@@ -1,9 +1,34 @@
+import { useEffect } from 'react';
 import { useAuth } from './auth/useAuth';
 import { LoginPage } from './auth/LoginPage';
 import { SessionProvider } from './state/SessionContext';
+import { useSession } from './state/SessionContext';
+import { AppShell } from './components/AppShell';
+import { SessionList } from './components/SessionList';
+import { ChatView } from './components/ChatView';
+import { UserMenu } from './components/UserMenu';
+
+function AppContent() {
+  const { loadSessions } = useSession();
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
+
+  const sidebar = (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 min-h-0">
+        <SessionList />
+      </div>
+      <UserMenu />
+    </div>
+  );
+
+  return <AppShell sidebar={sidebar} content={<ChatView />} />;
+}
 
 function App() {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -19,11 +44,7 @@ function App() {
 
   return (
     <SessionProvider>
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900">Welcome, {user?.name}!</h1>
-        </div>
-      </div>
+      <AppContent />
     </SessionProvider>
   );
 }
