@@ -1,0 +1,41 @@
+[project]
+name = "forge"
+version = "0.1.0"
+description = "AI Tuesdays - Digital Science internal chat and RAG application"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "litellm>=1.56",
+    "lancedb>=0.17",
+    "boto3>=1.36",
+    "pyjwt[crypto]>=2.10",
+    "cryptography>=44",
+    "python-multipart>=0.0.20",
+    "httpx>=0.28",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.25",
+    "httpx>=0.28",
+    "ruff>=0.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
