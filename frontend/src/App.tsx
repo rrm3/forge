@@ -1,5 +1,6 @@
 import { useAuth } from './auth/useAuth';
 import { LoginPage } from './auth/LoginPage';
+import { SessionProvider } from './state/SessionContext';
 
 function App() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -17,11 +18,13 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900">Welcome, {user?.name}!</h1>
+    <SessionProvider>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900">Welcome, {user?.name}!</h1>
+        </div>
       </div>
-    </div>
+    </SessionProvider>
   );
 }
 

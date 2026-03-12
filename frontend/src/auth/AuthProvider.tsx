@@ -5,6 +5,8 @@ import {
   type CognitoUserSession,
 } from 'amazon-cognito-identity-js';
 import { userPool } from './cognito';
+import { setTokenGetter } from '../api/client';
+import { setChatTokenGetter } from '../api/chat';
 
 interface AuthUser {
   userId: string;
@@ -105,6 +107,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     });
   }, []);
+
+  // Register the token getter with the API client so requests are authenticated
+  useEffect(() => {
+    setTokenGetter(getToken);
+    setChatTokenGetter(getToken);
+  }, [getToken]);
 
   const value: AuthContextType = {
     isAuthenticated: user !== null,
