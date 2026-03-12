@@ -1,0 +1,145 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_infra:
+        description: 'Run Terraform apply'
+        type: boolean
+        default: false
+
+env:
+  AWS_REGION: us-east-1
+  TF_VAR_environment: production
+  TF_VAR_cognito_user_pool_id: ${{ secrets.COGNITO_USER_POOL_ID }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        env:
+          DEV_MODE: "true"
+        run: python -m pytest tests/ -q
+
+  deploy-infra:
+    name: Deploy Infrastructure
+    needs: test
+    if: github.event.inputs.deploy_infra == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: infrastructure/terraform
+        run: terraform apply -auto-approve
+
+  deploy-backend:
+    name: Deploy Backend
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image_uri: ${{ steps.build.outputs.image_uri }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - name: Build and push Docker image
+        id: build
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        run: |
+          IMAGE_TAG="${GITHUB_SHA::8}"
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          docker build -t "${IMAGE_URI}" .
+          docker push "${IMAGE_URI}"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+
+      - name: Update Lambda function
+        env:
+          FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME }}
+        run: |
+          aws lambda update-function-code \
+            --function-name "${FUNCTION_NAME}" \
+            --image-uri "${{ steps.build.outputs.image_uri }}" \
+            --publish
+
+          aws lambda wait function-updated \
+            --function-name "${FUNCTION_NAME}"
+
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install and build
+        working-directory: frontend
+        env:
+          VITE_COGNITO_USER_POOL_ID: ${{ secrets.COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID }}
+          VITE_API_URL: ""
+        run: |
+          npm ci
+          npm run build
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync to S3
+        run: |
+          aws s3 sync frontend/dist/ "s3://${{ secrets.FRONTEND_BUCKET }}/" \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html"
+
+          aws s3 cp frontend/dist/index.html "s3://${{ secrets.FRONTEND_BUCKET }}/index.html" \
+            --cache-control "no-cache"
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/*"
