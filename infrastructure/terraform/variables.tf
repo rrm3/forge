@@ -21,6 +21,12 @@ variable "cloudfront_domain" {
   default     = ""
 }
 
+variable "github_repo" {
+  description = "GitHub repository in format owner/repo (for OIDC trust policy)"
+  type        = string
+  default     = "rrm3/forge"
+}
+
 variable "domain_name" {
   description = "Custom domain name for the CloudFront distribution (leave empty to skip)"
   type        = string

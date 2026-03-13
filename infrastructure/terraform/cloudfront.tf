@@ -118,15 +118,9 @@ resource "aws_cloudfront_distribution" "main" {
   # Optional ACM certificate for custom domain
   viewer_certificate {
     cloudfront_default_certificate = var.acm_certificate_arn == "" ? true : false
-
-    dynamic "acm_certificate" {
-      for_each = var.acm_certificate_arn != "" ? [1] : []
-      content {
-        acm_certificate_arn      = var.acm_certificate_arn
-        ssl_support_method       = "sni-only"
-        minimum_protocol_version = "TLSv1.2_2021"
-      }
-    }
+    acm_certificate_arn            = var.acm_certificate_arn != "" ? var.acm_certificate_arn : null
+    ssl_support_method             = var.acm_certificate_arn != "" ? "sni-only" : null
+    minimum_protocol_version       = var.acm_certificate_arn != "" ? "TLSv1.2_2021" : null
   }
 
   restrictions {
