@@ -4,16 +4,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      deploy_infra:
-        description: 'Run Terraform apply'
-        type: boolean
-        default: false
 
 env:
   AWS_REGION: us-east-1
-  TF_VAR_environment: production
-  TF_VAR_cognito_user_pool_id: ${{ secrets.COGNITO_USER_POOL_ID }}
 
 permissions:
   id-token: write
@@ -37,29 +30,6 @@ jobs:
         env:
           DEV_MODE: "true"
         run: python -m pytest tests/ -q
-
-  deploy-infra:
-    name: Deploy Infrastructure
-    needs: test
-    if: github.event.inputs.deploy_infra == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-
-      - name: Terraform Init
-        working-directory: infrastructure/terraform
-        run: terraform init
-
-      - name: Terraform Apply
-        working-directory: infrastructure/terraform
-        run: terraform apply -auto-approve
 
   deploy-backend:
     name: Deploy Backend
@@ -116,8 +86,8 @@ jobs:
       - name: Install and build
         working-directory: frontend
         env:
-          VITE_COGNITO_USER_POOL_ID: ${{ secrets.COGNITO_USER_POOL_ID }}
-          VITE_COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID }}
+          VITE_OIDC_PROVIDER_URL: ${{ secrets.OIDC_PROVIDER_URL }}
+          VITE_OIDC_CLIENT_ID: ${{ secrets.OIDC_CLIENT_ID }}
           VITE_API_URL: ""
         run: |
           npm ci

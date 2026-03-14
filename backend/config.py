@@ -4,10 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Auth
-    cognito_user_pool_id: str = ""
-    cognito_client_id: str = ""
-    cognito_region: str = "us-east-1"
+    # Auth (OIDC / Digital Science ID)
+    oidc_provider_url: str = ""
+    oidc_client_id: str = ""
 
     # DynamoDB
     dynamodb_table_prefix: str = "forge"

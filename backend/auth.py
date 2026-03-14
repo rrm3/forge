@@ -1,11 +1,10 @@
-"""JWT authentication for Cognito tokens."""
+"""JWT authentication for Digital Science ID (OIDC) tokens."""
 
 import logging
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Annotated
 
-import httpx
 import jwt
 from fastapi import Depends, Header, HTTPException, status
 from jwt import PyJWKClient
@@ -35,14 +34,11 @@ def _get_jwks_client(jwks_url: str) -> PyJWKClient:
 
 
 def _jwks_url() -> str:
-    return (
-        f"https://cognito-idp.{settings.cognito_region}.amazonaws.com"
-        f"/{settings.cognito_user_pool_id}/.well-known/jwks.json"
-    )
+    return f"{settings.oidc_provider_url}/.well-known/jwks.json"
 
 
-def _verify_cognito_token(token: str) -> CurrentUser:
-    """Verify a Cognito JWT and return the current user."""
+def _verify_oidc_token(token: str) -> CurrentUser:
+    """Verify an OIDC JWT and return the current user."""
     jwks_client = _get_jwks_client(_jwks_url())
 
     try:
@@ -53,18 +49,13 @@ def _verify_cognito_token(token: str) -> CurrentUser:
             detail=f"Invalid token key: {e}",
         ) from e
 
-    issuer = (
-        f"https://cognito-idp.{settings.cognito_region}.amazonaws.com"
-        f"/{settings.cognito_user_pool_id}"
-    )
-
     try:
         payload = jwt.decode(
             token,
             signing_key.key,
             algorithms=["RS256"],
-            audience=settings.cognito_client_id,
-            issuer=issuer,
+            audience=settings.oidc_client_id,
+            issuer=settings.oidc_provider_url,
             options={"verify_at_hash": False},
         )
     except jwt.ExpiredSignatureError as e:
@@ -81,7 +72,7 @@ def _verify_cognito_token(token: str) -> CurrentUser:
     return CurrentUser(
         user_id=payload["sub"],
         email=payload.get("email", ""),
-        name=payload.get("name", payload.get("cognito:username", "")),
+        name=payload.get("name", ""),
     )
 
 
@@ -89,9 +80,9 @@ async def verify_token(
     authorization: str | None = Header(None, alias="Authorization"),
     x_dev_user_id: str | None = Header(None, alias="X-Dev-User-Id"),
 ) -> CurrentUser:
-    """FastAPI dependency: verify Cognito JWT and return current user.
+    """FastAPI dependency: verify OIDC JWT and return current user.
 
-    In dev_mode, the X-Dev-User-Id header bypasses Cognito (defaults to "alice").
+    In dev_mode, the X-Dev-User-Id header bypasses auth (defaults to "alice").
     """
     if settings.dev_mode:
         uid = x_dev_user_id or "alice"
@@ -111,7 +102,7 @@ async def verify_token(
         )
 
     token = authorization[7:]
-    return _verify_cognito_token(token)
+    return _verify_oidc_token(token)
 
 
 # Dependency alias for use in route signatures

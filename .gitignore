@@ -36,6 +36,12 @@ frontend/.vite/
 cdk.out/
 .cdk.staging/
 
+# Terraform (removed, but prevent accidental commits)
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
 # Misc
 *.log
 .coverage

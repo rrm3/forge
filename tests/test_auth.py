@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from backend.auth import CurrentUser, _DEV_USERS, _verify_cognito_token, verify_token
+from backend.auth import CurrentUser, _DEV_USERS, _verify_oidc_token, verify_token
 
 
 class TestDevMode:
@@ -73,12 +73,9 @@ class TestAuthErrors:
     async def test_invalid_jwt_raises_401(self):
         with patch("backend.auth.settings") as mock_settings:
             mock_settings.dev_mode = False
-            mock_settings.cognito_region = "us-east-1"
-            mock_settings.cognito_user_pool_id = "us-east-1_test"
-            mock_settings.cognito_client_id = "testclient"
+            mock_settings.oidc_provider_url = "https://id-staging.digital-science.us"
+            mock_settings.oidc_client_id = "testclient"
             with patch("backend.auth._get_jwks_client") as mock_jwks:
-                import jwt as pyjwt
-
                 mock_client = MagicMock()
                 mock_client.get_signing_key_from_jwt.side_effect = Exception("key not found")
                 mock_jwks.return_value = mock_client
@@ -93,9 +90,8 @@ class TestAuthErrors:
     async def test_expired_token_raises_401(self):
         with patch("backend.auth.settings") as mock_settings:
             mock_settings.dev_mode = False
-            mock_settings.cognito_region = "us-east-1"
-            mock_settings.cognito_user_pool_id = "us-east-1_test"
-            mock_settings.cognito_client_id = "testclient"
+            mock_settings.oidc_provider_url = "https://id-staging.digital-science.us"
+            mock_settings.oidc_client_id = "testclient"
             with patch("backend.auth._get_jwks_client") as mock_jwks:
                 import jwt as pyjwt
 
@@ -133,8 +129,8 @@ class TestCurrentUser:
             assert len(name) > 0
 
 
-class TestVerifyCognitoToken:
-    """Unit tests for _verify_cognito_token."""
+class TestVerifyOidcToken:
+    """Unit tests for _verify_oidc_token."""
 
     def test_successful_decode_returns_current_user(self):
         mock_payload = {
@@ -153,21 +149,19 @@ class TestVerifyCognitoToken:
             patch("backend.auth.jwt.decode", return_value=mock_payload),
             patch("backend.auth.settings") as mock_settings,
         ):
-            mock_settings.cognito_region = "us-east-1"
-            mock_settings.cognito_user_pool_id = "us-east-1_pool"
-            mock_settings.cognito_client_id = "client123"
+            mock_settings.oidc_provider_url = "https://id-staging.digital-science.us"
+            mock_settings.oidc_client_id = "client123"
 
-            user = _verify_cognito_token("fake.jwt.token")
+            user = _verify_oidc_token("fake.jwt.token")
 
         assert user.user_id == "user-sub-456"
         assert user.email == "user@corp.com"
         assert user.name == "Corp User"
 
-    def test_falls_back_to_cognito_username_for_name(self):
+    def test_missing_name_defaults_to_empty(self):
         mock_payload = {
             "sub": "user-sub-789",
             "email": "user@corp.com",
-            "cognito:username": "jdoe",
         }
         mock_signing_key = MagicMock()
         mock_signing_key.key = "fake-rsa-key"
@@ -180,10 +174,9 @@ class TestVerifyCognitoToken:
             patch("backend.auth.jwt.decode", return_value=mock_payload),
             patch("backend.auth.settings") as mock_settings,
         ):
-            mock_settings.cognito_region = "us-east-1"
-            mock_settings.cognito_user_pool_id = "us-east-1_pool"
-            mock_settings.cognito_client_id = "client123"
+            mock_settings.oidc_provider_url = "https://id-staging.digital-science.us"
+            mock_settings.oidc_client_id = "client123"
 
-            user = _verify_cognito_token("fake.jwt.token")
+            user = _verify_oidc_token("fake.jwt.token")
 
-        assert user.name == "jdoe"
+        assert user.name == ""

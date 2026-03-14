@@ -5,8 +5,8 @@
 The app is fully implemented and pushed to https://github.com/rrm3/forge.git
 
 * **Backend:** Python FastAPI with ReAct agentic loop, LanceDB RAG, Cohere embeddings, 9 tools, 4 skills
-* **Frontend:** React + Vite + Tailwind SPA with Cognito auth, SSE streaming chat, session management
-* **Infrastructure:** Terraform configs for Lambda + Function URL, DynamoDB, S3, CloudFront
+* **Frontend:** React + Vite + Tailwind SPA with OIDC auth (Digital Science ID), SSE streaming chat, session management
+* **Infrastructure:** CDK stack for Lambda + Function URL, DynamoDB, S3, CloudFront
 * **CI/CD:** GitHub Actions workflow at `.github/workflows/deploy.yml` (deploys on push to main)
 * **Tests:** 197 passing tests
 
@@ -23,7 +23,7 @@ aws iam create-open-id-connect-provider \
   --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
 ```
 
-This is NOT part of ds-identity. It's a generic AWS account setting that allows any GitHub repo (that you authorize) to authenticate with AWS. ds-identity is about user authentication (Cognito). This is about CI/CD authentication.
+This is NOT part of ds-identity. It's a generic AWS account setting that allows any GitHub repo (that you authorize) to authenticate with AWS. ds-identity is about user authentication (OIDC). This is about CI/CD authentication.
 
 ### 2. Create IAM Deploy Role
 
@@ -57,60 +57,45 @@ Attach these managed policies (or create a custom one):
 * AWSLambda_FullAccess (update function code)
 * AmazonS3FullAccess (frontend deploy)
 * CloudFrontFullAccess (cache invalidation)
-* AmazonDynamoDBFullAccess (Terraform)
+* AmazonDynamoDBFullAccess (CDK)
 
 Or scope it down to specific resources after initial setup.
 
-### 3. Configure Terraform Backend
-
-Edit `infrastructure/terraform/main.tf` - uncomment and configure the S3 backend for state storage:
-
-```hcl
-backend "s3" {
-  bucket = "your-terraform-state-bucket"
-  key    = "forge/terraform.tfstate"
-  region = "us-east-1"
-}
-```
-
-Or use local state initially (already the default).
-
-### 4. Run Terraform (first time, from local machine)
+### 3. Deploy Infrastructure with CDK
 
 ```bash
-cd infrastructure/terraform
-export TF_VAR_cognito_user_pool_id="us-east-1_Gtq9PeFdk"  # from ds-identity
-terraform init
-terraform plan
-terraform apply
+cd infrastructure/cdk
+npm install
+npx cdk bootstrap aws://ACCOUNT_ID/us-east-1  # one-time
+npx cdk deploy --context environment=production
 ```
 
-This creates: ECR repo, Lambda function, DynamoDB tables, S3 buckets, CloudFront distribution, Cognito app client.
+This creates: ECR repo, Lambda function, DynamoDB tables, S3 buckets, CloudFront distribution.
 
-Note the outputs - you'll need them for step 5.
+Note the outputs - you'll need them for step 4.
 
-### 5. Set GitHub Secrets
+### 4. Set GitHub Secrets
 
-After Terraform apply, set these secrets on the repo:
+After CDK deploy, set these secrets on the repo using the stack outputs:
 
 ```bash
 cd /Users/rmcgrath/dev/forge
 
 # From step 2
-gh secret set AWS_DEPLOY_ROLE_ARN --body "arn:aws:iam::ACCOUNT_ID:role/forge-deploy"
+gh secret set AWS_DEPLOY_ROLE_ARN --body "arn:aws:iam::ACCOUNT_ID:role/forge-github-actions"
 
-# From Terraform outputs
-gh secret set ECR_REPOSITORY --body "$(cd infrastructure/terraform && terraform output -raw ecr_repository_url | cut -d/ -f2)"
-gh secret set LAMBDA_FUNCTION_NAME --body "forge-production"
-gh secret set FRONTEND_BUCKET --body "$(cd infrastructure/terraform && terraform output -raw frontend_bucket_name)"
-gh secret set CLOUDFRONT_DISTRIBUTION_ID --body "$(cd infrastructure/terraform && terraform output -raw cloudfront_distribution_id 2>/dev/null || echo 'TODO')"
+# From CDK outputs
+gh secret set ECR_REPOSITORY --body "forge-production-backend"
+gh secret set LAMBDA_FUNCTION_NAME --body "forge-production-backend"
+gh secret set FRONTEND_BUCKET --body "forge-production-frontend"
+gh secret set CLOUDFRONT_DISTRIBUTION_ID --body "<from CDK output>"
 
-# From ds-identity Cognito config
-gh secret set COGNITO_USER_POOL_ID --body "us-east-1_Gtq9PeFdk"
-gh secret set COGNITO_CLIENT_ID --body "$(cd infrastructure/terraform && terraform output -raw cognito_client_id)"
+# OIDC (Digital Science ID)
+gh secret set OIDC_PROVIDER_URL --body "https://id.digital-science.us"
+gh secret set OIDC_CLIENT_ID --body "<from ds-identity client registration>"
 ```
 
-### 6. Push Initial Docker Image
+### 5. Push Initial Docker Image
 
 The Lambda function needs an initial image before the GH Actions workflow can update it. After ECR is created:
 
@@ -119,22 +104,21 @@ The Lambda function needs an initial image before the GH Actions workflow can up
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
 
 # Build and push
-docker build -t ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/forge-production:initial .
-docker push ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/forge-production:initial
+docker build -t ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/forge-production-backend:initial .
+docker push ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/forge-production-backend:initial
 
 # Update Lambda to use it
 aws lambda update-function-code \
-  --function-name forge-production \
-  --image-uri ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/forge-production:initial
+  --function-name forge-production-backend \
+  --image-uri ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/forge-production-backend:initial
 ```
 
-### 7. Set Lambda Environment Variables
+### 6. Set Lambda Environment Variables
 
-The Lambda function needs these env vars (Terraform should set most of them, but verify):
+The Lambda function needs these env vars (CDK sets most of them, but verify):
 
-* COGNITO_USER_POOL_ID
-* COGNITO_CLIENT_ID
-* COGNITO_REGION=us-east-1
+* OIDC_PROVIDER_URL
+* OIDC_CLIENT_ID
 * DYNAMODB_TABLE_PREFIX=forge-production
 * S3_BUCKET=forge-production-data
 * LANCE_BACKEND=s3
@@ -143,7 +127,7 @@ The Lambda function needs these env vars (Terraform should set most of them, but
 * DEV_MODE=false
 * AWS_LWA_INVOKE_MODE=response_stream
 
-### 8. Index Curriculum
+### 7. Index Curriculum
 
 Once infrastructure is up, populate the LanceDB curriculum index:
 
@@ -163,7 +147,7 @@ Every push to main triggers the GH Actions workflow:
 2. Backend Docker image built and pushed to ECR, Lambda updated
 3. Frontend built and synced to S3, CloudFront invalidated
 
-Infrastructure changes: trigger manually via workflow_dispatch with `deploy_infra: true`, or run `terraform apply` locally.
+Infrastructure changes: run `npx cdk deploy` locally or add a CDK deploy job to the workflow.
 
 ## Local Development
 
@@ -178,8 +162,7 @@ Open http://localhost:5173. In dev mode, auth is bypassed (uses X-Dev-User-Id he
 ## Open Items
 
 * **Delete accidental repo:** https://github.com/digital-science/forge needs to be deleted (requires org admin or `delete_repo` scope)
-* **Cognito app client:** Verify the Terraform-created client works with the central-login pool. May need coordination with whoever manages ds-identity.
-* **Custom domain:** If you want forge.digital-science.com, you'll need an ACM certificate and Route53/DNS entry. Set `domain_name` and `acm_certificate_arn` Terraform variables.
+* **Custom domain:** If you want forge.digital-science.com, you'll need an ACM certificate and Route53/DNS entry. Set `domainName` and `acmCertificateArn` CDK context values.
 * **Curriculum content:** The test-curriculum is placeholder. Real AI Tuesdays curriculum needs to be authored and uploaded to S3.
 * **User profile pre-population:** Need a script or process to import DS org data into the profiles DynamoDB table.
 * **Memory extraction:** The periodic Lambda that extracts memory from session transcripts is designed but not implemented yet. Could be a scheduled Lambda or a cron script.

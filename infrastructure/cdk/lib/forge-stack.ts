@@ -1,5 +1,4 @@
 import * as cdk from 'aws-cdk-lib';
-import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
@@ -22,9 +21,9 @@ export class ForgeStack extends cdk.Stack {
     const { environment } = props;
     const prefix = `forge-${environment}`;
 
-    // Context parameters (equivalent to Terraform variables)
-    const cognitoUserPoolId = this.node.tryGetContext('cognitoUserPoolId') || '';
-    const cloudfrontDomain = this.node.tryGetContext('cloudfrontDomain') || '';
+    // Context parameters
+    const oidcProviderUrl = this.node.tryGetContext('oidcProviderUrl') || '';
+    const oidcClientId = this.node.tryGetContext('oidcClientId') || '';
     const githubRepo = this.node.tryGetContext('githubRepo') || 'rrm3/forge';
     const domainName = this.node.tryGetContext('domainName') || '';
     const acmCertificateArn = this.node.tryGetContext('acmCertificateArn') || '';
@@ -109,60 +108,6 @@ export class ForgeStack extends cdk.Stack {
     });
 
     // ---------------------------------------------------------------
-    // Cognito User Pool Client (against an external pool)
-    // ---------------------------------------------------------------
-    const userPool = cognito.UserPool.fromUserPoolId(this, 'ExternalUserPool', cognitoUserPoolId);
-
-    const callbackUrls = [
-      `https://${cloudfrontDomain || 'placeholder.cloudfront.net'}/callback`,
-      'http://localhost:5173/callback',
-    ];
-    const logoutUrls = [
-      `https://${cloudfrontDomain || 'placeholder.cloudfront.net'}/logout`,
-      'http://localhost:5173/logout',
-    ];
-
-    const userPoolClient = new cognito.UserPoolClient(this, 'UserPoolClient', {
-      userPool,
-      userPoolClientName: `${prefix}-spa`,
-      generateSecret: false,
-      accessTokenValidity: cdk.Duration.hours(1),
-      idTokenValidity: cdk.Duration.hours(1),
-      refreshTokenValidity: cdk.Duration.days(30),
-      oAuth: {
-        flows: {
-          implicitCodeGrant: true,
-        },
-        scopes: [
-          cognito.OAuthScope.EMAIL,
-          cognito.OAuthScope.OPENID,
-          cognito.OAuthScope.PROFILE,
-        ],
-        callbackUrls,
-        logoutUrls,
-      },
-      supportedIdentityProviders: [
-        cognito.UserPoolClientIdentityProvider.COGNITO,
-      ],
-      authFlows: {
-        userSrp: true,
-        custom: true,
-      },
-      preventUserExistenceErrors: true,
-      readAttributes: new cognito.ClientAttributes()
-        .withStandardAttributes({
-          email: true,
-          emailVerified: true,
-          fullname: true,
-        }),
-      writeAttributes: new cognito.ClientAttributes()
-        .withStandardAttributes({
-          email: true,
-          fullname: true,
-        }),
-    });
-
-    // ---------------------------------------------------------------
     // CloudWatch Log Group
     // ---------------------------------------------------------------
     const logGroup = new logs.LogGroup(this, 'BackendLogGroup', {
@@ -242,9 +187,8 @@ export class ForgeStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(900),
       role: lambdaRole,
       environment: {
-        COGNITO_USER_POOL_ID: cognitoUserPoolId,
-        COGNITO_CLIENT_ID: userPoolClient.userPoolClientId,
-        COGNITO_REGION: this.region,
+        OIDC_PROVIDER_URL: oidcProviderUrl,
+        OIDC_CLIENT_ID: oidcClientId,
         DYNAMODB_TABLE_PREFIX: prefix,
         AWS_REGION_NAME: this.region,
         S3_BUCKET: dataBucket.bucketName,
@@ -369,44 +313,10 @@ export class ForgeStack extends cdk.Stack {
       ),
     });
 
-    // Terraform state access (kept for compatibility, also applies to CDK state if using S3 backend)
+    // CDK resource management
     githubActionsRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'TerraformState',
+      sid: 'CDKResourceManagement',
       actions: [
-        's3:GetObject',
-        's3:PutObject',
-        's3:DeleteObject',
-        's3:ListBucket',
-      ],
-      resources: [
-        'arn:aws:s3:::forge-terraform-state',
-        'arn:aws:s3:::forge-terraform-state/*',
-      ],
-    }));
-
-    githubActionsRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'TerraformLocks',
-      actions: [
-        'dynamodb:GetItem',
-        'dynamodb:PutItem',
-        'dynamodb:DeleteItem',
-        'dynamodb:DescribeTable',
-      ],
-      resources: [
-        `arn:aws:dynamodb:${this.region}:${this.account}:table/forge-terraform-locks`,
-      ],
-    }));
-
-    // Terraform/CDK resource management
-    githubActionsRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'TerraformResourceManagement',
-      actions: [
-        // Cognito
-        'cognito-idp:CreateUserPoolClient',
-        'cognito-idp:UpdateUserPoolClient',
-        'cognito-idp:DescribeUserPoolClient',
-        'cognito-idp:DeleteUserPoolClient',
-        'cognito-idp:DescribeUserPool',
         // DynamoDB
         'dynamodb:CreateTable',
         'dynamodb:UpdateTable',
@@ -564,7 +474,7 @@ export class ForgeStack extends cdk.Stack {
     }));
 
     // ---------------------------------------------------------------
-    // Outputs (matching Terraform outputs)
+    // Outputs
     // ---------------------------------------------------------------
     new cdk.CfnOutput(this, 'CloudFrontUrl', {
       description: 'CloudFront distribution URL',
@@ -572,7 +482,7 @@ export class ForgeStack extends cdk.Stack {
     });
 
     new cdk.CfnOutput(this, 'CloudFrontDomain', {
-      description: 'CloudFront distribution domain name (for Cognito callback URLs)',
+      description: 'CloudFront distribution domain name (for OIDC callback URLs)',
       value: distribution.distributionDomainName,
     });
 
@@ -594,11 +504,6 @@ export class ForgeStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'EcrRepositoryUrl', {
       description: 'ECR repository URL for the backend image',
       value: ecrRepository.repositoryUri,
-    });
-
-    new cdk.CfnOutput(this, 'CognitoClientId', {
-      description: 'Cognito app client ID for the SPA',
-      value: userPoolClient.userPoolClientId,
     });
 
     new cdk.CfnOutput(this, 'GitHubActionsRoleArn', {
