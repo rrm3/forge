@@ -15,7 +15,7 @@ from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
-OPENAI_REALTIME_URL = "https://api.openai.com/v1/realtime/sessions"
+OPENAI_REALTIME_URL = "https://api.openai.com/v1/realtime/client_secrets"
 OPENAI_MODEL = "gpt-4o-realtime-preview-2024-12-17"
 
 
@@ -138,22 +138,8 @@ async def create_voice_session(
             "Briefly acknowledge the resumption ('Welcome back! We were discussing...')."
         )
 
-    payload = {
-        "model": OPENAI_MODEL,
-        "voice": "alloy",
-        "instructions": instructions,
-        "tools": VOICE_TOOLS,
-        "input_audio_transcription": {
-            "model": "whisper-1",
-        },
-        "turn_detection": {
-            "type": "server_vad",
-            "threshold": 0.6,
-            "prefix_padding_ms": 400,
-            "silence_duration_ms": 800,
-        },
-    }
-
+    # The GA client_secrets endpoint creates a bare token.
+    # Session config (instructions, tools, VAD) is sent via data channel after WebRTC connects.
     async with httpx.AsyncClient() as client:
         response = await client.post(
             OPENAI_REALTIME_URL,
@@ -161,7 +147,7 @@ async def create_voice_session(
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
-            json=payload,
+            json={},
             timeout=10.0,
         )
         response.raise_for_status()
@@ -169,8 +155,10 @@ async def create_voice_session(
     data = response.json()
 
     return {
-        "token": data["client_secret"]["value"],
+        "token": data["value"],
         "expires_at": data.get("expires_at", ""),
         "model": OPENAI_MODEL,
         "session_id": session_id,
+        "instructions": instructions,
+        "tools": VOICE_TOOLS,
     }

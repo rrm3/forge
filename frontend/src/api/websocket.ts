@@ -18,7 +18,7 @@ export type ServerMessage =
   | { type: 'tool_result'; session_id: string; tool_call_id: string; result: string }
   | { type: 'done'; session_id: string; usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null }
   | { type: 'error'; session_id?: string; message: string }
-  | { type: 'voice_token'; session_id: string; token: string; expires_at: string }
+  | { type: 'voice_token'; session_id: string; token: string; expires_at: string; instructions?: string; tools?: unknown[] }
   | { type: 'pong' }
   | { type: 'ping' }
   | { type: 'chunk'; chunk_id: string; seq: number; total: number; data: string };

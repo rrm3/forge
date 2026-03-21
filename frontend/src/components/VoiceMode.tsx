@@ -50,7 +50,8 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       if (cancelled) return;
       if (msg.type === 'voice_token' && 'session_id' in msg && msg.session_id === sessionId) {
         if (!pcRef.current) {
-          connectWebRTC(msg.token);
+          const m = msg as { token: string; instructions?: string; tools?: unknown[] };
+          connectWebRTC(m.token, m.instructions || '', m.tools || []);
         }
       }
       if (msg.type === 'tool_result' && 'session_id' in msg && msg.session_id === sessionId) {
@@ -87,7 +88,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
   // ---- WebRTC connection (from openai-realtime-console reference) ----
 
-  async function connectWebRTC(token: string) {
+  async function connectWebRTC(token: string, instructions: string, tools: unknown[]) {
     try {
       // 1. Get microphone
       let localStream: MediaStream;
@@ -142,10 +143,15 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       dcRef.current = dc;
 
       dc.addEventListener('open', () => {
-        // Send session.update to enable input transcription and set initial config
+        // Configure the session with instructions, tools, and VAD settings
+        // (GA endpoint creates bare tokens - config is sent via data channel)
         dc.send(JSON.stringify({
           type: 'session.update',
           session: {
+            model: REALTIME_MODEL,
+            instructions: instructions || undefined,
+            tools: tools.length > 0 ? tools : undefined,
+            voice: 'alloy',
             input_audio_transcription: { model: 'whisper-1' },
             turn_detection: {
               type: 'server_vad',

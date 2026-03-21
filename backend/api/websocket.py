@@ -205,6 +205,8 @@ async def _handle_voice_session(sender: MessageSender, user: CurrentUser, msg: d
             "session_id": session_id,
             "token": result["token"],
             "expires_at": result["expires_at"],
+            "instructions": result.get("instructions", ""),
+            "tools": result.get("tools", []),
         })
     except Exception as e:
         logger.exception("Voice session creation failed")
