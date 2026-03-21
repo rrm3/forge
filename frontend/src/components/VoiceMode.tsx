@@ -300,8 +300,12 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       case 'error':
         {
           const msg = (event.error as { message?: string })?.message || JSON.stringify(event.error);
-          console.error('Realtime error:', msg);
-          if (!msg.includes('active response')) {
+          console.warn('Realtime event error:', msg);
+          // Suppress transient errors that self-recover
+          const transient = msg.includes('active response') ||
+                            msg.includes('not found in conversation') ||
+                            msg.includes('Tool call ID');
+          if (!transient) {
             setError(msg);
           }
         }
@@ -319,11 +323,15 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
   function sendToolResult(callId: string, result: string) {
     console.log(`Sending tool result for ${callId}: ${result.substring(0, 100)}...`);
-    sendEvent({
-      type: 'conversation.item.create',
-      item: { type: 'function_call_output', call_id: callId, output: result },
-    });
-    sendEvent({ type: 'response.create' });
+    try {
+      sendEvent({
+        type: 'conversation.item.create',
+        item: { type: 'function_call_output', call_id: callId, output: result },
+      });
+      sendEvent({ type: 'response.create' });
+    } catch {
+      // Tool result may arrive after the conversation has moved on - that's OK
+    }
   }
 
   function executeToolViaBackend(callId: string, name: string, argsStr: string) {
