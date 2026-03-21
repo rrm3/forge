@@ -34,6 +34,8 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
   const [paused, setPaused] = useState(false);
   const [micGated, setMicGated] = useState(false);
   const responseActiveRef = useRef(false);
+  // Buffer tool results until response.done, then send them
+  const pendingToolResults = useRef<Map<string, { callId: string; result: string }>>(new Map());
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
@@ -255,6 +257,19 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
       case 'response.done':
         responseActiveRef.current = false;
+        // Flush any pending tool results now that the response is done
+        // and function_call items are committed to conversation history
+        if (pendingToolResults.current.size > 0) {
+          for (const [, { callId, result }] of pendingToolResults.current) {
+            console.log(`Flushing buffered tool result for ${callId}`);
+            sendEvent({
+              type: 'conversation.item.create',
+              item: { type: 'function_call_output', call_id: callId, output: result },
+            });
+          }
+          pendingToolResults.current.clear();
+          sendEvent({ type: 'response.create' });
+        }
         break;
 
       case 'response.audio.delta':
@@ -335,15 +350,16 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
   }
 
   function sendToolResult(callId: string, result: string) {
-    console.log(`Sending tool result for ${callId}: ${result.substring(0, 100)}...`);
-    sendEvent({
-      type: 'conversation.item.create',
-      item: { type: 'function_call_output', call_id: callId, output: result },
-    });
-    // Only trigger a new response if the previous one has finished.
-    // If a response is still active, the model will pick up the tool
-    // result automatically.
-    if (!responseActiveRef.current) {
+    console.log(`Tool result ready for ${callId}: ${result.substring(0, 100)}...`);
+    if (responseActiveRef.current) {
+      // Response is still active - buffer the result until response.done
+      pendingToolResults.current.set(callId, { callId, result });
+    } else {
+      // Response already done - send immediately
+      sendEvent({
+        type: 'conversation.item.create',
+        item: { type: 'function_call_output', call_id: callId, output: result },
+      });
       sendEvent({ type: 'response.create' });
     }
   }
