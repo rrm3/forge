@@ -4,28 +4,32 @@ import {
   useReducer,
   useCallback,
   useRef,
+  useEffect,
   type ReactNode,
 } from 'react';
-import type { Session, Message } from '../api/types';
+import type { Session, SessionType, Message } from '../api/types';
+import type { ServerMessage, ConnectionStatus } from '../api/websocket';
 import {
   listSessions,
-  createSession,
   getSession,
   deleteSession,
   renameSession,
 } from '../api/client';
-import { sendMessage } from '../api/chat';
+import { forgeWs } from '../api/websocket';
 
 interface SessionState {
   sessions: Session[];
+  sessionsLoaded: boolean;
   activeSessionId: string | null;
   messages: Message[];
   isStreaming: boolean;
   streamingText: string;
+  connectionStatus: ConnectionStatus;
 }
 
 type SessionAction =
   | { type: 'SET_SESSIONS'; sessions: Session[] }
+  | { type: 'SET_SESSION_ID'; sessionId: string }
   | { type: 'SELECT_SESSION'; sessionId: string; messages: Message[] }
   | { type: 'CREATE_SESSION'; session: Session }
   | { type: 'DELETE_SESSION'; sessionId: string }
@@ -33,20 +37,27 @@ type SessionAction =
   | { type: 'ADD_MESSAGE'; message: Message }
   | { type: 'APPEND_STREAMING_TEXT'; text: string }
   | { type: 'SET_STREAMING'; isStreaming: boolean }
-  | { type: 'CLEAR_STREAMING_TEXT' };
+  | { type: 'CLEAR_STREAMING_TEXT' }
+  | { type: 'SET_CONNECTION_STATUS'; status: ConnectionStatus }
+  | { type: 'DESELECT_SESSION' };
 
 const initialState: SessionState = {
   sessions: [],
+  sessionsLoaded: false,
   activeSessionId: null,
   messages: [],
   isStreaming: false,
   streamingText: '',
+  connectionStatus: 'disconnected',
 };
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
   switch (action.type) {
     case 'SET_SESSIONS':
-      return { ...state, sessions: action.sessions };
+      return { ...state, sessions: action.sessions, sessionsLoaded: true };
+
+    case 'SET_SESSION_ID':
+      return { ...state, activeSessionId: action.sessionId };
 
     case 'SELECT_SESSION':
       return {
@@ -95,6 +106,12 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
     case 'CLEAR_STREAMING_TEXT':
       return { ...state, streamingText: '' };
 
+    case 'SET_CONNECTION_STATUS':
+      return { ...state, connectionStatus: action.status };
+
+    case 'DESELECT_SESSION':
+      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false };
+
     default:
       return state;
   }
@@ -105,10 +122,11 @@ interface SessionContextType {
   dispatch: React.Dispatch<SessionAction>;
   loadSessions: () => Promise<void>;
   selectSession: (id: string) => Promise<void>;
-  newSession: () => Promise<Session>;
+  deselectSession: () => void;
   removeSession: (id: string) => Promise<void>;
   updateSessionTitle: (id: string, title: string) => Promise<void>;
   sendChatMessage: (message: string) => void;
+  startTypedSession: (type: SessionType) => void;
   cancelStreaming: () => void;
 }
 
@@ -116,7 +134,105 @@ const SessionContext = createContext<SessionContextType | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(sessionReducer, initialState);
-  const abortRef = useRef<AbortController | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
+  const accumulatedTextRef = useRef('');
+
+  // Keep the ref in sync
+  activeSessionIdRef.current = state.activeSessionId;
+
+  // Set up WebSocket message handler
+  useEffect(() => {
+    const unsubMessage = forgeWs.onMessage((msg: ServerMessage) => {
+      switch (msg.type) {
+        case 'connected':
+          // Connection established
+          break;
+
+        case 'session': {
+          // New session created via start_session
+          activeSessionIdRef.current = msg.session_id;
+          dispatch({ type: 'SET_SESSION_ID', sessionId: msg.session_id });
+          // Add to session list
+          const newSession: Session = {
+            session_id: msg.session_id,
+            user_id: '',
+            title: '',
+            type: msg.session_type as Session['type'],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            message_count: 0,
+            summary: null,
+          };
+          dispatch({ type: 'CREATE_SESSION', session: newSession });
+          dispatch({ type: 'SET_STREAMING', isStreaming: true });
+          dispatch({ type: 'CLEAR_STREAMING_TEXT' });
+          accumulatedTextRef.current = '';
+          break;
+        }
+
+        case 'session_update':
+          dispatch({ type: 'RENAME_SESSION', sessionId: msg.session_id, title: msg.title });
+          break;
+
+        case 'token':
+          if (msg.session_id === activeSessionIdRef.current) {
+            accumulatedTextRef.current += msg.content;
+            dispatch({ type: 'APPEND_STREAMING_TEXT', text: msg.content });
+          }
+          break;
+
+        case 'tool_call':
+          // Could show tool call indicator in future
+          break;
+
+        case 'tool_result':
+          // Could show tool result in future
+          break;
+
+        case 'done': {
+          if (msg.session_id === activeSessionIdRef.current) {
+            if (accumulatedTextRef.current) {
+              const assistantMessage: Message = {
+                role: 'assistant',
+                content: accumulatedTextRef.current,
+                timestamp: new Date().toISOString(),
+              };
+              dispatch({ type: 'ADD_MESSAGE', message: assistantMessage });
+              dispatch({ type: 'CLEAR_STREAMING_TEXT' });
+              accumulatedTextRef.current = '';
+            }
+            dispatch({ type: 'SET_STREAMING', isStreaming: false });
+
+            // Reload sessions to pick up updated title / message count
+            listSessions().then((sessions) => {
+              dispatch({ type: 'SET_SESSIONS', sessions });
+            });
+          }
+          break;
+        }
+
+        case 'error':
+          if (!msg.session_id || msg.session_id === activeSessionIdRef.current) {
+            dispatch({ type: 'SET_STREAMING', isStreaming: false });
+            dispatch({ type: 'CLEAR_STREAMING_TEXT' });
+            accumulatedTextRef.current = '';
+          }
+          break;
+
+        default:
+          break;
+      }
+    });
+
+    const unsubStatus = forgeWs.onStatus((status: ConnectionStatus) => {
+      dispatch({ type: 'SET_CONNECTION_STATUS', status });
+    });
+
+    return () => {
+      unsubMessage();
+      unsubStatus();
+    };
+  }, []);
 
   const loadSessions = useCallback(async () => {
     const sessions = await listSessions();
@@ -125,17 +241,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const selectSession = useCallback(async (id: string) => {
     const data = await getSession(id);
-    dispatch({ type: 'SELECT_SESSION', sessionId: id, messages: data.messages });
+    dispatch({ type: 'SELECT_SESSION', sessionId: id, messages: data.transcript || [] });
   }, []);
 
-  const newSession = useCallback(async () => {
-    const session = await createSession();
-    dispatch({ type: 'CREATE_SESSION', session });
-    return session;
+  const deselectSession = useCallback(() => {
+    dispatch({ type: 'DESELECT_SESSION' });
   }, []);
 
   const removeSession = useCallback(async (id: string) => {
     await deleteSession(id);
+    if (activeSessionIdRef.current === id) {
+      activeSessionIdRef.current = null;
+    }
     dispatch({ type: 'DELETE_SESSION', sessionId: id });
   }, []);
 
@@ -146,69 +263,50 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const sendChatMessage = useCallback(
     (message: string) => {
-      // Cancel any in-flight stream
-      abortRef.current?.abort();
+      const sessionId = activeSessionIdRef.current;
 
-      const sessionId = state.activeSessionId;
-
-      const userMessage: Message = {
-        role: 'user',
-        content: message,
-        timestamp: new Date().toISOString(),
-      };
-      dispatch({ type: 'ADD_MESSAGE', message: userMessage });
+      // Show user message in UI if there's content
+      if (message) {
+        const userMessage: Message = {
+          role: 'user',
+          content: message,
+          timestamp: new Date().toISOString(),
+        };
+        dispatch({ type: 'ADD_MESSAGE', message: userMessage });
+      }
       dispatch({ type: 'SET_STREAMING', isStreaming: true });
       dispatch({ type: 'CLEAR_STREAMING_TEXT' });
+      accumulatedTextRef.current = '';
 
-      let accumulatedText = '';
-
-      const controller = sendMessage(sessionId, message, (event) => {
-        switch (event.type) {
-          case 'text':
-            accumulatedText += event.text;
-            dispatch({ type: 'APPEND_STREAMING_TEXT', text: event.text });
-            break;
-
-          case 'done': {
-            // Commit the accumulated assistant message
-            if (accumulatedText) {
-              const assistantMessage: Message = {
-                role: 'assistant',
-                content: accumulatedText,
-                timestamp: new Date().toISOString(),
-              };
-              dispatch({ type: 'ADD_MESSAGE', message: assistantMessage });
-              dispatch({ type: 'CLEAR_STREAMING_TEXT' });
-            }
-            dispatch({ type: 'SET_STREAMING', isStreaming: false });
-
-            // Reload sessions to pick up updated title / message count
-            listSessions().then((sessions) => {
-              dispatch({ type: 'SET_SESSIONS', sessions });
-            });
-            break;
-          }
-
-          case 'error':
-            dispatch({ type: 'SET_STREAMING', isStreaming: false });
-            dispatch({ type: 'CLEAR_STREAMING_TEXT' });
-            break;
-
-          // tool_call and tool_result: no UI state needed at this layer
-          default:
-            break;
-        }
-      });
-
-      abortRef.current = controller;
+      if (sessionId) {
+        // Send to existing session
+        forgeWs.chat(sessionId, message);
+      } else {
+        // Create a new session of type 'chat'
+        forgeWs.startSession('chat', 'text');
+      }
     },
-    [state.activeSessionId]
+    []
+  );
+
+  const startTypedSession = useCallback(
+    (type: SessionType) => {
+      dispatch({ type: 'SET_STREAMING', isStreaming: true });
+      dispatch({ type: 'CLEAR_STREAMING_TEXT' });
+      accumulatedTextRef.current = '';
+      forgeWs.startSession(type, 'text');
+    },
+    []
   );
 
   const cancelStreaming = useCallback(() => {
-    abortRef.current?.abort();
+    const sessionId = activeSessionIdRef.current;
+    if (sessionId) {
+      forgeWs.cancel(sessionId);
+    }
     dispatch({ type: 'SET_STREAMING', isStreaming: false });
     dispatch({ type: 'CLEAR_STREAMING_TEXT' });
+    accumulatedTextRef.current = '';
   }, []);
 
   return (
@@ -218,10 +316,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         dispatch,
         loadSessions,
         selectSession,
-        newSession,
+        deselectSession,
         removeSession,
         updateSessionTitle,
         sendChatMessage,
+        startTypedSession,
         cancelStreaming,
       }}
     >

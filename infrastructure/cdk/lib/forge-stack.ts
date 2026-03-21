@@ -8,6 +8,8 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 
 interface ForgeStackProps extends cdk.StackProps {
@@ -41,12 +43,9 @@ export class ForgeStack extends cdk.Stack {
     // ---------------------------------------------------------------
     // ECR Repository
     // ---------------------------------------------------------------
-    const ecrRepository = new ecr.Repository(this, 'BackendRepository', {
-      repositoryName: `${prefix}-backend`,
-      imageScanOnPush: true,
-      imageTagMutability: ecr.TagMutability.MUTABLE,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
-    });
+    const ecrRepository = ecr.Repository.fromRepositoryName(
+      this, 'BackendRepository', `${prefix}-backend`,
+    );
 
     // ---------------------------------------------------------------
     // DynamoDB Tables
@@ -58,6 +57,14 @@ export class ForgeStack extends cdk.Stack {
       sortKey: { name: 'session_id', type: dynamodb.AttributeType.STRING },
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    // GSI for querying sessions by type (cross-user)
+    sessionsTable.addGlobalSecondaryIndex({
+      indexName: 'type-created_at-index',
+      partitionKey: { name: 'type', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'created_at', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
     });
 
     const profilesTable = new dynamodb.Table(this, 'ProfilesTable', {
@@ -83,6 +90,23 @@ export class ForgeStack extends cdk.Stack {
       partitionKey: { name: 'idea_id', type: dynamodb.AttributeType.STRING },
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    // WebSocket connections table
+    const connectionsTable = new dynamodb.Table(this, 'ConnectionsTable', {
+      tableName: `${prefix}-connections`,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: 'connection_id', type: dynamodb.AttributeType.STRING },
+      timeToLiveAttribute: 'ttl',
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // Connections are ephemeral
+    });
+
+    // GSI for looking up connections by user_id
+    connectionsTable.addGlobalSecondaryIndex({
+      indexName: 'user_id-connected_at-index',
+      partitionKey: { name: 'user_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'connected_at', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
     });
 
     // ---------------------------------------------------------------
@@ -143,6 +167,7 @@ export class ForgeStack extends cdk.Stack {
       ],
       resources: [
         `arn:aws:dynamodb:${this.region}:${this.account}:table/forge-*`,
+        `arn:aws:dynamodb:${this.region}:${this.account}:table/forge-*/index/*`,
       ],
     }));
 
@@ -171,9 +196,32 @@ export class ForgeStack extends cdk.Stack {
         'bedrock:InvokeModelWithResponseStream',
       ],
       resources: [
-        `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-*`,
-        `arn:aws:bedrock:${this.region}::foundation-model/cohere.embed-*`,
-        `arn:aws:bedrock:${this.region}::foundation-model/cohere.rerank-*`,
+        `arn:aws:bedrock:*::foundation-model/anthropic.claude-*`,
+        `arn:aws:bedrock:*::foundation-model/cohere.embed-*`,
+        `arn:aws:bedrock:*::foundation-model/cohere.rerank-*`,
+        `arn:aws:bedrock:*:${this.account}:inference-profile/us.anthropic.*`,
+      ],
+    }));
+
+    // Marketplace permissions required for Bedrock model subscriptions
+    lambdaRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'MarketplaceAccess',
+      actions: [
+        'aws-marketplace:ViewSubscriptions',
+        'aws-marketplace:Subscribe',
+      ],
+      resources: ['*'],
+    }));
+
+    // SSM Parameter Store access (for OpenAI API key)
+    lambdaRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'SSMAccess',
+      actions: [
+        'ssm:GetParameter',
+        'ssm:GetParameters',
+      ],
+      resources: [
+        `arn:aws:ssm:${this.region}:${this.account}:parameter/forge/*`,
       ],
     }));
 
@@ -194,16 +242,90 @@ export class ForgeStack extends cdk.Stack {
         S3_BUCKET: dataBucket.bucketName,
         LANCE_BACKEND: 's3',
         LANCE_S3_BUCKET: dataBucket.bucketName,
-        LLM_MODEL: 'anthropic.claude-sonnet-4-20250514-v1:0',
+        LLM_MODEL: 'bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0',
+        ORGCHART_S3_KEY: 'orgchart/org-chart.db',
+        CONNECTIONS_TABLE: connectionsTable.tableName,
       },
       logGroup,
     });
 
-    // Lambda Function URL with streaming
+    // Lambda Function URL with streaming (kept for REST API endpoints)
     const functionUrl = backendFunction.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
       invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
     });
+
+    // ---------------------------------------------------------------
+    // API Gateway WebSocket API
+    // ---------------------------------------------------------------
+    const wsApi = new apigatewayv2.CfnApi(this, 'WebSocketApi', {
+      name: `${prefix}-ws`,
+      protocolType: 'WEBSOCKET',
+      routeSelectionExpression: '$request.body.action',
+    });
+
+    // Lambda integration for WebSocket routes
+    const wsIntegration = new apigatewayv2.CfnIntegration(this, 'WsIntegration', {
+      apiId: wsApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: `arn:aws:apigateway:${this.region}:lambda:path/2015-03-31/functions/${backendFunction.functionArn}/invocations`,
+    });
+
+    // $connect route
+    new apigatewayv2.CfnRoute(this, 'ConnectRoute', {
+      apiId: wsApi.ref,
+      routeKey: '$connect',
+      target: `integrations/${wsIntegration.ref}`,
+    });
+
+    // $disconnect route
+    new apigatewayv2.CfnRoute(this, 'DisconnectRoute', {
+      apiId: wsApi.ref,
+      routeKey: '$disconnect',
+      target: `integrations/${wsIntegration.ref}`,
+    });
+
+    // $default route
+    new apigatewayv2.CfnRoute(this, 'DefaultRoute', {
+      apiId: wsApi.ref,
+      routeKey: '$default',
+      target: `integrations/${wsIntegration.ref}`,
+    });
+
+    // Deploy the WebSocket API
+    const wsDeployment = new apigatewayv2.CfnDeployment(this, 'WsDeployment', {
+      apiId: wsApi.ref,
+    });
+    wsDeployment.addDependency(
+      this.node.findChild('ConnectRoute') as cdk.CfnResource
+    );
+
+    const wsStage = new apigatewayv2.CfnStage(this, 'WsStage', {
+      apiId: wsApi.ref,
+      stageName: 'v1',
+      deploymentId: wsDeployment.ref,
+    });
+
+    // Grant API Gateway permission to invoke Lambda
+    backendFunction.addPermission('WsApiGatewayInvoke', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${wsApi.ref}/*`,
+    });
+
+    // Grant Lambda permission to post to WebSocket connections (Management API)
+    lambdaRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'WebSocketManagementApi',
+      actions: ['execute-api:ManageConnections'],
+      resources: [
+        `arn:aws:execute-api:${this.region}:${this.account}:${wsApi.ref}/*`,
+      ],
+    }));
+
+    // Add WebSocket endpoint to Lambda environment
+    backendFunction.addEnvironment(
+      'WEBSOCKET_API_ENDPOINT',
+      `https://${wsApi.ref}.execute-api.${this.region}.amazonaws.com/${wsStage.stageName}`,
+    );
 
     // ---------------------------------------------------------------
     // CloudFront Distribution
@@ -221,7 +343,6 @@ export class ForgeStack extends cdk.Stack {
     });
 
     // Lambda function URL origin
-    // Strip the https:// and trailing slash from the function URL for the domain name
     const lambdaOrigin = new origins.FunctionUrlOrigin(functionUrl, {});
 
     // Build optional custom domain configuration
@@ -255,15 +376,7 @@ export class ForgeStack extends cdk.Stack {
           cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD,
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           compress: true,
-          cachePolicy: new cloudfront.CachePolicy(this, 'ApiCachePolicy', {
-            cachePolicyName: `${prefix}-api-no-cache`,
-            minTtl: cdk.Duration.seconds(0),
-            defaultTtl: cdk.Duration.seconds(0),
-            maxTtl: cdk.Duration.seconds(0),
-            headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Authorization', 'Content-Type', 'Accept'),
-            queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(),
-            cookieBehavior: cloudfront.CacheCookieBehavior.all(),
-          }),
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
           originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
         },
       },
@@ -288,17 +401,13 @@ export class ForgeStack extends cdk.Stack {
     // ---------------------------------------------------------------
     // GitHub Actions OIDC Provider and Role
     // ---------------------------------------------------------------
-    const githubOidcProvider = new iam.OpenIdConnectProvider(this, 'GitHubActionsOIDC', {
-      url: 'https://token.actions.githubusercontent.com',
-      clientIds: ['sts.amazonaws.com'],
-      thumbprints: [
-        '6938fd4d98bab03faadb97b34396831e3780aea1',
-        '1c58a3a8518e8759bf075b76b750d4f2df264fcd',
-      ],
-    });
+    const githubOidcProvider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(
+      this, 'GitHubActionsOIDC',
+      `arn:aws:iam::${this.account}:oidc-provider/token.actions.githubusercontent.com`,
+    );
 
     const githubActionsRole = new iam.Role(this, 'GitHubActionsRole', {
-      roleName: 'forge-github-actions',
+      roleName: `${prefix}-github-actions`,
       assumedBy: new iam.FederatedPrincipal(
         githubOidcProvider.openIdConnectProviderArn,
         {
@@ -407,6 +516,16 @@ export class ForgeStack extends cdk.Stack {
         'logs:ListTagsForResource',
         'logs:TagResource',
         'logs:PutRetentionPolicy',
+        // API Gateway
+        'apigateway:*',
+        'execute-api:*',
+        // SSM
+        'ssm:GetParameter',
+        'ssm:PutParameter',
+        'ssm:DeleteParameter',
+        'ssm:DescribeParameters',
+        'ssm:ListTagsForResource',
+        'ssm:AddTagsToResource',
       ],
       resources: ['*'],
     }));
@@ -489,6 +608,11 @@ export class ForgeStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'FunctionUrl', {
       description: 'Lambda function URL',
       value: functionUrl.url,
+    });
+
+    new cdk.CfnOutput(this, 'WebSocketApiUrl', {
+      description: 'WebSocket API endpoint',
+      value: `wss://${wsApi.ref}.execute-api.${this.region}.amazonaws.com/${wsStage.stageName}`,
     });
 
     new cdk.CfnOutput(this, 'DataBucketName', {

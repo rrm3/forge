@@ -1,7 +1,7 @@
-import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { startLogin, handleCallback, parseJwtPayload, oidcConfig, type OidcTokens } from './oidc';
 import { setTokenGetter } from '../api/client';
-import { setChatTokenGetter } from '../api/chat';
+import { setWsTokenGetter, forgeWs } from '../api/websocket';
 
 interface AuthUser {
   userId: string;
@@ -46,6 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const callbackProcessed = useRef(false);
+  const wsConnected = useRef(false);
 
   // Handle callback on mount
   useEffect(() => {
@@ -54,6 +56,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const state = params.get('state');
 
     if (code && state) {
+      // Guard against React strict mode double-invocation
+      if (callbackProcessed.current) return;
+      callbackProcessed.current = true;
+
       // We're on the callback - exchange code for tokens
       handleCallback(code, state)
         .then((tokens: OidcTokens) => {
@@ -61,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(getUserFromToken(tokens.idToken));
           setAuthError(null);
           // Clean URL
-          window.history.replaceState({}, '', window.location.pathname);
+          window.history.replaceState({}, '', '/');
         })
         .catch((err) => {
           console.error('OIDC callback failed:', err);
@@ -76,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token && !isTokenExpired(token)) {
       setUser(getUserFromToken(token));
     } else if (token) {
-      // Token expired - clean up and redirect to login
+      // Token expired - clean up
       localStorage.removeItem(TOKEN_KEY);
     }
     setIsLoading(false);
@@ -89,9 +95,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
-    setUser(null);
-    // Redirect to IdP logout to end the session there too
-    const logoutUrl = `${oidcConfig.providerUrl}/logout?redirect_uri=${encodeURIComponent(window.location.origin)}`;
+    forgeWs.disconnect();
+    wsConnected.current = false;
+    const logoutUrl = `${oidcConfig.providerUrl}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
     window.location.href = logoutUrl;
   }, []);
 
@@ -99,7 +105,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token || isTokenExpired(token)) {
       localStorage.removeItem(TOKEN_KEY);
-      // Token expired - redirect to re-authenticate
       setUser(null);
       startLogin();
       return null;
@@ -107,10 +112,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return token;
   }, []);
 
+  // Wire token getters for REST and WebSocket clients
   useEffect(() => {
     setTokenGetter(getToken);
-    setChatTokenGetter(getToken);
+    setWsTokenGetter(getToken);
   }, [getToken]);
+
+  // Connect WebSocket when authenticated
+  useEffect(() => {
+    if (user && !wsConnected.current) {
+      wsConnected.current = true;
+      forgeWs.connect();
+    }
+    return () => {
+      // Don't disconnect on unmount (strict mode) - only on sign out
+    };
+  }, [user]);
 
   const value: AuthContextType = {
     isAuthenticated: user !== null,

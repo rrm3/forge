@@ -38,7 +38,7 @@ export async function createSession(): Promise<Session> {
   return res.json();
 }
 
-export async function getSession(id: string): Promise<Session & { messages: Message[] }> {
+export async function getSession(id: string): Promise<Session & { transcript: Message[] }> {
   const res = await fetchWithAuth(`${API_BASE}/api/sessions/${encodeURIComponent(id)}`);
   await checkResponse(res);
   return res.json();

@@ -54,6 +54,7 @@ class DynamoDBSessionRepository(SessionRepository):
             "user_id": session.user_id,
             "session_id": session.session_id,
             "title": session.title,
+            "type": session.type,
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
             "message_count": session.message_count,
@@ -61,12 +62,20 @@ class DynamoDBSessionRepository(SessionRepository):
         }
 
     def _deserialize(self, item: dict) -> Session:
+        created = datetime.fromisoformat(item["created_at"])
+        updated = datetime.fromisoformat(item["updated_at"])
+        # Ensure timezone-aware for consistent sorting
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=UTC)
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=UTC)
         return Session(
             user_id=item["user_id"],
             session_id=item["session_id"],
             title=item.get("title", ""),
-            created_at=datetime.fromisoformat(item["created_at"]),
-            updated_at=datetime.fromisoformat(item["updated_at"]),
+            type=item.get("type", "chat"),
+            created_at=created,
+            updated_at=updated,
             message_count=int(item.get("message_count", 0)),
             summary=item.get("summary", ""),
         )

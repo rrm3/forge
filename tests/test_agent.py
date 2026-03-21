@@ -20,30 +20,8 @@ from backend.agent.events import (
 )
 from backend.agent.loop import react_loop
 from backend.agent.skills import detect_active_skill, load_skill
-from backend.agent.sse import format_sse
 from backend.models import TokenUsage, UserProfile
 from backend.tools.registry import ToolContext, ToolRegistry
-
-
-# ---------------------------------------------------------------------------
-# SSE formatting
-# ---------------------------------------------------------------------------
-
-
-class TestFormatSSE:
-    def test_basic_format(self):
-        result = format_sse("text", {"content": "hello"})
-        assert result == 'event: text\ndata: {"content": "hello"}\n\n'
-
-    def test_done_event(self):
-        result = format_sse("done", {"usage": None})
-        assert result.startswith("event: done\n")
-        assert result.endswith("\n\n")
-
-    def test_special_characters(self):
-        result = format_sse("text", {"content": 'line1\n"quoted"'})
-        parsed = json.loads(result.split("data: ")[1].strip())
-        assert parsed["content"] == 'line1\n"quoted"'
 
 
 # ---------------------------------------------------------------------------

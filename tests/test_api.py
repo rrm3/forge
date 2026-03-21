@@ -352,16 +352,5 @@ class TestIdeas:
         assert len(resp.json()) == 2
 
 
-# ---------------------------------------------------------------------------
-# Chat (smoke test - doesn't actually call LLM)
-# ---------------------------------------------------------------------------
 
-class TestChatCancel:
-    def test_cancel_no_session(self, client):
-        resp = client.post(
-            "/api/chat/cancel",
-            headers=DEV_HEADERS,
-            json={"session_id": "nonexistent"},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "no_active_session"
+# Chat cancel endpoint removed in v2 - cancellation is now via WebSocket

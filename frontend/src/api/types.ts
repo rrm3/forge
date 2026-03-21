@@ -1,7 +1,10 @@
+export type SessionType = 'chat' | 'tip' | 'stuck' | 'brainstorm' | 'wrapup' | 'intake';
+
 export interface Session {
   session_id: string;
   user_id: string;
   title: string;
+  type: SessionType;
   created_at: string;
   updated_at: string;
   message_count: number;
@@ -29,7 +32,25 @@ export interface UserProfile {
   interests: string[];
   tools_used: string[];
   goals: string[];
+  location: string;
+  start_date: string;
+  work_summary: string;
   onboarding_complete: boolean;
+  intake_completed_at: string | null;
+  products: string[];
+  daily_tasks: string;
+  core_skills: string[];
+  learning_goals: string[];
+  ai_tools_used: string[];
+  ai_superpower: string;
+  ai_proficiency: {
+    operational_fluency: number;
+    strategic_delegation: number;
+    discernment: number;
+    security_awareness: number;
+    automation_readiness: number;
+  } | null;
+  intake_summary: string;
   created_at: string;
   updated_at: string;
 }
@@ -53,11 +74,3 @@ export interface Idea {
   interested_users: string[];
   created_at: string;
 }
-
-// SSE event types from backend
-export type ChatEvent =
-  | { type: 'text'; text: string }
-  | { type: 'tool_call'; tool_name: string; tool_call_id: string; arguments: Record<string, unknown> }
-  | { type: 'tool_result'; tool_call_id: string; result: string }
-  | { type: 'done'; usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null }
-  | { type: 'error'; error: string };

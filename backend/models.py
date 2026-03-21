@@ -1,15 +1,20 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
 
 
 class Session(BaseModel):
     session_id: str
     user_id: str
     title: str = ""
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    type: str = "chat"  # chat, tip, stuck, brainstorm, wrapup, intake
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
     message_count: int = 0
     summary: str = ""
 
@@ -17,7 +22,7 @@ class Session(BaseModel):
 class Message(BaseModel):
     role: Literal["user", "assistant", "system", "tool_call", "tool_result"]
     content: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=_now)
     tool_name: str | None = None
     tool_call_id: str | None = None
 
@@ -35,9 +40,12 @@ class UserProfile(BaseModel):
     interests: list[str] = Field(default_factory=list)
     tools_used: list[str] = Field(default_factory=list)
     goals: list[str] = Field(default_factory=list)
+    location: str = ""
+    start_date: str = ""
+    work_summary: str = ""
     onboarding_complete: bool = False
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
 
 
 class JournalEntry(BaseModel):
@@ -45,7 +53,7 @@ class JournalEntry(BaseModel):
     user_id: str
     content: str
     tags: list[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_now)
 
 
 class Idea(BaseModel):
@@ -57,7 +65,7 @@ class Idea(BaseModel):
     proposed_by_name: str = ""
     status: str = "open"  # e.g. "open", "in_progress", "completed", "archived"
     interested_users: list[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_now)
 
 
 class TokenUsage(BaseModel):
