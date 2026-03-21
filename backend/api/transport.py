@@ -105,28 +105,44 @@ class ApiGatewayManagementSender:
             )
             return True
         except Exception as e:
-            error_code = getattr(getattr(e, "response", {}), "get", lambda *a: None)
-            if error_code is None:
-                # Check if it's a GoneException
-                err_resp = getattr(e, "response", {})
-                if isinstance(err_resp, dict) and err_resp.get("Error", {}).get("Code") == "GoneException":
-                    self._gone = True
-                    logger.info("Connection %s is gone", self._connection_id)
-                    return False
+            # Check if it's a GoneException (client disconnected)
+            err_resp = getattr(e, "response", None)
+            if isinstance(err_resp, dict):
+                error_code = err_resp.get("Error", {}).get("Code", "")
+            else:
+                error_code = getattr(err_resp, "status_code", "") if err_resp else ""
+            if error_code == "GoneException" or "Gone" in str(e):
+                self._gone = True
+                logger.info("Connection %s is gone", self._connection_id)
+                return False
             logger.warning("Failed to send to connection %s: %s", self._connection_id, e)
             return False
 
     async def _send_chunked(self, raw: str) -> bool:
+        import asyncio
+
         chunk_id = str(uuid.uuid4())[:8]
-        chunks = [raw[i:i + MAX_FRAME_SIZE] for i in range(0, len(raw), MAX_FRAME_SIZE)]
+        # Reserve space for the chunk envelope JSON (~120 bytes) to prevent recursion
+        chunk_size = MAX_FRAME_SIZE - 200
+        chunks = [raw[i:i + chunk_size] for i in range(0, len(raw), chunk_size)]
+        loop = asyncio.get_event_loop()
         for seq, chunk in enumerate(chunks):
-            ok = await self.send({
+            envelope = json.dumps({
                 "type": "chunk",
                 "chunk_id": chunk_id,
                 "seq": seq,
                 "total": len(chunks),
                 "data": chunk,
             })
-            if not ok:
+            try:
+                await loop.run_in_executor(
+                    None,
+                    lambda e=envelope: self._get_client().post_to_connection(
+                        ConnectionId=self._connection_id,
+                        Data=e.encode("utf-8"),
+                    ),
+                )
+            except Exception:
+                self._gone = True
                 return False
         return True

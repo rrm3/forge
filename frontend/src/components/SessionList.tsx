@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
 import type { Session, SessionType } from '../api/types';
 
@@ -9,6 +9,7 @@ const SESSION_ICONS: Record<string, typeof Lightbulb> = {
   brainstorm: Star,
   wrapup: Sunrise,
   chat: MessageCircle,
+  intake: ClipboardCheck,
 };
 
 function getSessionIcon(type: string) {

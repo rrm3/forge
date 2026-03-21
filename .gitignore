@@ -27,6 +27,7 @@ frontend/.vite/
 .DS_Store
 
 # Env
+.envrc
 .envrc.local
 *.env
 .env.*
@@ -46,3 +47,5 @@ cdk.out/
 *.log
 .coverage
 htmlcov/
+curriculum-source/
+.gstack/
