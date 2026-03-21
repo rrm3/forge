@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head><title>Silent Refresh</title></head>
+<body>
+<script>
+  // This page runs inside a hidden iframe during silent token refresh.
+  // It extracts the auth code from the URL and posts it to the parent window.
+  var params = new URLSearchParams(window.location.search);
+  var code = params.get('code');
+  var state = params.get('state');
+  var error = params.get('error');
+
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({
+      type: 'silent-callback',
+      code: code,
+      state: state,
+      error: error || undefined,
+    }, window.location.origin);
+  }
+</script>
+</body>
+</html>

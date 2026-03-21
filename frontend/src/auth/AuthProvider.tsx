@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
-import { startLogin, handleCallback, parseJwtPayload, oidcConfig, type OidcTokens } from './oidc';
+import { startLogin, handleCallback, parseJwtPayload, silentRefresh, oidcConfig, type OidcTokens } from './oidc';
 import { setTokenGetter } from '../api/client';
 import { setWsTokenGetter, forgeWs } from '../api/websocket';
 
@@ -23,6 +23,9 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 
 const TOKEN_KEY = 'oidc_id_token';
 
+// Refresh 5 minutes before expiry
+const REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
 function getUserFromToken(token: string): AuthUser {
   const payload = parseJwtPayload(token);
   return {
@@ -42,14 +45,22 @@ function isTokenExpired(token: string): boolean {
   }
 }
 
+function getTokenExpiresIn(token: string): number {
+  try {
+    const payload = parseJwtPayload(token);
+    const exp = payload.exp as number;
+    return exp * 1000 - Date.now();
+  } catch {
+    return 0;
+  }
+}
+
 function getInitialAuthState(): { user: AuthUser | null; isLoading: boolean } {
-  // Check for OIDC callback first
   const params = new URLSearchParams(window.location.search);
   if (params.get('code') && params.get('state')) {
-    return { user: null, isLoading: true }; // Will handle in useEffect
+    return { user: null, isLoading: true };
   }
 
-  // Synchronously check localStorage for existing token
   const token = localStorage.getItem(TOKEN_KEY);
   if (token && !isTokenExpired(token)) {
     return { user: getUserFromToken(token), isLoading: false };
@@ -67,8 +78,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const callbackProcessed = useRef(false);
   const wsConnected = useRef(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Handle OIDC callback on mount (only when code+state params are present)
+  // Schedule a silent refresh before the token expires
+  const scheduleRefresh = useCallback((token: string) => {
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+
+    const expiresIn = getTokenExpiresIn(token);
+    const refreshIn = Math.max(expiresIn - REFRESH_BUFFER_MS, 10000); // At least 10s from now
+
+    console.log(`Token refresh scheduled in ${Math.round(refreshIn / 1000)}s`);
+
+    refreshTimerRef.current = setTimeout(async () => {
+      console.log('Attempting silent token refresh...');
+      try {
+        const tokens = await silentRefresh();
+        localStorage.setItem(TOKEN_KEY, tokens.idToken);
+        setUser(getUserFromToken(tokens.idToken));
+        console.log('Silent refresh succeeded');
+        // Schedule the next refresh
+        scheduleRefresh(tokens.idToken);
+      } catch (err) {
+        console.warn('Silent refresh failed, will redirect on next API call:', err);
+        // Don't force a redirect immediately - the user might still have a few
+        // minutes left on the current token. The getToken() function will
+        // redirect when the token actually expires.
+      }
+    }, refreshIn);
+  }, []);
+
+  // Handle OIDC callback on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
@@ -84,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(getUserFromToken(tokens.idToken));
           setAuthError(null);
           window.history.replaceState({}, '', '/');
+          scheduleRefresh(tokens.idToken);
         })
         .catch((err) => {
           console.error('OIDC callback failed:', err);
@@ -91,7 +133,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         .finally(() => setIsLoading(false));
     }
-  }, []);
+  }, [scheduleRefresh]);
+
+  // Schedule refresh for existing token on mount
+  useEffect(() => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token && !isTokenExpired(token)) {
+      scheduleRefresh(token);
+    }
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
+  }, [scheduleRefresh]);
 
   const signIn = useCallback(() => {
     setAuthError(null);
@@ -99,6 +154,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(() => {
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
     localStorage.removeItem(TOKEN_KEY);
     forgeWs.disconnect();
     wsConnected.current = false;
@@ -109,15 +167,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const getToken = useCallback(async (): Promise<string | null> => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token || isTokenExpired(token)) {
-      localStorage.removeItem(TOKEN_KEY);
-      setUser(null);
-      startLogin();
-      return null;
+      // Token is dead - try one silent refresh before redirecting
+      try {
+        const tokens = await silentRefresh();
+        localStorage.setItem(TOKEN_KEY, tokens.idToken);
+        setUser(getUserFromToken(tokens.idToken));
+        scheduleRefresh(tokens.idToken);
+        return tokens.idToken;
+      } catch {
+        // Silent refresh failed - full redirect
+        localStorage.removeItem(TOKEN_KEY);
+        setUser(null);
+        startLogin();
+        return null;
+      }
     }
     return token;
-  }, []);
+  }, [scheduleRefresh]);
 
-  // Wire token getters for REST and WebSocket clients
+  // Wire token getters
   useEffect(() => {
     setTokenGetter(getToken);
     setWsTokenGetter(getToken);
@@ -129,9 +197,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       wsConnected.current = true;
       forgeWs.connect();
     }
-    return () => {
-      // Don't disconnect on unmount (strict mode) - only on sign out
-    };
   }, [user]);
 
   const value: AuthContextType = {

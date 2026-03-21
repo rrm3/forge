@@ -102,3 +102,96 @@ export function parseJwtPayload(token: string): Record<string, unknown> {
   const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
   return JSON.parse(atob(base64));
 }
+
+/**
+ * Silent token refresh via hidden iframe.
+ *
+ * Sends the user to the OIDC authorize endpoint with prompt=none in a
+ * hidden iframe. If the provider's session is still alive, it redirects
+ * back with a new auth code which we exchange for fresh tokens.
+ * If the session is dead, the iframe returns an error and we fall back
+ * to a full redirect.
+ */
+export async function silentRefresh(): Promise<OidcTokens> {
+  const codeVerifier = generateRandomString(64);
+  const codeChallenge = base64urlEncode(await sha256(codeVerifier));
+  const state = generateRandomString(32);
+
+  // Use a dedicated silent callback path
+  const silentRedirectUri = `${window.location.origin}/silent-callback.html`;
+
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: oidcConfig.clientId,
+    redirect_uri: silentRedirectUri,
+    scope: oidcConfig.scopes,
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+    prompt: 'none',
+  });
+
+  const authorizeUrl = `${oidcConfig.providerUrl}/authorize?${params}`;
+
+  return new Promise<OidcTokens>((resolve, reject) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Silent refresh timed out'));
+    }, 10000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      window.removeEventListener('message', onMessage);
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    }
+
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== 'silent-callback') return;
+
+      cleanup();
+
+      const { code: cbCode, state: cbState, error } = event.data;
+
+      if (error) {
+        reject(new Error(error));
+        return;
+      }
+
+      if (cbState !== state) {
+        reject(new Error('State mismatch in silent refresh'));
+        return;
+      }
+
+      // Exchange code for tokens
+      fetch(`${oidcConfig.providerUrl}/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: cbCode,
+          redirect_uri: silentRedirectUri,
+          client_id: oidcConfig.clientId,
+          code_verifier: codeVerifier,
+        }),
+      })
+        .then(async (resp) => {
+          if (!resp.ok) throw new Error('Token exchange failed');
+          const data = await resp.json();
+          resolve({
+            idToken: data.id_token,
+            accessToken: data.access_token,
+            expiresIn: data.expires_in,
+          });
+        })
+        .catch(reject);
+    }
+
+    window.addEventListener('message', onMessage);
+    iframe.src = authorizeUrl;
+  });
+}
