@@ -33,6 +33,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
   const [streamingText, setStreamingText] = useState('');
   const [paused, setPaused] = useState(false);
   const [micGated, setMicGated] = useState(false);
+  const responseActiveRef = useRef(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
@@ -248,6 +249,14 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
         setOrbState('idle');
         break;
 
+      case 'response.created':
+        responseActiveRef.current = true;
+        break;
+
+      case 'response.done':
+        responseActiveRef.current = false;
+        break;
+
       case 'response.audio.delta':
         setOrbState('speaking');
         // Mute mic while AI speaks to prevent echo pickup
@@ -327,14 +336,16 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
   function sendToolResult(callId: string, result: string) {
     console.log(`Sending tool result for ${callId}: ${result.substring(0, 100)}...`);
-    // Only send the result - don't send response.create.
-    // The model's response is already in progress and waiting for this
-    // tool result to continue. Sending response.create would conflict
-    // with the active response.
     sendEvent({
       type: 'conversation.item.create',
       item: { type: 'function_call_output', call_id: callId, output: result },
     });
+    // Only trigger a new response if the previous one has finished.
+    // If a response is still active, the model will pick up the tool
+    // result automatically.
+    if (!responseActiveRef.current) {
+      sendEvent({ type: 'response.create' });
+    }
   }
 
   // Execute tools as fast as possible - use direct REST calls where we can
