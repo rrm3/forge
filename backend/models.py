@@ -27,6 +27,15 @@ class Message(BaseModel):
     tool_call_id: str | None = None
 
 
+class AIProficiency(BaseModel):
+    """AI proficiency dimensions scored 1-5 by the AI during intake."""
+    operational_fluency: int = 0
+    strategic_delegation: int = 0
+    discernment: int = 0
+    security_awareness: int = 0
+    automation_readiness: int = 0
+
+
 class UserProfile(BaseModel):
     user_id: str
     email: str = ""
@@ -36,7 +45,7 @@ class UserProfile(BaseModel):
     manager: str = ""
     direct_reports: list[str] = Field(default_factory=list)
     team: str = ""
-    ai_experience_level: str = ""  # e.g. "beginner", "intermediate", "advanced"
+    ai_experience_level: str = ""
     interests: list[str] = Field(default_factory=list)
     tools_used: list[str] = Field(default_factory=list)
     goals: list[str] = Field(default_factory=list)
@@ -44,6 +53,16 @@ class UserProfile(BaseModel):
     start_date: str = ""
     work_summary: str = ""
     onboarding_complete: bool = False
+    # v2 intake fields
+    products: list[str] = Field(default_factory=list)
+    daily_tasks: str = ""
+    core_skills: list[str] = Field(default_factory=list)
+    learning_goals: list[str] = Field(default_factory=list)
+    ai_tools_used: list[str] = Field(default_factory=list)
+    ai_superpower: str = ""
+    ai_proficiency: AIProficiency | None = None
+    intake_summary: str = ""
+    intake_completed_at: datetime | None = None
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 

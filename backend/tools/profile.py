@@ -20,7 +20,7 @@ READ_PROFILE_SCHEMA = {
 
 UPDATE_PROFILE_SCHEMA = {
     "name": "update_profile",
-    "description": "Update your profile with new information",
+    "description": "Update the user's profile with new information captured during conversation",
     "input_schema": {
         "type": "object",
         "properties": {
@@ -35,6 +35,25 @@ UPDATE_PROFILE_SCHEMA = {
                     "interests": {"type": "array", "items": {"type": "string"}},
                     "tools_used": {"type": "array", "items": {"type": "string"}},
                     "goals": {"type": "array", "items": {"type": "string"}},
+                    "products": {"type": "array", "items": {"type": "string"}},
+                    "daily_tasks": {"type": "string"},
+                    "core_skills": {"type": "array", "items": {"type": "string"}},
+                    "learning_goals": {"type": "array", "items": {"type": "string"}},
+                    "ai_tools_used": {"type": "array", "items": {"type": "string"}},
+                    "ai_superpower": {"type": "string"},
+                    "ai_proficiency": {
+                        "type": "object",
+                        "properties": {
+                            "operational_fluency": {"type": "integer", "minimum": 1, "maximum": 5},
+                            "strategic_delegation": {"type": "integer", "minimum": 1, "maximum": 5},
+                            "discernment": {"type": "integer", "minimum": 1, "maximum": 5},
+                            "security_awareness": {"type": "integer", "minimum": 1, "maximum": 5},
+                            "automation_readiness": {"type": "integer", "minimum": 1, "maximum": 5},
+                        },
+                    },
+                    "intake_summary": {"type": "string"},
+                    "intake_completed_at": {"type": "string", "description": "ISO 8601 datetime when intake was completed"},
+                    "onboarding_complete": {"type": "boolean"},
                 },
             },
         },
@@ -101,7 +120,12 @@ async def update_profile(fields: dict, context: ToolContext) -> str:
         return "No fields provided to update."
 
     # Strip unknown keys
-    allowed = {"title", "department", "team", "ai_experience_level", "interests", "tools_used", "goals"}
+    allowed = {
+        "title", "department", "team", "ai_experience_level", "interests",
+        "tools_used", "goals", "products", "daily_tasks", "core_skills",
+        "learning_goals", "ai_tools_used", "ai_superpower", "ai_proficiency",
+        "intake_summary", "intake_completed_at", "onboarding_complete",
+    }
     filtered = {k: v for k, v in fields.items() if k in allowed}
     if not filtered:
         return f"No valid fields to update. Allowed fields: {', '.join(sorted(allowed))}"

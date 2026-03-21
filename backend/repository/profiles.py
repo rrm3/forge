@@ -44,7 +44,7 @@ class DynamoDBProfileRepository(ProfileRepository):
         self.table = self.dynamodb.Table(table_name)
 
     def _serialize(self, profile: UserProfile) -> dict:
-        return {
+        data = {
             "user_id": profile.user_id,
             "email": profile.email,
             "name": profile.name,
@@ -57,12 +57,37 @@ class DynamoDBProfileRepository(ProfileRepository):
             "interests": profile.interests,
             "tools_used": profile.tools_used,
             "goals": profile.goals,
+            "location": profile.location,
+            "start_date": profile.start_date,
+            "work_summary": profile.work_summary,
             "onboarding_complete": profile.onboarding_complete,
+            "products": profile.products,
+            "daily_tasks": profile.daily_tasks,
+            "core_skills": profile.core_skills,
+            "learning_goals": profile.learning_goals,
+            "ai_tools_used": profile.ai_tools_used,
+            "ai_superpower": profile.ai_superpower,
+            "ai_proficiency": profile.ai_proficiency.model_dump() if profile.ai_proficiency else None,
+            "intake_summary": profile.intake_summary,
+            "intake_completed_at": profile.intake_completed_at.isoformat() if profile.intake_completed_at else None,
             "created_at": profile.created_at.isoformat(),
             "updated_at": profile.updated_at.isoformat(),
         }
+        # DynamoDB doesn't support None values in items - remove them
+        return {k: v for k, v in data.items() if v is not None}
 
     def _deserialize(self, item: dict) -> UserProfile:
+        from backend.models import AIProficiency
+        ai_prof = item.get("ai_proficiency")
+        if isinstance(ai_prof, dict):
+            ai_prof = AIProficiency(**ai_prof)
+        else:
+            ai_prof = None
+
+        intake_completed = item.get("intake_completed_at")
+        if isinstance(intake_completed, str):
+            intake_completed = datetime.fromisoformat(intake_completed)
+
         return UserProfile(
             user_id=item["user_id"],
             email=item.get("email", ""),
@@ -76,7 +101,19 @@ class DynamoDBProfileRepository(ProfileRepository):
             interests=list(item.get("interests", [])),
             tools_used=list(item.get("tools_used", [])),
             goals=list(item.get("goals", [])),
+            location=item.get("location", ""),
+            start_date=item.get("start_date", ""),
+            work_summary=item.get("work_summary", ""),
             onboarding_complete=bool(item.get("onboarding_complete", False)),
+            products=list(item.get("products", [])),
+            daily_tasks=item.get("daily_tasks", ""),
+            core_skills=list(item.get("core_skills", [])),
+            learning_goals=list(item.get("learning_goals", [])),
+            ai_tools_used=list(item.get("ai_tools_used", [])),
+            ai_superpower=item.get("ai_superpower", ""),
+            ai_proficiency=ai_prof,
+            intake_summary=item.get("intake_summary", ""),
+            intake_completed_at=intake_completed,
             created_at=datetime.fromisoformat(item["created_at"]),
             updated_at=datetime.fromisoformat(item["updated_at"]),
         )
