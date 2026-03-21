@@ -1,13 +1,14 @@
 /**
- * Voice Mode - uses @openai/agents RealtimeSession with WebRTC.
+ * Voice Mode - OpenAI Realtime API via WebRTC.
  *
- * The SDK handles all audio capture, playback, echo cancellation,
- * and VAD. We just configure the session and listen for events.
+ * Based on the openai-realtime-console reference implementation:
+ * - WebRTC PeerConnection for audio (native echo cancellation)
+ * - Data channel for events (transcripts, tool calls)
+ * - Ephemeral token from server-side session creation
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MicOff, Square, Type, Pause, Play } from 'lucide-react';
-import { RealtimeSession, RealtimeAgent, OpenAIRealtimeWebRTC, tool } from '@openai/agents/realtime';
 import { VoiceOrb, type OrbState } from './VoiceOrb';
 import { forgeWs } from '../api/websocket';
 import type { ServerMessage } from '../api/websocket';
@@ -20,6 +21,8 @@ interface VoiceModeProps {
   onTranscriptUpdate?: (entries: { role: string; text: string }[]) => void;
 }
 
+const REALTIME_MODEL = 'gpt-4o-realtime-preview-2024-12-17';
+
 export function VoiceMode({ sessionId, sessionType, onExit, transcript: externalTranscript, onTranscriptUpdate }: VoiceModeProps) {
   const [orbState, setOrbState] = useState<OrbState>('idle');
   const [audioLevel, setAudioLevel] = useState(0);
@@ -30,8 +33,12 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
   const [streamingText, setStreamingText] = useState('');
   const [paused, setPaused] = useState(false);
 
-  const sessionRef = useRef<RealtimeSession | null>(null);
-  const transportRef = useRef<OpenAIRealtimeWebRTC | null>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const dcRef = useRef<RTCDataChannel | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animFrameRef = useRef<number>(0);
 
   useEffect(() => { onTranscriptUpdate?.(transcript); }, [transcript, onTranscriptUpdate]);
 
@@ -42,14 +49,15 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
     const unsubMessage = forgeWs.onMessage((msg: ServerMessage) => {
       if (cancelled) return;
       if (msg.type === 'voice_token' && 'session_id' in msg && msg.session_id === sessionId) {
-        if (!sessionRef.current) {
-          connectWithToken(msg.token);
+        if (!pcRef.current) {
+          connectWebRTC(msg.token);
         }
       }
-      // Tool results from backend - relay to the session
       if (msg.type === 'tool_result' && 'session_id' in msg && msg.session_id === sessionId) {
-        // The SDK handles tool results internally via its tool definitions
-        // We relay via a different mechanism (see tool definitions below)
+        sendToolResult(
+          (msg as { tool_call_id: string }).tool_call_id,
+          (msg as { result: string }).result,
+        );
       }
     });
 
@@ -62,203 +70,261 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
     };
   }, [sessionId, sessionType]);
 
-  async function connectWithToken(token: string) {
+  // Audio level visualization
+  useEffect(() => {
+    function tick() {
+      if (analyserRef.current) {
+        const data = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(data);
+        const avg = data.reduce((sum, v) => sum + v, 0) / data.length;
+        setAudioLevel(Math.min(avg / 128, 1));
+      }
+      animFrameRef.current = requestAnimationFrame(tick);
+    }
+    animFrameRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, []);
+
+  // ---- WebRTC connection (from openai-realtime-console reference) ----
+
+  async function connectWebRTC(token: string) {
     try {
-      // Check mic access first
+      // 1. Get microphone
+      let localStream: MediaStream;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop()); // Release immediately, SDK will request again
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
       } catch {
         setMicDenied(true);
         setConnecting(false);
         return;
       }
+      localStreamRef.current = localStream;
 
-      // Create agent with tools that relay to our Forge backend
-      const agent = new RealtimeAgent({
-        name: 'forge',
-        instructions: 'Follow the instructions from the session configuration.',
-        tools: [
-          tool({
-            name: 'search',
-            description: 'Search the knowledge base',
-            parameters: { type: 'object' as const, properties: { query: { type: 'string' as const } }, required: ['query'] as const },
-            execute: async (_ctx, args) => {
-              return await relayToolToBackend('search', args as Record<string, unknown>);
-            },
-          }),
-          tool({
-            name: 'read_profile',
-            description: 'Read the user profile',
-            parameters: { type: 'object' as const, properties: {} },
-            execute: async (_ctx, _args) => {
-              return await relayToolToBackend('read_profile', {});
-            },
-          }),
-          tool({
-            name: 'update_profile',
-            description: 'Update the user profile',
-            parameters: { type: 'object' as const, properties: { fields: { type: 'object' as const } }, required: ['fields'] as const },
-            execute: async (_ctx, args) => {
-              return await relayToolToBackend('update_profile', args as Record<string, unknown>);
-            },
-          }),
-          tool({
-            name: 'save_journal',
-            description: 'Save a journal entry',
-            parameters: { type: 'object' as const, properties: { content: { type: 'string' as const } }, required: ['content'] as const },
-            execute: async (_ctx, args) => {
-              return await relayToolToBackend('save_journal', args as Record<string, unknown>);
-            },
-          }),
-        ],
-      });
+      // Set up analyser for orb visualization
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(localStream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyserRef.current = analyser;
 
-      // WebRTC transport with correct endpoint for ephemeral tokens
-      // Ephemeral tokens use /v1/realtime?model=... not /v1/realtime/calls
-      const transport = new OpenAIRealtimeWebRTC({
-        baseUrl: 'https://api.openai.com/v1/realtime',
-      });
-      transportRef.current = transport;
+      // 2. Create PeerConnection
+      const pc = new RTCPeerConnection();
+      pcRef.current = pc;
 
-      // Create session - agent is first arg, options second
-      const session = new RealtimeSession(agent, {
-        transport,
-        model: 'gpt-4o-realtime-preview-2024-12-17',
-      });
-      sessionRef.current = session;
-
-      // Event listeners
-      session.on('agent_start', () => {
-        setOrbState('speaking');
-      });
-
-      session.on('agent_end', () => {
-        setOrbState('listening');
-      });
-
-      session.on('audio_start', () => {
-        setOrbState('speaking');
-      });
-
-      session.on('audio_stopped', () => {
-        setOrbState('listening');
-      });
-
-      session.on('audio_interrupted', () => {
-        setOrbState('listening');
-      });
-
-      session.on('agent_tool_start', () => {
-        setOrbState('tool_call');
-      });
-
-      session.on('agent_tool_end', () => {
-        setOrbState('idle');
-      });
-
-      session.on('history_updated', (history) => {
-        // Convert history to our transcript format
-        const entries: { role: string; text: string }[] = [];
-        for (const item of history) {
-          if (item.type === 'message') {
-            const role = item.role === 'user' ? 'user' : 'assistant';
-            const text = item.content?.map((c: { text?: string; transcript?: string }) => c.text || c.transcript || '').join('') || '';
-            if (text.trim()) {
-              entries.push({ role, text: text.trim() });
-            }
-          }
+      pc.addEventListener('connectionstatechange', () => {
+        if (pc.connectionState === 'connected') {
+          setConnecting(false);
+          setOrbState('listening');
         }
-        setTranscript(entries);
-        setStreamingText('');
-      });
-
-      session.on('transport_event', (event) => {
-        if (event.type === 'transcript_delta') {
-          setStreamingText(prev => prev + ((event as { delta?: string }).delta || ''));
+        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+          setOrbState('reconnecting');
         }
       });
 
-      session.on('error', (err) => {
-        const msg = err?.error ? String(err.error) : 'Voice error';
-        console.error('RealtimeSession error:', msg);
-        if (!msg.includes('active response')) {
-          setError(msg);
-        }
+      // 3. Play remote audio (AI's voice) via an <audio> element
+      pc.addEventListener('track', (event) => {
+        const [remoteStream] = event.streams;
+        if (!remoteAudioRef.current || !remoteStream) return;
+        remoteAudioRef.current.srcObject = remoteStream;
+        remoteAudioRef.current.play().catch(() => {});
       });
 
-      // Connect with the ephemeral token
-      await session.connect({ apiKey: token });
-      setConnecting(false);
-      setOrbState('listening');
+      // 4. Add local mic tracks
+      for (const track of localStream.getAudioTracks()) {
+        pc.addTrack(track, localStream);
+      }
 
-      // Trigger initial greeting
-      transport.sendEvent({ type: 'response.create' });
+      // 5. Create data channel for events
+      const dc = pc.createDataChannel('oai-events');
+      dcRef.current = dc;
+
+      dc.addEventListener('open', () => {
+        // Send session.update to enable input transcription and set initial config
+        dc.send(JSON.stringify({
+          type: 'session.update',
+          session: {
+            input_audio_transcription: { model: 'whisper-1' },
+            turn_detection: {
+              type: 'server_vad',
+              threshold: 0.6,
+              silence_duration_ms: 800,
+            },
+          },
+        }));
+
+        // Trigger initial greeting
+        dc.send(JSON.stringify({ type: 'response.create' }));
+      });
+
+      dc.addEventListener('message', (messageEvent) => {
+        try {
+          const event = JSON.parse(messageEvent.data);
+          handleServerEvent(event);
+        } catch {}
+      });
+
+      // 6. SDP offer/answer exchange
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await waitForIceGathering(pc);
+
+      const url = new URL('https://api.openai.com/v1/realtime/calls');
+      url.searchParams.set('model', REALTIME_MODEL);
+
+      const sdpResponse = await fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/sdp',
+        },
+        body: pc.localDescription?.sdp,
+      });
+
+      if (!sdpResponse.ok) {
+        const errText = await sdpResponse.text();
+        throw new Error(`SDP exchange failed: ${sdpResponse.status} ${errText}`);
+      }
+
+      const answerSdp = await sdpResponse.text();
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
 
     } catch (err) {
       console.error('Voice connection failed:', err);
-      setError(`Connection failed: ${err}`);
+      setError(err instanceof Error ? err.message : String(err));
       setConnecting(false);
     }
   }
 
-  // Relay tool calls to our backend via the Forge WebSocket
-  function relayToolToBackend(toolName: string, args: Record<string, unknown>): Promise<string> {
+  function waitForIceGathering(pc: RTCPeerConnection): Promise<void> {
     return new Promise((resolve) => {
-      const callId = `voice_${Date.now()}`;
-
-      const unsub = forgeWs.onMessage((msg: ServerMessage) => {
-        if (msg.type === 'tool_result' && 'tool_call_id' in msg && (msg as { tool_call_id: string }).tool_call_id === callId) {
-          unsub();
-          resolve((msg as { result: string }).result || 'Done');
+      if (pc.iceGatheringState === 'complete') {
+        resolve();
+        return;
+      }
+      const check = () => {
+        if (pc.iceGatheringState === 'complete') {
+          pc.removeEventListener('icegatheringstatechange', check);
+          resolve();
         }
-      });
-
-      forgeWs.send({
-        action: 'tool_call',
-        session_id: sessionId,
-        tool: toolName,
-        tool_call_id: callId,
-        args,
-      });
-
-      // Timeout after 15s
-      setTimeout(() => { unsub(); resolve('Tool call timed out'); }, 15000);
+      };
+      pc.addEventListener('icegatheringstatechange', check);
+      // Fallback timeout
+      setTimeout(resolve, 3000);
     });
   }
 
+  // ---- Handle server events from data channel ----
+
+  function handleServerEvent(event: { type: string; [key: string]: unknown }) {
+    switch (event.type) {
+      case 'input_audio_buffer.speech_started':
+        setOrbState('listening');
+        break;
+
+      case 'input_audio_buffer.speech_stopped':
+        setOrbState('idle');
+        break;
+
+      case 'response.audio.delta':
+        setOrbState('speaking');
+        break;
+
+      case 'response.audio.done':
+        setOrbState('listening');
+        break;
+
+      case 'response.output_audio_transcript.delta':
+        setStreamingText(prev => prev + (String(event.delta ?? '')));
+        break;
+
+      case 'response.output_audio_transcript.done':
+        setStreamingText('');
+        {
+          const text = String(event.transcript ?? '').trim();
+          if (text) {
+            setTranscript(prev => [...prev, { role: 'assistant', text }]);
+            forgeWs.send({ action: 'transcript', session_id: sessionId, role: 'assistant', content: text });
+          }
+        }
+        break;
+
+      case 'conversation.item.input_audio_transcription.completed':
+        {
+          const text = String(event.transcript ?? '').trim();
+          if (text) {
+            setTranscript(prev => {
+              if (prev.length > 0 && prev[prev.length - 1].role === 'user') {
+                return [...prev.slice(0, -1), { role: 'user', text }];
+              }
+              return [...prev, { role: 'user', text }];
+            });
+            forgeWs.send({ action: 'transcript', session_id: sessionId, role: 'user', content: text });
+          }
+        }
+        break;
+
+      case 'response.function_call_arguments.done':
+        setOrbState('tool_call');
+        {
+          const callId = String(event.call_id ?? '');
+          const name = String(event.name ?? '');
+          const args = String(event.arguments ?? '{}');
+          forgeWs.send({
+            action: 'tool_call',
+            session_id: sessionId,
+            tool: name,
+            tool_call_id: callId,
+            args: JSON.parse(args),
+          });
+        }
+        break;
+
+      case 'error':
+        {
+          const msg = (event.error as { message?: string })?.message || JSON.stringify(event.error);
+          console.error('Realtime error:', msg);
+          if (!msg.includes('active response')) {
+            setError(msg);
+          }
+        }
+        break;
+    }
+  }
+
+  // ---- Send events via data channel ----
+
+  function sendEvent(event: Record<string, unknown>) {
+    if (dcRef.current?.readyState === 'open') {
+      dcRef.current.send(JSON.stringify(event));
+    }
+  }
+
+  function sendToolResult(callId: string, result: string) {
+    sendEvent({
+      type: 'conversation.item.create',
+      item: { type: 'function_call_output', call_id: callId, output: result },
+    });
+    sendEvent({ type: 'response.create' });
+  }
+
   function togglePause() {
-    const transport = transportRef.current;
-    if (transport) {
+    const stream = localStreamRef.current;
+    if (stream) {
       const newPaused = !paused;
-      transport.mute(newPaused);
+      stream.getAudioTracks().forEach(t => { t.enabled = !newPaused; });
       setPaused(newPaused);
     }
   }
 
   function cleanup() {
-    if (sessionRef.current) {
-      try { sessionRef.current.close(); } catch {}
-      sessionRef.current = null;
-    }
-    if (transportRef.current) {
-      try { transportRef.current.close(); } catch {}
-      transportRef.current = null;
-    }
+    if (dcRef.current) { try { dcRef.current.close(); } catch {} dcRef.current = null; }
+    if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+    if (localStreamRef.current) { localStreamRef.current.getTracks().forEach(t => t.stop()); localStreamRef.current = null; }
+    analyserRef.current = null;
   }
-
-  // Persist transcript to backend when it changes
-  useEffect(() => {
-    if (transcript.length > 0) {
-      const last = transcript[transcript.length - 1];
-      forgeWs.send({
-        action: 'transcript',
-        session_id: sessionId,
-        role: last.role,
-        content: last.text,
-      });
-    }
-  }, [transcript.length, sessionId]);
 
   // ---- Render ----
 
@@ -286,6 +352,9 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
   return (
     <div className="flex flex-col items-center h-full" style={{ backgroundColor: 'var(--color-surface-white)' }}>
+      {/* Hidden audio element for AI voice playback */}
+      <audio ref={remoteAudioRef} autoPlay style={{ display: 'none' }} />
+
       <div className="flex-shrink-0 flex items-center justify-center pt-8 pb-4">
         {connecting ? (
           <div className="flex flex-col items-center gap-3">
