@@ -328,10 +328,13 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
   function executeToolViaBackend(callId: string, name: string, argsStr: string) {
     const localCallId = `voice_${Date.now()}`;
+    let resolved = false;
 
     const unsub = forgeWs.onMessage((msg: ServerMessage) => {
+      if (resolved) return;
       if (msg.type === 'tool_result' && 'tool_call_id' in msg &&
           (msg as { tool_call_id: string }).tool_call_id === localCallId) {
+        resolved = true;
         unsub();
         const result = (msg as { result: string }).result || 'Done';
         sendToolResult(callId, result);
@@ -346,10 +349,13 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       args: JSON.parse(argsStr),
     });
 
-    // Timeout - send empty result rather than hanging
+    // Timeout - only fire if real result hasn't arrived
     setTimeout(() => {
-      unsub();
-      sendToolResult(callId, 'Tool call timed out');
+      if (!resolved) {
+        resolved = true;
+        unsub();
+        sendToolResult(callId, 'Tool call timed out');
+      }
     }, 15000);
   }
 

@@ -92,19 +92,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log(`Token refresh scheduled in ${Math.round(refreshIn / 1000)}s`);
 
     refreshTimerRef.current = setTimeout(async () => {
-      console.log('Attempting silent token refresh...');
+      // Attempt silent refresh. If the OIDC provider doesn't support prompt=none
+      // (e.g. ds-identity), this will fail silently and we'll redirect when the
+      // token actually expires via getToken().
       try {
         const tokens = await silentRefresh();
         localStorage.setItem(TOKEN_KEY, tokens.idToken);
         setUser(getUserFromToken(tokens.idToken));
-        console.log('Silent refresh succeeded');
-        // Schedule the next refresh
         scheduleRefresh(tokens.idToken);
-      } catch (err) {
-        console.warn('Silent refresh failed, will redirect on next API call:', err);
-        // Don't force a redirect immediately - the user might still have a few
-        // minutes left on the current token. The getToken() function will
-        // redirect when the token actually expires.
+      } catch {
+        // Silent refresh not supported or session expired.
+        // getToken() will handle the redirect when needed.
       }
     }, refreshIn);
   }, []);
