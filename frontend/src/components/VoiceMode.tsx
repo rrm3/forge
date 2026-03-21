@@ -151,9 +151,9 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
                 transcription: { model: 'whisper-1' },
                 turn_detection: {
                   type: 'server_vad',
-                  threshold: 0.6,
-                  silence_duration_ms: 800,
-                  prefix_padding_ms: 400,
+                  threshold: 0.8,
+                  silence_duration_ms: 1200,
+                  prefix_padding_ms: 500,
                   create_response: true,
                   interrupt_response: true,
                 },
