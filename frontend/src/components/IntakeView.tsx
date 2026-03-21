@@ -1,46 +1,95 @@
 /**
  * IntakeView - Full-screen focused layout for first-run intake.
  *
- * Shows a splash screen with voice/text choice, then runs the intake
- * conversation in the chosen mode. No sidebar, no action buttons.
+ * Shows onboarding cards first, then transitions to chat with mic option.
+ * No sidebar, no action buttons. TopBar persists across both states.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Mic, Send, Square, MessageSquare } from 'lucide-react';
+import { Square, Send, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSession } from '../state/SessionContext';
-import { getSession } from '../api/client';
 import { MessageBubble, streamingMarkdownComponents } from './MessageBubble';
-import { VoiceMode } from './VoiceMode';
-
-type IntakeStage = 'splash' | 'text' | 'voice';
+import { VoiceButton } from './VoiceButton';
+import { OnboardingCards } from './OnboardingCards';
+import { TopBar } from './TopBar';
+import { IntakeDebugPanel } from './IntakeDebugPanel';
 
 export function IntakeView() {
-  const { state, dispatch, sendChatMessage, startTypedSession, cancelStreaming } = useSession();
+  const { state, sendChatMessage, startTypedSession, cancelStreaming } = useSession();
   const { messages = [], isStreaming, streamingText, activeSessionId } = state;
 
-  const [stage, setStage] = useState<IntakeStage>('splash');
   const [inputValue, setInputValue] = useState('');
-  const [voiceTranscript, setVoiceTranscript] = useState<{ role: string; text: string }[]>([]);
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  // Don't show cards until we know whether an intake session exists
+  const sessionsLoaded = state.sessionsLoaded;
+  const hasIntakeSession = state.sessions.some((s) => s.type === 'intake');
+  const [cardsDismissed, setCardsDismissed] = useState(false);
+
+  const showCards = !cardsDismissed && !hasIntakeSession;
+
+  // Also dismiss cards once messages arrive (covers the streaming case)
+  useEffect(() => {
+    if (!cardsDismissed && messages.length > 0) {
+      setCardsDismissed(true);
+    }
+  }, [cardsDismissed, messages.length]);
+  const [showCapsHint, setShowCapsHint] = useState(false);
+  const capsHintDismissed = useRef(false);
   const inputValueRef = useRef(inputValue);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const intakeStarted = useRef(false);
 
-  function startIntake(mode: 'text' | 'voice') {
-    if (intakeStarted.current) return;
-    intakeStarted.current = true;
-    startTypedSession('intake', mode);
-    setStage(mode);
+  const sendCountRef = useRef(0);
+
+  // Pre-load: start the intake session on Card 1 so AI greeting is ready by "Let's go"
+  function handleCardChange(cardIndex: number) {
+    if (cardIndex >= 0 && !intakeStarted.current) {
+      intakeStarted.current = true;
+      startTypedSession('intake');
+    }
   }
+
+  function handleCardsComplete() {
+    setCardsDismissed(true);
+  }
+
+  // If cards are skipped (returning user), start the intake session immediately
+  useEffect(() => {
+    if (!showCards && !intakeStarted.current) {
+      intakeStarted.current = true;
+      startTypedSession('intake');
+    }
+  }, [showCards, startTypedSession]);
 
   function handleInputChange(v: string) {
     inputValueRef.current = v;
     setInputValue(v);
   }
 
+  function handleTranscribedText(text: string, cursorPosition?: number) {
+    const textarea = textareaRef.current;
+    if (textarea && cursorPosition !== undefined) {
+      const before = inputValue.substring(0, cursorPosition);
+      const after = inputValue.substring(cursorPosition);
+      const padBefore = before.length > 0 && !/\s$/.test(before) ? ' ' : '';
+      const padAfter = after.length > 0 && !/^\s/.test(after) ? ' ' : '';
+      const inserted = padBefore + text + padAfter;
+      handleInputChange(before + inserted + after);
+      requestAnimationFrame(() => {
+        textarea.selectionStart = textarea.selectionEnd = cursorPosition + inserted.length;
+        textarea.focus();
+      });
+    } else {
+      handleInputChange(inputValue ? inputValue + ' ' + text : text);
+      textareaRef.current?.focus();
+    }
+  }
+
   useEffect(() => {
+    if (isVoiceRecording) return; // Don't resize while recording
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
@@ -51,10 +100,45 @@ export function IntakeView() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, streamingText]);
 
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, [activeSessionId]);
+
+  // Show CapsLock hint after first AI message appears
+  useEffect(() => {
+    if (messages.length > 0 && !capsHintDismissed.current && !showCards) {
+      setShowCapsHint(true);
+    }
+  }, [messages.length, showCards]);
+
+  // Auto-dismiss CapsLock hint after 15 seconds
+  useEffect(() => {
+    if (!showCapsHint) return;
+    const timer = setTimeout(() => {
+      setShowCapsHint(false);
+      capsHintDismissed.current = true;
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [showCapsHint]);
+
+  // Hide CapsLock hint when recording starts
+  useEffect(() => {
+    if (isVoiceRecording && showCapsHint) {
+      setShowCapsHint(false);
+      capsHintDismissed.current = true;
+    }
+  }, [isVoiceRecording, showCapsHint]);
+
+  function dismissCapsHint() {
+    setShowCapsHint(false);
+    capsHintDismissed.current = true;
+  }
+
   const handleSend = useCallback(() => {
     const text = inputValueRef.current.trim();
     if (!text || isStreaming) return;
     handleInputChange('');
+    sendCountRef.current += 1;
     sendChatMessage(text);
   }, [isStreaming, sendChatMessage]);
 
@@ -66,236 +150,182 @@ export function IntakeView() {
   }
 
   const hasInput = inputValue.trim().length > 0;
+  const showVoiceHint = sendCountRef.current < 3;
+  const hintText = isVoiceRecording
+    ? 'Recording... tap check to stop'
+    : showVoiceHint
+      ? 'Tap mic or press CapsLock to respond'
+      : 'Enter to send, Shift+Enter for new line';
 
-  // Splash screen - voice/text choice
-  if (stage === 'splash') {
-    return (
-      <div
-        className="min-h-screen flex flex-col items-center justify-center px-6"
-        style={{ backgroundColor: 'var(--color-surface)' }}
-      >
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold tracking-tight mb-3" style={{ color: 'var(--color-text-primary)' }}>
-            Welcome to AI Tuesdays
-          </h1>
-          <p className="text-lg" style={{ color: 'var(--color-text-muted)' }}>
-            Let's get to know each other. This takes about 10 minutes.
-          </p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
-          <button
-            onClick={() => startIntake('voice')}
-            className="flex-1 flex flex-col items-center gap-3 px-6 py-6 rounded-2xl border-2 transition-all duration-200 hover:shadow-md"
-            style={{
-              borderColor: 'var(--color-primary)',
-              backgroundColor: 'var(--color-primary-subtle)',
-            }}
-          >
-            <div
-              className="w-14 h-14 rounded-full flex items-center justify-center"
-              style={{ backgroundColor: 'var(--color-primary)' }}
-            >
-              <Mic className="w-7 h-7 text-white" strokeWidth={1.5} />
-            </div>
-            <div>
-              <p className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                Start with Voice
-              </p>
-              <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                Recommended - feels like a conversation
-              </p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => startIntake('text')}
-            className="flex-1 flex flex-col items-center gap-3 px-6 py-6 rounded-2xl border-2 transition-all duration-200 hover:shadow-md"
-            style={{
-              borderColor: 'var(--color-border)',
-              backgroundColor: 'var(--color-surface-white)',
-            }}
-          >
-            <div
-              className="w-14 h-14 rounded-full flex items-center justify-center"
-              style={{ backgroundColor: 'var(--color-surface-raised)' }}
-            >
-              <MessageSquare className="w-7 h-7" style={{ color: 'var(--color-text-muted)' }} strokeWidth={1.5} />
-            </div>
-            <div>
-              <p className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                Start with Text
-              </p>
-              <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                Type at your own pace
-              </p>
-            </div>
-          </button>
-        </div>
-
-        <a
-          href="mailto:forge-support@digitalscience.com"
-          className="mt-8 text-sm hover:underline"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
-          Need help?
-        </a>
-      </div>
-    );
-  }
-
-  // Voice mode with transcript visible below
-  if (stage === 'voice' && activeSessionId) {
+  // Wait for sessions to load before deciding what to show
+  if (!sessionsLoaded) {
     return (
       <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--color-surface)' }}>
-        <VoiceMode
-          sessionId={activeSessionId}
-          sessionType="intake"
-          onExit={() => {
-            // Load the voice transcript into the text session so the conversation continues
-            if (activeSessionId) {
-              getSession(activeSessionId).then((data) => {
-                if (data.transcript) {
-                  data.transcript.forEach((msg) => {
-                    dispatch({ type: 'ADD_MESSAGE', message: msg });
-                  });
-                }
-              }).catch(() => {});
-            }
-            setStage('text');
-          }}
-          transcript={voiceTranscript}
-          onTranscriptUpdate={setVoiceTranscript}
-        />
+        <TopBar />
       </div>
     );
   }
 
-  // Text mode - full-screen focused chat
   return (
     <div
       className="min-h-screen flex flex-col"
       style={{ backgroundColor: 'var(--color-surface)' }}
     >
-      {/* Compact header */}
-      <div className="text-center pt-6 pb-4 px-6">
-        <h1 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-          AI Tuesdays
-        </h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-          Getting to know you
-        </p>
-      </div>
+      <TopBar />
+      <IntakeDebugPanel />
 
-      {/* Chat area */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-4 py-2 space-y-1">
-          {messages.map((msg, i) => (
-            <MessageBubble key={i} message={msg} />
-          ))}
+      {showCards ? (
+        <OnboardingCards onComplete={handleCardsComplete} onCardChange={handleCardChange} />
+      ) : (
+        <div className="flex-1 flex flex-col relative" style={{ minHeight: 0 }}>
+          {/* Subtle gradient wash at top */}
+          <div
+            className="pointer-events-none absolute top-0 left-0 right-0 h-32 z-10"
+            style={{
+              background: 'linear-gradient(to bottom, rgba(34,211,238,0.03), rgba(129,140,248,0.02), transparent)',
+            }}
+          />
 
-          {isStreaming && streamingText && (
-            <div className="flex justify-start py-1">
-              <div className="max-w-[95%] md:max-w-[85%] prose prose-sm max-w-none" style={{ color: 'var(--color-text-primary)' }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={streamingMarkdownComponents}>
-                  {streamingText}
-                </ReactMarkdown>
-              </div>
-            </div>
-          )}
+          {/* Scrollable messages area */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-2xl mx-auto px-4 py-4 space-y-1 min-h-full flex flex-col justify-end">
+              {messages.map((msg, i) => (
+                <MessageBubble key={i} message={msg} />
+              ))}
 
-          {isStreaming && (
-            <div className="flex justify-start py-1">
-              <div className="px-1 py-1">
-                <div className="flex gap-1.5 items-center">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--color-text-placeholder)', animation: 'bounce 1.4s ease-in-out infinite' }} />
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--color-text-placeholder)', animation: 'bounce 1.4s ease-in-out 0.2s infinite' }} />
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--color-text-placeholder)', animation: 'bounce 1.4s ease-in-out 0.4s infinite' }} />
+              {isStreaming && streamingText && (
+                <div className="flex justify-start py-1">
+                  <div className="max-w-[95%] md:max-w-[85%] prose prose-sm max-w-none px-4 py-3 rounded-2xl" style={{ color: 'var(--color-text-primary)', backgroundColor: 'var(--color-surface-white, #FFFFFF)', border: '1px solid var(--color-border, #E2E8F0)' }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={streamingMarkdownComponents}>
+                      {streamingText}
+                    </ReactMarkdown>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
-
-          <div ref={bottomRef} />
-        </div>
-      </div>
-
-      {/* Input area */}
-      <div className="mx-auto max-w-2xl w-full px-4 pb-4">
-        <div
-          className="relative rounded-xl border transition-all duration-200"
-          style={{
-            backgroundColor: 'var(--color-surface-white)',
-            borderColor: 'var(--color-border)',
-          }}
-        >
-          <div className="p-2">
-            <textarea
-              ref={textareaRef}
-              rows={1}
-              value={inputValue}
-              onChange={(e) => handleInputChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isStreaming}
-              placeholder="Type your response..."
-              className="w-full resize-none bg-transparent outline-none border-none text-base md:text-sm leading-6 p-1 pb-8 pr-20 overflow-y-auto"
-              style={{
-                color: 'var(--color-text-primary)',
-                minHeight: '40px',
-                maxHeight: '184px',
-              }}
-              aria-label="Intake response"
-            />
-
-            <div className="absolute bottom-0 right-0 flex items-center gap-1.5 pb-2 pr-2">
-              {!isStreaming && activeSessionId && (
-                <button
-                  onClick={() => setStage('voice')}
-                  className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150"
-                  style={{ color: 'var(--color-text-muted)' }}
-                  title="Switch to voice"
-                >
-                  <Mic className="w-4 h-4" strokeWidth={1.5} />
-                </button>
               )}
 
-              {isStreaming ? (
-                <button
-                  onClick={cancelStreaming}
-                  className="flex items-center justify-center w-8 h-8 rounded-lg text-white"
-                  style={{ backgroundColor: 'var(--color-text-secondary)' }}
-                  title="Stop"
+              {isStreaming && (
+                <div className="flex justify-start py-1">
+                  <div className="px-1 py-1">
+                    <div className="flex gap-1.5 items-center" role="status" aria-label="AI is thinking">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--color-text-placeholder)', animation: 'bounce 1.4s ease-in-out infinite' }} />
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--color-text-placeholder)', animation: 'bounce 1.4s ease-in-out 0.2s infinite' }} />
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--color-text-placeholder)', animation: 'bounce 1.4s ease-in-out 0.4s infinite' }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div ref={bottomRef} />
+            </div>
+          </div>
+
+          {/* Input area - always at bottom */}
+          <div className="max-w-2xl mx-auto w-full px-4 pb-4">
+            {/* CapsLock floating hint */}
+            {showCapsHint && (
+              <div className="flex justify-center mb-2">
+                <div
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+                  style={{ backgroundColor: '#E8F4F8' }}
                 >
-                  <Square className="w-4 h-4" fill="currentColor" strokeWidth={0} />
-                </button>
-              ) : (
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+                    <rect x="1" y="1" width="14" height="14" rx="3" stroke="#159AC9" strokeWidth="1.2" opacity="0.7" />
+                    <path d="M8 4L5 7.5H7V9.5H9V7.5H11L8 4Z" fill="#159AC9" opacity="0.7" />
+                    <rect x="6" y="10.5" width="4" height="1.5" rx="0.5" fill="#159AC9" opacity="0.7" />
+                  </svg>
+                  <span style={{ color: '#159AC9', fontSize: 12, fontWeight: 500 }}>
+                    Press CapsLock to record
+                  </span>
+                  <button
+                    onClick={dismissCapsHint}
+                    className="flex items-center justify-center"
+                    style={{ color: '#94A3B8', cursor: 'pointer' }}
+                    aria-label="Dismiss hint"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-end gap-2">
+              {/* Input box with mic inside */}
+              <div
+                className="relative flex-1 rounded-xl border transition-all duration-200"
+                style={{
+                  backgroundColor: 'var(--color-surface-white)',
+                  borderColor: 'var(--color-border)',
+                }}
+              >
+                <div className="p-2">
+                  <textarea
+                    ref={textareaRef}
+                    rows={1}
+                    value={inputValue}
+                    onChange={(e) => handleInputChange(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    disabled={isStreaming}
+                    placeholder="Type or tap mic to respond..."
+                    className="w-full resize-none bg-transparent outline-none border-none text-base md:text-sm leading-6 p-1 pb-8 pr-14 overflow-y-auto"
+                    style={{
+                      color: 'var(--color-text-primary)',
+                      minHeight: '40px',
+                      maxHeight: '184px',
+                      caretColor: 'var(--color-text-primary)',
+                      opacity: isVoiceRecording ? 0 : 1,
+                      pointerEvents: isVoiceRecording ? 'none' : undefined,
+                    }}
+                    aria-label="Intake response"
+                  />
+
+                  {/* Mic / recording / stop - inside the input */}
+                  <div className={`absolute bottom-0 right-0 left-0 flex items-center pb-2 px-3 ${isVoiceRecording ? '' : 'justify-end'}`}>
+                    {isVoiceRecording ? (
+                      <VoiceButton
+                        onTranscribedText={handleTranscribedText}
+                        onRecordingStateChange={setIsVoiceRecording}
+                        textareaRef={textareaRef}
+                      />
+                    ) : isStreaming ? (
+                      <button
+                        onClick={cancelStreaming}
+                        className="flex items-center justify-center w-14 h-14 md:w-10 md:h-10 rounded-full text-white transition-colors duration-150"
+                        style={{ backgroundColor: 'var(--color-text-secondary)' }}
+                        title="Stop"
+                        aria-label="Stop generating"
+                      >
+                        <Square className="w-4 h-4" fill="currentColor" strokeWidth={0} />
+                      </button>
+                    ) : (
+                      <VoiceButton
+                        onTranscribedText={handleTranscribedText}
+                        onRecordingStateChange={setIsVoiceRecording}
+                        textareaRef={textareaRef}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Send button - outside the input, to the right */}
+              {hasInput && !isVoiceRecording && !isStreaming && (
                 <button
                   onClick={handleSend}
-                  disabled={!hasInput}
-                  className="flex items-center justify-center w-8 h-8 rounded-lg"
-                  style={{
-                    backgroundColor: hasInput ? 'var(--color-primary)' : 'transparent',
-                    color: hasInput ? '#FFFFFF' : 'var(--color-text-placeholder)',
-                  }}
-                  title="Send"
+                  className="flex items-center justify-center w-10 h-10 rounded-full text-white transition-all duration-150 shrink-0 mb-1"
+                  style={{ backgroundColor: 'var(--color-primary)' }}
+                  title="Send (Enter)"
+                  aria-label="Send message"
                 >
                   <Send className="w-4 h-4" strokeWidth={1.5} />
                 </button>
               )}
             </div>
+            <p className="text-xs text-center mt-1.5" style={{ color: 'var(--color-text-placeholder)' }}>
+              {hintText}
+            </p>
           </div>
         </div>
-      </div>
-
-      <div className="text-center pb-4">
-        <a
-          href="mailto:forge-support@digitalscience.com"
-          className="text-xs hover:underline"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
-          Need help?
-        </a>
-      </div>
+      )}
     </div>
   );
 }

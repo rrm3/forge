@@ -8,6 +8,7 @@ import { ChatView } from './components/ChatView';
 import { HomeScreen } from './components/HomeScreen';
 import { IntakeView } from './components/IntakeView';
 import { UserMenu } from './components/UserMenu';
+import { TopBar } from './components/TopBar';
 import { getProfile } from './api/client';
 import type { UserProfile } from './api/types';
 
@@ -76,7 +77,14 @@ function AppContent() {
 
   const content = state.activeSessionId ? <ChatView /> : <HomeScreen />;
 
-  return <AppShell sidebar={sidebar} content={content} />;
+  return (
+    <div className="flex flex-col h-screen">
+      <TopBar />
+      <div className="flex-1 min-h-0">
+        <AppShell sidebar={sidebar} content={content} />
+      </div>
+    </div>
+  );
 }
 
 function App() {

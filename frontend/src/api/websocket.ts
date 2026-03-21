@@ -6,7 +6,7 @@
  * - Heartbeat ping every 5 minutes
  * - Offline message queue (messages typed while disconnected)
  * - Frame reassembly for chunked messages
- * - All chat, session, and voice actions over a single connection
+ * - All chat and session actions over a single connection
  */
 
 export type ServerMessage =
@@ -18,7 +18,7 @@ export type ServerMessage =
   | { type: 'tool_result'; session_id: string; tool_call_id: string; result: string }
   | { type: 'done'; session_id: string; usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null }
   | { type: 'error'; session_id?: string; message: string }
-  | { type: 'voice_token'; session_id: string; token: string; expires_at: string; instructions?: string; tools?: unknown[] }
+  | { type: 'intake_progress'; session_id: string; checklist: Array<{ field: string; label: string; done: boolean; value?: string }> }
   | { type: 'pong' }
   | { type: 'ping' }
   | { type: 'chunk'; chunk_id: string; seq: number; total: number; data: string };
@@ -94,6 +94,12 @@ class ForgeWebSocket {
       wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
     }
 
+    // Masquerade: append target email so the backend swaps identity
+    const masquerade = localStorage.getItem('forge-masquerade');
+    if (masquerade) {
+      wsUrl += `&masquerade=${encodeURIComponent(masquerade)}`;
+    }
+
     try {
       this.ws = new WebSocket(wsUrl);
     } catch {
@@ -159,8 +165,8 @@ class ForgeWebSocket {
   }
 
   // Convenience methods for common actions
-  startSession(type: string, mode: 'text' | 'voice' = 'text') {
-    this.send({ action: 'start_session', type, mode });
+  startSession(type: string) {
+    this.send({ action: 'start_session', type });
   }
 
   chat(sessionId: string, message: string) {
@@ -169,10 +175,6 @@ class ForgeWebSocket {
 
   cancel(sessionId: string) {
     this.send({ action: 'cancel', session_id: sessionId });
-  }
-
-  requestVoiceSession(sessionId: string, type?: string, resume = false) {
-    this.send({ action: 'voice_session', session_id: sessionId, type, resume });
   }
 
   private handleMessage(msg: ServerMessage) {

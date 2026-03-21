@@ -18,6 +18,11 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   const headers = new Headers(options.headers);
   if (token) headers.set('Authorization', `Bearer ${token}`);
   headers.set('Content-Type', 'application/json');
+
+  // Masquerade: forward the target email so the backend swaps identity
+  const masquerade = localStorage.getItem('forge-masquerade');
+  if (masquerade) headers.set('X-Masquerade-As', masquerade);
+
   return fetch(url, { ...options, headers });
 }
 

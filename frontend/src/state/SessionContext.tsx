@@ -17,6 +17,13 @@ import {
 } from '../api/client';
 import { forgeWs } from '../api/websocket';
 
+export interface IntakeChecklistItem {
+  field: string;
+  label: string;
+  done: boolean;
+  value?: string;
+}
+
 interface SessionState {
   sessions: Session[];
   sessionsLoaded: boolean;
@@ -25,6 +32,7 @@ interface SessionState {
   isStreaming: boolean;
   streamingText: string;
   connectionStatus: ConnectionStatus;
+  intakeChecklist: IntakeChecklistItem[];
 }
 
 type SessionAction =
@@ -39,6 +47,7 @@ type SessionAction =
   | { type: 'SET_STREAMING'; isStreaming: boolean }
   | { type: 'CLEAR_STREAMING_TEXT' }
   | { type: 'SET_CONNECTION_STATUS'; status: ConnectionStatus }
+  | { type: 'SET_INTAKE_CHECKLIST'; checklist: IntakeChecklistItem[] }
   | { type: 'DESELECT_SESSION' };
 
 const initialState: SessionState = {
@@ -49,6 +58,7 @@ const initialState: SessionState = {
   isStreaming: false,
   streamingText: '',
   connectionStatus: 'disconnected',
+  intakeChecklist: [],
 };
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
@@ -109,6 +119,9 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
     case 'SET_CONNECTION_STATUS':
       return { ...state, connectionStatus: action.status };
 
+    case 'SET_INTAKE_CHECKLIST':
+      return { ...state, intakeChecklist: action.checklist };
+
     case 'DESELECT_SESSION':
       return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false };
 
@@ -126,7 +139,7 @@ interface SessionContextType {
   removeSession: (id: string) => Promise<void>;
   updateSessionTitle: (id: string, title: string) => Promise<void>;
   sendChatMessage: (message: string) => void;
-  startTypedSession: (type: SessionType, mode?: 'text' | 'voice') => void;
+  startTypedSession: (type: SessionType) => void;
   cancelStreaming: () => void;
 }
 
@@ -144,9 +157,37 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubMessage = forgeWs.onMessage((msg: ServerMessage) => {
       switch (msg.type) {
-        case 'connected':
-          // Connection established
+        case 'connected': {
+          // Connection (re-)established. Sync session state in case we
+          // missed messages during a disconnect.
+          const activeId = activeSessionIdRef.current;
+          if (activeId) {
+            getSession(activeId)
+              .then((data) => {
+                if (data.transcript && data.transcript.length > 0) {
+                  dispatch({
+                    type: 'SELECT_SESSION',
+                    sessionId: activeId,
+                    messages: data.transcript,
+                  });
+                }
+              })
+              .catch(() => {});
+          }
+          // Clear any stale streaming state from before disconnect
+          if (accumulatedTextRef.current) {
+            const recovered: Message = {
+              role: 'assistant',
+              content: accumulatedTextRef.current,
+              timestamp: new Date().toISOString(),
+            };
+            dispatch({ type: 'ADD_MESSAGE', message: recovered });
+            dispatch({ type: 'CLEAR_STREAMING_TEXT' });
+            accumulatedTextRef.current = '';
+          }
+          dispatch({ type: 'SET_STREAMING', isStreaming: false });
           break;
+        }
 
         case 'session': {
           // New session created via start_session
@@ -210,6 +251,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           }
           break;
         }
+
+        case 'intake_progress':
+          if ('checklist' in msg) {
+            dispatch({
+              type: 'SET_INTAKE_CHECKLIST',
+              checklist: (msg as { checklist: IntakeChecklistItem[] }).checklist,
+            });
+          }
+          break;
 
         case 'error':
           if (!msg.session_id || msg.session_id === activeSessionIdRef.current) {
@@ -283,20 +333,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         forgeWs.chat(sessionId, message);
       } else {
         // Create a new session of type 'chat'
-        forgeWs.startSession('chat', 'text');
+        forgeWs.startSession('chat');
       }
     },
     []
   );
 
   const startTypedSession = useCallback(
-    (type: SessionType, mode: 'text' | 'voice' = 'text') => {
-      if (mode === 'text') {
-        dispatch({ type: 'SET_STREAMING', isStreaming: true });
-        dispatch({ type: 'CLEAR_STREAMING_TEXT' });
-        accumulatedTextRef.current = '';
-      }
-      forgeWs.startSession(type, mode);
+    (type: SessionType) => {
+      dispatch({ type: 'SET_STREAMING', isStreaming: true });
+      dispatch({ type: 'CLEAR_STREAMING_TEXT' });
+      accumulatedTextRef.current = '';
+      forgeWs.startSession(type);
     },
     []
   );
