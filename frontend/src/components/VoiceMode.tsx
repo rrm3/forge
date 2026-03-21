@@ -54,12 +54,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
           connectWebRTC(m.token, m.instructions || '', m.tools || []);
         }
       }
-      if (msg.type === 'tool_result' && 'session_id' in msg && msg.session_id === sessionId) {
-        sendToolResult(
-          (msg as { tool_call_id: string }).tool_call_id,
-          (msg as { result: string }).result,
-        );
-      }
+      // Tool results are handled by executeToolViaBackend's own message listener
     });
 
     forgeWs.requestVoiceSession(sessionId, sessionType);
@@ -284,13 +279,9 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
           const callId = String(event.call_id ?? '');
           const name = String(event.name ?? '');
           const args = String(event.arguments ?? '{}');
-          forgeWs.send({
-            action: 'tool_call',
-            session_id: sessionId,
-            tool: name,
-            tool_call_id: callId,
-            args: JSON.parse(args),
-          });
+          console.log(`Tool call: ${name} (${callId})`);
+          // Execute tool via backend relay
+          executeToolViaBackend(callId, name, args);
         }
         break;
 
@@ -315,11 +306,39 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
   }
 
   function sendToolResult(callId: string, result: string) {
+    console.log(`Sending tool result for ${callId}: ${result.substring(0, 100)}...`);
     sendEvent({
       type: 'conversation.item.create',
       item: { type: 'function_call_output', call_id: callId, output: result },
     });
     sendEvent({ type: 'response.create' });
+  }
+
+  function executeToolViaBackend(callId: string, name: string, argsStr: string) {
+    const localCallId = `voice_${Date.now()}`;
+
+    const unsub = forgeWs.onMessage((msg: ServerMessage) => {
+      if (msg.type === 'tool_result' && 'tool_call_id' in msg &&
+          (msg as { tool_call_id: string }).tool_call_id === localCallId) {
+        unsub();
+        const result = (msg as { result: string }).result || 'Done';
+        sendToolResult(callId, result);
+      }
+    });
+
+    forgeWs.send({
+      action: 'tool_call',
+      session_id: sessionId,
+      tool: name,
+      tool_call_id: localCallId,
+      args: JSON.parse(argsStr),
+    });
+
+    // Timeout - send empty result rather than hanging
+    setTimeout(() => {
+      unsub();
+      sendToolResult(callId, 'Tool call timed out');
+    }, 15000);
   }
 
   function togglePause() {
