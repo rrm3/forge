@@ -32,6 +32,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
   const [connecting, setConnecting] = useState(true);
   const [streamingText, setStreamingText] = useState('');
   const [paused, setPaused] = useState(false);
+  const [micGated, setMicGated] = useState(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
@@ -149,11 +150,12 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
             audio: {
               input: {
                 transcription: { model: 'whisper-1' },
+                noise_reduction: { type: 'far_field' },
                 turn_detection: {
                   type: 'server_vad',
-                  threshold: 0.8,
-                  silence_duration_ms: 1200,
-                  prefix_padding_ms: 500,
+                  threshold: 0.7,
+                  silence_duration_ms: 1000,
+                  prefix_padding_ms: 400,
                   create_response: true,
                   interrupt_response: true,
                 },
@@ -237,10 +239,20 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
       case 'response.audio.delta':
         setOrbState('speaking');
+        // Mute mic while AI speaks to prevent echo pickup
+        setMicGated(true);
+        localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
         break;
 
       case 'response.audio.done':
-        setOrbState('listening');
+        // Re-enable mic after AI finishes speaking (short delay for tail audio)
+        setTimeout(() => {
+          if (!pausedRef.current) {
+            setMicGated(false);
+            localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = true; });
+          }
+          setOrbState('listening');
+        }, 300);
         break;
 
       case 'response.output_audio_transcript.delta':
@@ -347,7 +359,16 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       const newPaused = !paused;
       stream.getAudioTracks().forEach(t => { t.enabled = !newPaused; });
       setPaused(newPaused);
+      if (!newPaused) setMicGated(false);
     }
+  }
+
+  function interrupt() {
+    // Unmute mic and cancel AI's current response
+    setMicGated(false);
+    localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = true; });
+    sendEvent({ type: 'response.cancel' });
+    setOrbState('listening');
   }
 
   function cleanup() {
@@ -405,13 +426,22 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
               className="text-sm font-semibold" style={{ color: 'var(--color-primary)' }}>Try again</button>
           </div>
         ) : (
-          <p className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-            {paused ? 'Paused' :
-             orbState === 'listening' ? 'Listening...' :
-             orbState === 'speaking' ? 'AI is speaking...' :
-             orbState === 'tool_call' ? 'Looking something up...' :
-             orbState === 'reconnecting' ? 'Reconnecting...' : 'Ready'}
-          </p>
+          <>
+            <p className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+              {paused ? 'Paused' :
+               orbState === 'listening' ? 'Listening...' :
+               orbState === 'speaking' ? 'AI is speaking... tap to interrupt' :
+               orbState === 'tool_call' ? 'Looking something up...' :
+               orbState === 'reconnecting' ? 'Reconnecting...' : 'Ready'}
+            </p>
+            {orbState === 'speaking' && !paused && (
+              <button onClick={interrupt}
+                className="mt-2 text-xs font-semibold px-3 py-1 rounded-full border"
+                style={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}>
+                Interrupt
+              </button>
+            )}
+          </>
         )}
       </div>
 
