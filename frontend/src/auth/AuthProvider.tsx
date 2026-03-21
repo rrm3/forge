@@ -42,31 +42,47 @@ function isTokenExpired(token: string): boolean {
   }
 }
 
+function getInitialAuthState(): { user: AuthUser | null; isLoading: boolean } {
+  // Check for OIDC callback first
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('code') && params.get('state')) {
+    return { user: null, isLoading: true }; // Will handle in useEffect
+  }
+
+  // Synchronously check localStorage for existing token
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token && !isTokenExpired(token)) {
+    return { user: getUserFromToken(token), isLoading: false };
+  }
+  if (token) {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+  return { user: null, isLoading: false };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const initialState = getInitialAuthState();
+  const [user, setUser] = useState<AuthUser | null>(initialState.user);
+  const [isLoading, setIsLoading] = useState(initialState.isLoading);
   const [authError, setAuthError] = useState<string | null>(null);
   const callbackProcessed = useRef(false);
   const wsConnected = useRef(false);
 
-  // Handle callback on mount
+  // Handle OIDC callback on mount (only when code+state params are present)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const state = params.get('state');
 
     if (code && state) {
-      // Guard against React strict mode double-invocation
       if (callbackProcessed.current) return;
       callbackProcessed.current = true;
 
-      // We're on the callback - exchange code for tokens
       handleCallback(code, state)
         .then((tokens: OidcTokens) => {
           localStorage.setItem(TOKEN_KEY, tokens.idToken);
           setUser(getUserFromToken(tokens.idToken));
           setAuthError(null);
-          // Clean URL
           window.history.replaceState({}, '', '/');
         })
         .catch((err) => {
@@ -74,18 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuthError(err instanceof Error ? err.message : 'Authentication failed');
         })
         .finally(() => setIsLoading(false));
-      return;
     }
-
-    // Check for existing token
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (token && !isTokenExpired(token)) {
-      setUser(getUserFromToken(token));
-    } else if (token) {
-      // Token expired - clean up
-      localStorage.removeItem(TOKEN_KEY);
-    }
-    setIsLoading(false);
   }, []);
 
   const signIn = useCallback(() => {
