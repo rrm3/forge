@@ -42,14 +42,30 @@ PROFILES_SCHEMA = pa.schema(
     ]
 )
 
+DEPARTMENT_RESOURCES_SCHEMA = pa.schema(
+    [
+        pa.field("id", pa.string(), nullable=False),
+        pa.field("document_id", pa.string()),
+        pa.field("department", pa.string()),
+        pa.field("section", pa.string()),
+        pa.field("source_file", pa.string()),
+        pa.field("content", pa.string(), nullable=False),
+        pa.field("metadata", pa.string()),
+        pa.field("created_at", pa.timestamp("us", tz="UTC"), nullable=False),
+        pa.field("vector", VECTOR_TYPE),
+    ]
+)
+
 # Maps collection name -> schema for auto-creation
 BUILTIN_SCHEMAS: dict[str, pa.Schema] = {
     "curriculum": CURRICULUM_SCHEMA,
     "profiles": PROFILES_SCHEMA,
+    "department_resources": DEPARTMENT_RESOURCES_SCHEMA,
 }
 
 # Maps collection name -> the field used as document-level ID for upsert
 DOCUMENT_ID_FIELDS: dict[str, str] = {
     "curriculum": "document_key",
     "profiles": "user_id",
+    "department_resources": "document_id",
 }

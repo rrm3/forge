@@ -1,32 +1,37 @@
 # Technology - AI Tuesdays Resources
 
+## Key Focus Areas
+* AI Asset Governance
+* Data Governance
+* API Expertise
+* Vector Database Management
+* Strategic Thinking
+
+## Use Cases
+
+**AI as a daily dev copilot**
+* Use Claude Code or GitHub Copilot in your IDE for code generation, refactoring, and debugging
+* Paste a stack trace and ask for root cause analysis
+* Ask AI to write tests for an existing function, then review and tighten them
+* Generate Terraform/CDK templates from plain English requirements
+
+**AI for Operations & Incident Response**
+* Use AI as a triage partner during incidents - paste logs and ask for likely causes
+* Automate runbook creation: describe your incident response steps, AI structures them
+* Generate post-incident summaries and action items from Slack/PagerDuty threads
+
+**Building AI into products responsibly**
+* Learn RAG (Retrieval-Augmented Generation) patterns for grounding AI on company data
+* Implement evaluation frameworks before shipping AI features - know your quality baseline
+* Build guardrails: content filtering, output validation, and fallback handling
+
 ## Getting Started
-The technology team is well-positioned to get the most from AI tools. Whether you're writing code, reviewing PRs, debugging, or designing architecture, AI can accelerate your workflow significantly.
-
-## By Role
-
-### Software Engineers
-* Use Claude or Copilot for code generation, refactoring, and debugging
-* Try: Paste a stack trace and ask for root cause analysis
-* Try: Ask AI to write tests for an existing function
-* Advanced: Build a Claude Code workflow for repetitive development tasks
-
-### DevOps / Infrastructure
-* Use AI to generate Terraform, CDK, or CloudFormation templates
-* Try: Describe your infrastructure requirements in plain English
-* Advanced: Use AI to review infrastructure-as-code for security issues and cost optimization
-
-### Data Engineers
-* Use AI to write and optimize SQL queries
-* Try: Describe the data transformation you need in plain English
-* Advanced: Generate dbt models and documentation from schema descriptions
-
-### QA / Testing
-* Generate test cases from requirements documents
-* Try: Paste an API spec and ask for comprehensive test scenarios
-* Advanced: Use AI to generate property-based tests or fuzzing inputs
+* Start with the IDE copilot - one week of consistent use shows the productivity gain
+* Pick one runbook and ask AI to improve it
+* If building AI features: read up on RAG, evals, and guardrails before shipping anything
 
 ## Recommended Tools
 * Claude Code (CLI): AI-assisted coding in the terminal
-* GitHub Copilot: Inline code suggestions in your editor
+* GitHub Copilot: Inline suggestions in your editor
 * Claude.ai: Architecture discussions, code reviews, documentation
+* LangChain / LlamaIndex: RAG and agentic workflow frameworks

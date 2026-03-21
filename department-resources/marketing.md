@@ -1,32 +1,42 @@
 # Marketing - AI Tuesdays Resources
 
-## Getting Started
-Marketing teams can use AI to draft content faster, analyze campaign data, and generate creative variations. The key is using AI as a first-draft tool that you refine with your expertise and brand voice.
+## Key Focus Areas
+* Content Creation & Curation
+* Semantic SEO & Technical Website Optimisation
+* Brand Strategy
+* Social Media Strategy
+* Data & Marketing Analytics
+* Customer Journey
+* Storytelling & Creativity
+* Strategic Thinking
 
-## By Role
+## Use Cases
 
-### Content Marketing
-* Use Claude for long-form blog posts, whitepapers, and case studies
-* Try: Give AI your topic, target audience, and key points, then ask for a structured outline
-* Try: Paste an existing piece and ask for 5 headline variations
-* Advanced: Create a brand voice guide and have AI write in your style
+**Content generation and refinement**
+* Use AI to generate first drafts for blog posts, whitepapers, and case studies - then apply your brand voice
+* Take one long-form piece and ask AI to repurpose it: LinkedIn post, email newsletter, 3 social variations
+* Ask AI to critique a draft against your target persona's pain points before publishing
 
-### Social Media
-* Generate post variations for different platforms from a single piece of content
-* Try: Take a blog post URL and ask for LinkedIn, Twitter, and newsletter versions
-* Advanced: Analyze past engagement data and ask AI to identify patterns
+**Brand guideline automation**
+* Feed your brand guidelines into AI and use it as a brand checker - paste any draft and ask "does this match our voice?"
+* Generate on-brand copy variations at scale: product descriptions, ad copy, landing page headlines
+* Build a reusable prompt that includes your tone of voice, audience, and messaging pillars
 
-### Product Marketing
-* Draft positioning statements, competitive comparisons, and launch messaging
-* Try: Describe your product and target persona, ask for a positioning framework
-* Advanced: Feed in competitor messaging and ask for differentiation analysis
+**Customer personalization at scale**
+* Segment your messaging by persona - ask AI to reframe the same content for different customer types
+* Use AI to generate personalized email sequences based on customer behavior or tier
+* Analyze customer journey data: paste drop-off points and ask for hypothesis about why
 
-### SEO
+**SEO**
+* Ask AI to analyze a top-ranking competitor page and suggest content gaps
 * Generate keyword-optimized content briefs and meta descriptions
-* Try: Ask AI to analyze a top-ranking competitor page and suggest improvements
-* Advanced: Build a content gap analysis from SERP data
+* Use semantic SEO thinking: ask AI to map topic clusters, not just keywords
+
+## Getting Started
+* Build your brand voice prompt this week - it makes every other task faster
+* Pick your highest-traffic page and run it through an AI SEO audit
 
 ## Recommended Tools
-* Claude: Long-form writing, strategic analysis
+* Claude: Long-form writing, brand strategy, analysis
+* Gemini (Google Workspace): Integrated drafting in Docs
 * ChatGPT: Quick brainstorming, social copy
-* Midjourney/DALL-E: Visual assets and concepts

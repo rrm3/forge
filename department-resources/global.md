@@ -1,5 +1,14 @@
 # Global AI Resources - All Departments
 
+## Learning Tracks
+Structured learning paths available through AI Tuesdays. Pick the one that matches where you are and where you want to go.
+
+* **AI Leaders track:** For managers and senior ICs who need to make decisions about AI adoption, governance, and team enablement
+* **Prompt Engineering track:** Core skills for getting reliable, high-quality output from any AI tool - relevant to every role
+* **Google Workspace track:** Practical AI use within Gemini, Docs, Gmail, Sheets, and Meet - low barrier, high immediate value
+* **Gen AI track:** Broader understanding of generative AI capabilities, limitations, and where it's heading
+* **Agentic AI track:** Building and managing AI agents and automated workflows - for those ready to go beyond prompting
+
 ## Getting Started with AI
 Every role at Digital Science can benefit from AI. Here are universal starting points regardless of your department.
 

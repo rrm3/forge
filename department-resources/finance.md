@@ -1,27 +1,39 @@
 # Finance - AI Tuesdays Resources
 
+## Key Focus Areas
+* AI FinOps
+* Scenario Building
+* Data Analytics
+* Process Optimisation
+
+## Use Cases
+
+**Automating manual repetitive tasks**
+* With 16+ FTEs on manual repetitive work, this is the highest-priority starting point
+* Map your most time-consuming manual process first - document every step
+* Ask AI to identify which steps are automatable vs need human judgment
+* Build a prioritized list of what to tackle first based on volume and error risk
+
+**Matching & reconciliations in Netsuite**
+* Use AI to write and test macros that pre-match transaction data
+* Explore Netsuite's own AI/ML features for reconciliation automation
+* Ask AI to generate the business case for a custom reconciliation bot
+
+**Scenario building and financial modelling**
+* Describe your model assumptions in plain English, ask AI to structure the logic
+* Paste actuals vs budget tables and ask for management-ready variance commentary
+* Generate "what if" scenarios faster by having AI build sensitivity tables
+
+**Exploring system roadmaps**
+* Use AI to summarize vendor roadmap documents and identify what's relevant to your workflows
+* Compare Netsuite's roadmap against your pain points - ask AI to prioritize fit
+
 ## Getting Started
-Finance teams can use AI for analysis automation, report drafting, and process improvement. AI is especially useful for tasks that combine data with narrative explanations.
-
-## Common Use Cases
-
-### Financial Analysis
-* Generate variance analysis narratives from data
-* Try: Paste a table of actuals vs budget and ask for a management-ready variance commentary
-* Advanced: Build financial models from assumptions described in plain English
-
-### Reporting
-* Draft board reports, investor updates, and financial summaries
-* Try: Describe the key metrics and trends, ask for a structured executive summary
-* Advanced: Generate chart descriptions and recommendations from data tables
-
-### Process Improvement
-* Document existing processes and identify automation opportunities
-* Try: Describe a manual workflow step by step, ask AI where automation would help most
-
-## Data Safety Note
-Financial data is sensitive. When using external AI tools, anonymize or use sample data. For internal financial details, use approved tools only.
+* Identify your single most painful manual process and time-box a week to automate it
+* Share process documentation with AI and ask where automation would have the highest impact
+* Avoid sharing real financial data with external tools - use anonymized or sample data
 
 ## Recommended Tools
-* Claude: Report writing, analysis narratives, process documentation
-* ChatGPT with Code Interpreter: Excel/CSV analysis, chart generation
+* Claude: Process documentation, variance narratives, scenario analysis
+* ChatGPT with Code Interpreter: Excel/CSV analysis, macro generation
+* Netsuite native AI features: Check your current subscription tier

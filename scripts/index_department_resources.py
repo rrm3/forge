@@ -5,13 +5,20 @@ Reads all .md files from department-resources/ directory, chunks them,
 and indexes into the 'department_resources' LanceDB table.
 
 Usage:
+    # Index locally (dev)
     python scripts/index_department_resources.py
-    python scripts/index_department_resources.py --source s3://bucket/department-resources/
+
+    # Index to S3 (production)
+    AWS_PROFILE=acumentum python scripts/index_department_resources.py --target s3
+
+    # Custom source directory
+    python scripts/index_department_resources.py --source /path/to/markdown/files
 """
 
 import argparse
 import asyncio
 import logging
+import os
 import re
 import sys
 from pathlib import Path
@@ -19,24 +26,18 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend.lance.indexing import index_document
-
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
 def chunk_markdown(content: str, max_chunk_size: int = 1500) -> list[dict]:
-    """Split markdown into chunks by heading sections.
-
-    Returns list of dicts with 'content' and 'section' keys.
-    """
+    """Split markdown into chunks by heading sections."""
     chunks = []
     current_section = ""
     current_content: list[str] = []
 
     for line in content.split("\n"):
         if line.startswith("## "):
-            # Flush previous section
             if current_content:
                 text = "\n".join(current_content).strip()
                 if text:
@@ -44,13 +45,11 @@ def chunk_markdown(content: str, max_chunk_size: int = 1500) -> list[dict]:
             current_section = line.lstrip("# ").strip()
             current_content = [line]
         elif line.startswith("# ") and not current_content:
-            # Top-level heading (title)
             current_section = line.lstrip("# ").strip()
             current_content = [line]
         else:
             current_content.append(line)
 
-    # Flush final section
     if current_content:
         text = "\n".join(current_content).strip()
         if text:
@@ -62,7 +61,6 @@ def chunk_markdown(content: str, max_chunk_size: int = 1500) -> list[dict]:
         if len(chunk["content"]) <= max_chunk_size:
             split_chunks.append(chunk)
         else:
-            # Split by subsections (###) or paragraphs
             parts = re.split(r"\n(?=### |\n\n)", chunk["content"])
             current = ""
             for part in parts:
@@ -79,19 +77,22 @@ def chunk_markdown(content: str, max_chunk_size: int = 1500) -> list[dict]:
 
 async def index_file(filepath: Path) -> int:
     """Index a single department resource file. Returns number of chunks indexed."""
+    from backend.lance.indexing import index_document
+
     content = filepath.read_text(encoding="utf-8")
-    department = filepath.stem  # e.g., "marketing" from "marketing.md"
+    department = filepath.stem
 
     chunks = chunk_markdown(content)
     count = 0
+    errors = 0
 
     for i, chunk in enumerate(chunks):
         doc_id = f"dept-{department}-{i}"
         try:
-            await index_document(
+            result = await index_document(
                 collection="department_resources",
                 content=chunk["content"],
-                scope_path="department-resources",
+                scope_path="department_resources",
                 document_id=doc_id,
                 extra_fields={
                     "department": department,
@@ -99,14 +100,32 @@ async def index_file(filepath: Path) -> int:
                     "source_file": filepath.name,
                 },
             )
-            count += 1
+            if result.get("error"):
+                logger.error("  Chunk %s: %s", doc_id, result["error"])
+                errors += 1
+            else:
+                count += 1
         except Exception as e:
-            logger.error("Failed to index chunk %s: %s", doc_id, e)
+            logger.error("  Failed to index chunk %s: %s", doc_id, e)
+            errors += 1
 
+    if errors:
+        logger.warning("  %s: %d chunks OK, %d errors", filepath.name, count, errors)
     return count
 
 
-async def main(source_dir: str):
+async def main(source_dir: str, target: str):
+    from backend.config import settings
+
+    # Override lance backend based on target
+    if target == "s3":
+        settings.lance_backend = "s3"
+        bucket = settings.lance_s3_bucket or settings.s3_bucket
+        logger.info("Target: S3 (bucket: %s)", bucket)
+    else:
+        settings.lance_backend = "local"
+        logger.info("Target: local (%s)", settings.lance_local_path)
+
     source = Path(source_dir)
     if not source.is_dir():
         logger.error("Source directory not found: %s", source)
@@ -116,6 +135,8 @@ async def main(source_dir: str):
     if not md_files:
         logger.warning("No .md files found in %s", source)
         return
+
+    logger.info("Found %d markdown files in %s", len(md_files), source)
 
     total = 0
     for filepath in md_files:
@@ -127,11 +148,28 @@ async def main(source_dir: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Index department resources into LanceDB")
+    parser = argparse.ArgumentParser(
+        description="Index department resources into LanceDB",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Local dev (writes to /tmp/lance/)
+  python scripts/index_department_resources.py
+
+  # Production S3 (needs AWS credentials)
+  AWS_PROFILE=acumentum python scripts/index_department_resources.py --target s3
+        """,
+    )
     parser.add_argument(
         "--source",
         default=str(Path(__file__).resolve().parent.parent / "department-resources"),
-        help="Path to department resources directory",
+        help="Path to department resource markdown files (default: ./department-resources/)",
+    )
+    parser.add_argument(
+        "--target",
+        choices=["local", "s3"],
+        default="local",
+        help="Where to write the index: 'local' for /tmp/lance, 's3' for production (default: local)",
     )
     args = parser.parse_args()
-    asyncio.run(main(args.source))
+    asyncio.run(main(args.source, args.target))

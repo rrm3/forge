@@ -1,27 +1,34 @@
 # Sales - AI Tuesdays Resources
 
+## Key Focus Areas
+* Prompt Engineering
+* AI-Assisted Research & Insight Generation
+* Emotional Intelligence
+* Sales Methodologies
+* Storytelling
+
+## Use Cases
+
+**Proposal generation**
+* Give AI the opportunity context, stakeholder map, and your solution - ask for a structured proposal draft
+* Use AI to stress-test your proposal from the buyer's perspective before sending
+* Iterate fast: have AI generate 3 opening angles, pick the strongest one
+
+**Email drafting**
+* Draft follow-up emails that reference specific discussion points from the call
+* Ask AI to adjust tone: more direct, more empathetic, more urgency - test what lands
+* Generate personalized outreach sequences from a prospect's LinkedIn profile or website
+
+**Gong call analysis**
+* Paste Gong transcript excerpts and ask AI for coaching notes: objections missed, moments to build on
+* Identify talk-to-listen ratios and ask AI to recommend adjustments by deal stage
+* Extract competitor mentions across a batch of calls to spot patterns
+
 ## Getting Started
-Sales teams can use AI to prepare for calls, draft outreach, analyze deal data, and respond to RFPs faster. The key is combining AI's speed with your relationship expertise.
-
-## By Role
-
-### Account Executives
-* Prepare for calls with AI-generated company research and talking points
-* Try: Paste a prospect's website URL and ask for key business challenges and conversation starters
-* Try: Draft a follow-up email that references specific discussion points
-* Advanced: Build a deal qualification framework and have AI score your pipeline
-
-### Sales Development
-* Generate personalized outreach sequences
-* Try: Give AI a prospect's LinkedIn profile and ask for a personalized cold email
-* Advanced: Create email templates that AI personalizes at scale
-
-### Sales Operations
-* Analyze pipeline data and forecast accuracy
-* Try: Describe your pipeline data and ask AI to identify patterns in won vs lost deals
-* Advanced: Generate Salesforce reports and dashboards from natural language descriptions
+* Next proposal you write: draft it yourself first, then ask AI to improve the opening, the value framing, and the close - compare versions
+* Pick one Gong call per week and run it through Claude for coaching insights
 
 ## Recommended Tools
-* Claude: Research, email drafting, RFP responses
-* ChatGPT: Quick prospect research, competitive intel
-* Gong AI: Call analysis and coaching (already in use)
+* Claude: Proposals, email drafting, competitive research, call analysis
+* Gong AI: Call analysis and coaching (already in use - go deeper)
+* ChatGPT: Quick research, competitive intel

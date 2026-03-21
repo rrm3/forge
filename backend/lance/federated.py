@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # All available shared tables and their scope paths
 SHARED_TABLES = {
-    "department_resources": "department-resources",
+    "department_resources": "department_resources",
     "gong_turns": "gong",
     "gong_calls": "gong",
     "dovetail_highlights": "dovetail",
