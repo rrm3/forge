@@ -242,7 +242,7 @@ export class ForgeStack extends cdk.Stack {
         S3_BUCKET: dataBucket.bucketName,
         LANCE_BACKEND: 's3',
         LANCE_S3_BUCKET: dataBucket.bucketName,
-        LLM_MODEL: 'bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0',
+        LLM_MODEL: 'bedrock/us.anthropic.claude-opus-4-6-v1',
         ORGCHART_S3_KEY: 'orgchart/org-chart.db',
         CONNECTIONS_TABLE: connectionsTable.tableName,
       },
@@ -280,7 +280,7 @@ export class ForgeStack extends cdk.Stack {
         S3_BUCKET: dataBucket.bucketName,
         LANCE_BACKEND: 's3',
         LANCE_S3_BUCKET: dataBucket.bucketName,
-        LLM_MODEL: 'bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0',
+        LLM_MODEL: 'bedrock/us.anthropic.claude-opus-4-6-v1',
         ORGCHART_S3_KEY: 'orgchart/org-chart.db',
         CONNECTIONS_TABLE: connectionsTable.tableName,
         LAMBDA_FUNCTION_NAME: `${prefix}-ws`, // self-invoke for Dispatcher-Worker

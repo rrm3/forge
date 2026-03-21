@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     lance_s3_bucket: str = ""
 
     # LLM
-    llm_model: str = "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0"
+    llm_model: str = "bedrock/us.anthropic.claude-opus-4-6-v1"
 
     # Org chart
     orgchart_s3_key: str = "orgchart/org-chart.db"
