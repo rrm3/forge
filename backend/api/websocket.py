@@ -259,26 +259,157 @@ def _handle_cancel(msg: dict):
 
 async def _handle_voice_session(ws: WebSocket, user: CurrentUser, msg: dict):
     """Create an OpenAI Realtime ephemeral token for voice mode."""
-    # Placeholder - implemented in Step 8
-    await _send_json(ws, {
-        "type": "error",
-        "message": "Voice mode not yet implemented",
-    })
+    session_id = msg.get("session_id")
+    session_type = msg.get("type", "chat")
+    resume = msg.get("resume", False)
+
+    if not session_id:
+        await _send_json(ws, {"type": "error", "message": "Missing session_id for voice session"})
+        return
+
+    try:
+        # Load profile and build system prompt
+        profile = await _profiles_repo.get(user.user_id)
+        memory = await load_memory(_storage, user.user_id)
+
+        from backend.agent.skills import load_skill
+        skill_instructions = None
+        if session_type and session_type != "chat":
+            skill_instructions = load_skill(session_type)
+
+        system_prompt = build_system_prompt(
+            profile=profile,
+            memory=memory,
+            skill_instructions=skill_instructions,
+        )
+
+        # Load transcript context for resume
+        transcript_context = None
+        if resume:
+            transcript = await load_transcript(_storage, user.user_id, session_id)
+            if transcript:
+                lines = []
+                for m in transcript:
+                    lines.append(f"{m.role}: {m.content}")
+                transcript_context = "\n".join(lines)
+
+        # Create the voice session
+        from backend.voice import create_voice_session
+        result = await create_voice_session(
+            system_prompt=system_prompt,
+            session_id=session_id,
+            transcript_context=transcript_context,
+        )
+
+        await _send_json(ws, {
+            "type": "voice_token",
+            "session_id": session_id,
+            "token": result["token"],
+            "expires_at": result["expires_at"],
+        })
+
+    except Exception as e:
+        logger.exception("Voice session creation failed")
+        await _send_json(ws, {
+            "type": "error",
+            "session_id": session_id,
+            "message": f"Failed to create voice session: {e}",
+        })
 
 
 async def _handle_tool_call(ws: WebSocket, user: CurrentUser, msg: dict):
-    """Execute a tool call relayed from voice mode."""
-    # Placeholder - implemented in Step 8
+    """Execute a tool call relayed from voice mode (server-side validation)."""
+    tool_name = msg.get("tool")
+    tool_args = msg.get("args", {})
+    tool_call_id = msg.get("tool_call_id", "")
+    session_id = msg.get("session_id")
+
+    if not tool_name or not session_id:
+        await _send_json(ws, {"type": "error", "message": "Missing tool or session_id"})
+        return
+
+    # Validate: tool must be in the registry
+    if _tool_registry is None:
+        await _send_json(ws, {"type": "error", "message": "Tool registry not available"})
+        return
+
+    schemas = _tool_registry.get_schemas()
+    valid_tools = {s["name"] for s in schemas}
+    if tool_name not in valid_tools:
+        await _send_json(ws, {
+            "type": "tool_result",
+            "session_id": session_id,
+            "tool_call_id": tool_call_id,
+            "result": f"Unknown tool: {tool_name}",
+        })
+        return
+
+    # Verify session ownership
+    session = await _sessions_repo.get(user.user_id, session_id)
+    if session is None:
+        await _send_json(ws, {
+            "type": "tool_result",
+            "session_id": session_id,
+            "tool_call_id": tool_call_id,
+            "result": "Session not found or access denied",
+        })
+        return
+
+    # Build tool context and execute
+    context = ToolContext(
+        user_id=user.user_id,
+        session_id=session_id,
+        repos={
+            "sessions": _sessions_repo,
+            "profiles": _profiles_repo,
+            "journal": _journal_repo,
+            "ideas": _ideas_repo,
+        },
+        storage=_storage,
+        config=settings,
+    )
+
+    try:
+        result = await _tool_registry.execute(tool_name, tool_args, context)
+    except Exception as exc:
+        logger.exception("Voice tool '%s' failed", tool_name)
+        result = f"Error executing {tool_name}: {exc}"
+
     await _send_json(ws, {
-        "type": "error",
-        "message": "Voice tool calls not yet implemented",
+        "type": "tool_result",
+        "session_id": session_id,
+        "tool_call_id": tool_call_id,
+        "result": result if isinstance(result, str) else json.dumps(result),
     })
 
 
 async def _handle_transcript(ws: WebSocket, user: CurrentUser, msg: dict):
-    """Persist a voice transcript chunk."""
-    # Placeholder - implemented in Step 8
-    pass
+    """Persist a voice transcript chunk to the session transcript."""
+    session_id = msg.get("session_id")
+    role = msg.get("role", "user")
+    content = msg.get("content", "")
+
+    if not session_id or not content:
+        return
+
+    # Verify session ownership
+    session = await _sessions_repo.get(user.user_id, session_id)
+    if session is None:
+        return
+
+    # Load existing transcript and append
+    transcript = await load_transcript(_storage, user.user_id, session_id) or []
+    transcript.append(Message(
+        role=role,
+        content=content,
+        timestamp=datetime.now(UTC),
+    ))
+    await save_transcript(_storage, user.user_id, session_id, transcript)
+
+    # Update session message count
+    session.message_count = len(transcript)
+    session.updated_at = datetime.now(UTC)
+    await _sessions_repo.update(session)
 
 
 async def _run_agent(

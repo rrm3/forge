@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, Square } from 'lucide-react';
+import { Send, Square, Mic } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { VoiceMode } from './VoiceMode';
 import remarkGfm from 'remark-gfm';
 import { useSession } from '../state/SessionContext';
 import { MessageBubble, streamingMarkdownComponents } from './MessageBubble';
@@ -10,6 +11,7 @@ export function ChatView() {
   const { messages = [], isStreaming, streamingText, connectionStatus } = state;
 
   const [inputValue, setInputValue] = useState('');
+  const [voiceActive, setVoiceActive] = useState(false);
   const inputValueRef = useRef(inputValue);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -54,6 +56,16 @@ export function ChatView() {
   const hasMessages = messages.length > 0 || isStreaming;
   const hasInput = inputValue.trim().length > 0;
   const isReconnecting = connectionStatus === 'reconnecting' || connectionStatus === 'disconnected';
+
+  // Voice mode
+  if (voiceActive && state.activeSessionId) {
+    return (
+      <VoiceMode
+        sessionId={state.activeSessionId}
+        onExit={() => setVoiceActive(false)}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--color-surface-white)' }}>
@@ -156,7 +168,19 @@ export function ChatView() {
             />
 
             {/* Action buttons - bottom right */}
-            <div className="absolute bottom-0 right-0 flex items-center gap-2 pb-2 pr-2">
+            <div className="absolute bottom-0 right-0 flex items-center gap-1.5 pb-2 pr-2">
+              {/* Voice toggle */}
+              {!isStreaming && state.activeSessionId && (
+                <button
+                  onClick={() => setVoiceActive(true)}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150"
+                  style={{ color: 'var(--color-text-muted)' }}
+                  title="Switch to voice"
+                  aria-label="Switch to voice mode"
+                >
+                  <Mic className="w-4 h-4" strokeWidth={1.5} />
+                </button>
+              )}
               {isStreaming ? (
                 <button
                   onClick={cancelStreaming}
