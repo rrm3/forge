@@ -7,9 +7,15 @@ from backend.models import UserProfile
 _BASE_PROMPT = (
     "You are an AI assistant for Digital Science's AI Tuesdays program. "
     "You help employees learn to use AI in their daily work.\n\n"
-    "You have access to tools that let you search the knowledge base, "
-    "manage journal entries, track ideas, and update user memory. "
-    "Use them when appropriate to help users effectively."
+    "You have access to tools that let you search the knowledge base "
+    "(department resources, Gong calls, Dovetail research, roadmap, competitive intelligence), "
+    "manage journal entries, track ideas, and update user profiles. "
+    "Use them when appropriate to help users effectively.\n\n"
+    "When searching, choose tables relevant to the user's question. "
+    "For department-specific guidance, search 'department_resources'. "
+    "For customer conversations, search 'gong_turns' or 'gong_calls'. "
+    "For user research, search 'dovetail_highlights'. "
+    "For competitive intelligence, search 'klue_battlecards'."
 )
 
 
@@ -40,8 +46,18 @@ def build_system_prompt(
             lines.append(f"Title: {profile.title}")
         if profile.department:
             lines.append(f"Department: {profile.department}")
+        if profile.manager:
+            lines.append(f"Manager: {profile.manager}")
         if profile.team:
             lines.append(f"Team: {profile.team}")
+        if profile.location:
+            lines.append(f"Location: {profile.location}")
+        if profile.direct_reports:
+            lines.append(f"Direct reports: {', '.join(profile.direct_reports)}")
+        if profile.start_date:
+            lines.append(f"Start date: {profile.start_date}")
+        if profile.work_summary:
+            lines.append(f"Work: {profile.work_summary}")
         if profile.ai_experience_level:
             lines.append(f"AI experience: {profile.ai_experience_level}")
         if profile.interests:

@@ -27,6 +27,7 @@ from backend.storage import LocalStorage
 from backend.tools.ideas import register_ideas_tools
 from backend.tools.journal import register_journal_tools
 from backend.tools.profile import register_profile_tools
+from backend.tools.search import register_search_tools
 from backend.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,7 @@ def _build_orgchart():
 def _build_tool_registry() -> ToolRegistry:
     """Create tool registry and register all tools."""
     registry = ToolRegistry()
+    register_search_tools(registry)
     register_ideas_tools(registry)
     register_journal_tools(registry)
     register_profile_tools(registry)
