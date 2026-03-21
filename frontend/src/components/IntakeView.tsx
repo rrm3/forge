@@ -10,13 +10,14 @@ import { Mic, Send, Square, MessageSquare } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSession } from '../state/SessionContext';
+import { getSession } from '../api/client';
 import { MessageBubble, streamingMarkdownComponents } from './MessageBubble';
 import { VoiceMode } from './VoiceMode';
 
 type IntakeStage = 'splash' | 'text' | 'voice';
 
 export function IntakeView() {
-  const { state, sendChatMessage, startTypedSession, cancelStreaming } = useSession();
+  const { state, dispatch, sendChatMessage, startTypedSession, cancelStreaming } = useSession();
   const { messages = [], isStreaming, streamingText, activeSessionId } = state;
 
   const [stage, setStage] = useState<IntakeStage>('splash');
@@ -150,7 +151,19 @@ export function IntakeView() {
         <VoiceMode
           sessionId={activeSessionId}
           sessionType="intake"
-          onExit={() => setStage('text')}
+          onExit={() => {
+            // Load the voice transcript into the text session so the conversation continues
+            if (activeSessionId) {
+              getSession(activeSessionId).then((data) => {
+                if (data.transcript) {
+                  data.transcript.forEach((msg) => {
+                    dispatch({ type: 'ADD_MESSAGE', message: msg });
+                  });
+                }
+              }).catch(() => {});
+            }
+            setStage('text');
+          }}
           transcript={voiceTranscript}
           onTranscriptUpdate={setVoiceTranscript}
         />

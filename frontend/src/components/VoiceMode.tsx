@@ -118,16 +118,20 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
       ws.onopen = () => {
         setConnecting(false);
-        setOrbState('listening');
+        setOrbState('idle');
         startAudioCapture(ws);
-
-        // Tell OpenAI to generate the initial greeting
-        ws.send(JSON.stringify({ type: 'response.create' }));
+        // Don't send response.create here - wait for session.created
       };
 
       ws.onmessage = (event) => {
         try {
-          handleOpenAIEvent(JSON.parse(event.data));
+          const parsed = JSON.parse(event.data);
+          // After session is created, trigger the initial greeting
+          if (parsed.type === 'session.created') {
+            console.log('OpenAI Realtime session created');
+            ws.send(JSON.stringify({ type: 'response.create' }));
+          }
+          handleOpenAIEvent(parsed);
         } catch { /* ignore parse errors */ }
       };
 
@@ -233,15 +237,30 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
         break;
 
       case 'conversation.item.input_audio_transcription.completed': {
+        // This is the FINAL user transcript (post-processed by Whisper).
+        // Replace any existing partial user entry at the end of transcript.
         const text = ((data as { transcript?: string }).transcript || '').trim();
         if (text) {
-          setTranscript(prev => [...prev, { role: 'user', text }]);
+          setTranscript(prev => {
+            // If the last entry is a user entry, replace it (it was a partial)
+            if (prev.length > 0 && prev[prev.length - 1].role === 'user') {
+              return [...prev.slice(0, -1), { role: 'user', text }];
+            }
+            return [...prev, { role: 'user', text }];
+          });
           forgeWs.send({ action: 'transcript', session_id: sessionId, role: 'user', content: text });
         }
         break;
       }
 
+      case 'input_audio_buffer.committed': {
+        // User speech was committed - add a placeholder that will be replaced
+        // by the transcription.completed event above
+        break;
+      }
+
       case 'response.audio_transcript.done': {
+        // Final assistant transcript for this response turn
         const text = ((data as { transcript?: string }).transcript || '').trim();
         if (text) {
           setTranscript(prev => [...prev, { role: 'assistant', text }]);
