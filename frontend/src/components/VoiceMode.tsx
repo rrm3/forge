@@ -148,6 +148,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
         dc.send(JSON.stringify({
           type: 'session.update',
           session: {
+            type: 'realtime',
             model: REALTIME_MODEL,
             instructions: instructions || undefined,
             tools: tools.length > 0 ? tools : undefined,
