@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MicOff, Square, Type, Pause, Play } from 'lucide-react';
-import { RealtimeSession, RealtimeAgent, OpenAIRealtimeWebSocket, tool } from '@openai/agents/realtime';
+import { RealtimeSession, RealtimeAgent, OpenAIRealtimeWebRTC, tool } from '@openai/agents/realtime';
 import { VoiceOrb, type OrbState } from './VoiceOrb';
 import { forgeWs } from '../api/websocket';
 import type { ServerMessage } from '../api/websocket';
@@ -31,7 +31,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
   const [paused, setPaused] = useState(false);
 
   const sessionRef = useRef<RealtimeSession | null>(null);
-  const transportRef = useRef<OpenAIRealtimeWebSocket | null>(null);
+  const transportRef = useRef<OpenAIRealtimeWebRTC | null>(null);
 
   useEffect(() => { onTranscriptUpdate?.(transcript); }, [transcript, onTranscriptUpdate]);
 
@@ -114,8 +114,11 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
         ],
       });
 
-      // Use WebSocket transport (compatible with our ephemeral tokens)
-      const transport = new OpenAIRealtimeWebSocket();
+      // WebRTC transport with correct endpoint for ephemeral tokens
+      // Ephemeral tokens use /v1/realtime?model=... not /v1/realtime/calls
+      const transport = new OpenAIRealtimeWebRTC({
+        baseUrl: 'https://api.openai.com/v1/realtime',
+      });
       transportRef.current = transport;
 
       // Create session - agent is first arg, options second
