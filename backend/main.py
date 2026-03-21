@@ -24,6 +24,7 @@ from backend.repository.journal import MemoryJournalRepository
 from backend.repository.profiles import MemoryProfileRepository
 from backend.repository.sessions import MemorySessionRepository
 from backend.storage import LocalStorage
+from backend.tools.analyze import register_analyze_tools
 from backend.tools.ideas import register_ideas_tools
 from backend.tools.journal import register_journal_tools
 from backend.tools.profile import register_profile_tools
@@ -88,6 +89,7 @@ def _build_tool_registry() -> ToolRegistry:
     register_ideas_tools(registry)
     register_journal_tools(registry)
     register_profile_tools(registry)
+    register_analyze_tools(registry)
     return registry
 
 
