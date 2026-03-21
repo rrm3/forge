@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -19,7 +18,7 @@ from backend.agent.events import (
     ToolResultEvent,
 )
 from backend.agent.loop import react_loop
-from backend.agent.skills import detect_active_skill, load_skill
+from backend.agent.skills import load_skill
 from backend.models import TokenUsage, UserProfile
 from backend.tools.registry import ToolContext, ToolRegistry
 
@@ -106,29 +105,15 @@ class TestSkills:
         result = load_skill("test_skill")
         assert result == "# Test Skill\nContent here"
 
-    def test_detect_no_profile(self):
-        assert detect_active_skill(None, 0) == "onboarding"
+    def test_load_session_type_prompts(self):
+        """Session-type prompts load correctly."""
+        for name in ["tip", "stuck", "brainstorm", "wrapup"]:
+            result = load_skill(name)
+            assert result is not None, f"Failed to load {name}"
 
-    def test_detect_onboarding_incomplete(self):
-        profile = UserProfile(user_id="u1", onboarding_complete=False)
-        assert detect_active_skill(profile, 0) == "onboarding"
-
-    def test_detect_tuesday_new_session(self):
-        profile = UserProfile(user_id="u1", onboarding_complete=True)
-        # Tuesday = weekday 1
-        tuesday = date(2026, 3, 10)  # A Tuesday
-        assert detect_active_skill(profile, 0, current_date=tuesday) == "tuesday_checkin"
-
-    def test_detect_tuesday_existing_session(self):
-        profile = UserProfile(user_id="u1", onboarding_complete=True)
-        tuesday = date(2026, 3, 10)
-        # Session already has messages -> no forced skill
-        assert detect_active_skill(profile, 5, current_date=tuesday) is None
-
-    def test_detect_non_tuesday(self):
-        profile = UserProfile(user_id="u1", onboarding_complete=True)
-        wednesday = date(2026, 3, 11)  # A Wednesday
-        assert detect_active_skill(profile, 0, current_date=wednesday) is None
+    def test_chat_type_has_no_prompt(self):
+        """The 'chat' type has no dedicated prompt."""
+        assert load_skill("chat") is None
 
 
 # ---------------------------------------------------------------------------

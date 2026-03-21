@@ -1,44 +1,92 @@
+import { useEffect, useState } from 'react';
+import { Lightbulb, Compass, Star, Sunrise } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
-import type { SessionType } from '../api/types';
+import { useAuth } from '../auth/useAuth';
+import { getProfile } from '../api/client';
+import type { SessionType, UserProfile } from '../api/types';
 
-const ACTION_BUTTONS: { type: SessionType; label: string; icon: string }[] = [
-  { type: 'tip', label: 'Share a Tip or Trick', icon: '💡' },
-  { type: 'stuck', label: "I'm Stuck", icon: '🧭' },
-  { type: 'brainstorm', label: 'Brainstorm an Opportunity', icon: '⭐' },
-  { type: 'wrapup', label: 'End-of-Day Wrap-up', icon: '🌅' },
+const ACTION_BUTTONS: { type: SessionType; label: string; Icon: typeof Lightbulb }[] = [
+  { type: 'tip', label: 'Share a Tip or Trick', Icon: Lightbulb },
+  { type: 'stuck', label: "I'm Stuck", Icon: Compass },
+  { type: 'brainstorm', label: 'Brainstorm an Opportunity', Icon: Star },
+  { type: 'wrapup', label: 'End-of-Day Wrap-up', Icon: Sunrise },
 ];
 
+function getGreeting(profile: UserProfile | null, sessionCount: number): string {
+  const name = profile?.name?.split(' ')[0] || '';
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const isTuesday = dayOfWeek === 2;
+
+  if (isTuesday) {
+    return name ? `Ready for AI Tuesday, ${name}?` : 'Ready for AI Tuesday?';
+  }
+
+  if (sessionCount >= 5) {
+    return name
+      ? `You're building momentum, ${name}.`
+      : "You're building momentum.";
+  }
+
+  if (sessionCount > 0) {
+    return name ? `Welcome back, ${name}.` : 'Welcome back.';
+  }
+
+  return name ? `Welcome, ${name}.` : 'Welcome to AI Tuesdays.';
+}
+
 export function HomeScreen() {
-  const { startTypedSession, sendChatMessage } = useSession();
+  const { startTypedSession, state } = useSession();
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      getProfile().then(setProfile).catch(() => {});
+    }
+  }, [user]);
+
+  const sessionCount = state.sessions.length;
+  const greeting = getGreeting(profile, sessionCount);
 
   return (
-    <div className="flex flex-col items-center justify-center h-full px-6 text-center bg-white">
+    <div className="flex flex-col items-center justify-center h-full px-6 text-center">
       <div className="mb-8">
-        <h2 className="text-2xl font-semibold text-[#21262E]">Welcome to AI Tuesdays</h2>
-        <p className="mt-2 text-sm text-[#5e7a88] max-w-md">
-          Your AI companion for the Forge program. Choose an action below or start a free-form chat.
+        <h1 className="text-3xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>
+          {greeting}
+        </h1>
+        <p className="mt-3 text-base" style={{ color: 'var(--color-text-muted)' }}>
+          Choose what you'd like to work on today.
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 w-full max-w-md mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg">
         {ACTION_BUTTONS.map((btn) => (
           <button
             key={btn.type}
             onClick={() => startTypedSession(btn.type)}
-            className="px-4 py-3 rounded-xl border border-[#d9dfe1] bg-white hover:border-[#159AC9] hover:bg-[#f3f6f7] text-sm text-[#3A4853] hover:text-[#159AC9] transition-colors text-left flex items-center gap-2"
+            className="group flex items-center gap-3 px-5 py-4 rounded-xl border bg-white hover:bg-[var(--color-primary-subtle)] hover:border-[var(--color-primary)] text-left transition-all duration-200"
+            style={{ borderColor: 'var(--color-border)' }}
           >
-            <span className="text-lg">{btn.icon}</span>
-            <span>{btn.label}</span>
+            <div
+              className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors duration-200"
+              style={{ backgroundColor: 'var(--color-surface-raised)' }}
+            >
+              <btn.Icon
+                className="w-5 h-5 transition-colors duration-200 group-hover:text-[var(--color-primary)]"
+                style={{ color: 'var(--color-text-muted)' }}
+                strokeWidth={1.5}
+              />
+            </div>
+            <span
+              className="text-sm font-medium transition-colors duration-200 group-hover:text-[var(--color-primary)]"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              {btn.label}
+            </span>
           </button>
         ))}
       </div>
-
-      <button
-        onClick={() => sendChatMessage('')}
-        className="text-sm text-[#5e7a88] hover:text-[#159AC9] transition-colors"
-      >
-        Or start a free-form chat
-      </button>
     </div>
   );
 }

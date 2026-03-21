@@ -1,22 +1,57 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
-import type { Session } from '../api/types';
+import type { Session, SessionType } from '../api/types';
 
-function formatDate(iso: string): string {
-  const date = new Date(iso);
+const SESSION_ICONS: Record<string, typeof Lightbulb> = {
+  tip: Lightbulb,
+  stuck: Compass,
+  brainstorm: Star,
+  wrapup: Sunrise,
+  chat: MessageCircle,
+};
+
+function getSessionIcon(type: string) {
+  return SESSION_ICONS[type] || MessageCircle;
+}
+
+function getWeekKey(dateStr: string): string {
+  const date = new Date(dateStr);
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  const diffHr = Math.floor(diffMs / 3600000);
-  const diffDay = Math.floor(diffMs / 86400000);
 
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin} min ago`;
-  if (diffHr < 24) return `${diffHr}h ago`;
-  if (diffDay === 1) return 'yesterday';
-  if (diffDay < 7) return `${diffDay} days ago`;
+  // Start of this week (Monday)
+  const thisMonday = new Date(now);
+  thisMonday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  thisMonday.setHours(0, 0, 0, 0);
 
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const lastMonday = new Date(thisMonday);
+  lastMonday.setDate(thisMonday.getDate() - 7);
+
+  if (date >= thisMonday) return 'This Week';
+  if (date >= lastMonday) return 'Last Week';
+
+  // Calculate week number from program start (approximate)
+  const weeksAgo = Math.floor((thisMonday.getTime() - date.getTime()) / (7 * 24 * 60 * 60 * 1000));
+  return `${weeksAgo + 1} Weeks Ago`;
+}
+
+function groupByWeek(sessions: Session[]): [string, Session[]][] {
+  const groups = new Map<string, Session[]>();
+
+  const sorted = [...sessions].sort(
+    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+  );
+
+  for (const session of sorted) {
+    // Don't show incomplete intake sessions
+    if (session.type === 'intake' && !session.title) continue;
+
+    const week = getWeekKey(session.updated_at);
+    if (!groups.has(week)) groups.set(week, []);
+    groups.get(week)!.push(session);
+  }
+
+  return Array.from(groups.entries());
 }
 
 interface SessionRowProps {
@@ -68,21 +103,31 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename }: Session
     }
   }
 
+  const Icon = getSessionIcon(session.type || 'chat');
+
   return (
     <div
       className={[
-        'group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer select-none',
+        'group flex items-center gap-2 pl-2 pr-2 rounded-lg cursor-pointer select-none',
         isActive
-          ? 'bg-blue-600 text-white'
-          : 'text-gray-300 hover:bg-gray-700',
+          ? 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)]'
+          : 'hover:bg-[var(--color-surface-raised)]',
       ].join(' ')}
+      style={{ height: '36px', minHeight: '36px' }}
       onClick={onSelect}
     >
+      <Icon
+        className="flex-shrink-0 w-3.5 h-3.5"
+        strokeWidth={1.5}
+        style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
+      />
+
       <div className="flex-1 min-w-0">
         {editing ? (
           <input
             ref={inputRef}
-            className="w-full bg-transparent border-b border-white/50 outline-none text-sm text-white"
+            className="w-full bg-transparent border-b border-[var(--color-primary)] outline-none text-sm"
+            style={{ color: 'var(--color-text-primary)' }}
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={commitEdit}
@@ -91,25 +136,21 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename }: Session
           />
         ) : (
           <p
-            className="text-sm font-medium truncate"
+            className="text-sm truncate"
+            style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
             onDoubleClick={(e) => { e.stopPropagation(); startEdit(); }}
           >
             {session.title || 'New Chat'}
           </p>
         )}
-        <p className={['text-xs mt-0.5', isActive ? 'text-blue-200' : 'text-gray-500'].join(' ')}>
-          {formatDate(session.updated_at)}
-        </p>
       </div>
 
       <button
         className={[
           'shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity',
-          isActive
-            ? 'hover:bg-blue-500 text-blue-200 hover:text-white'
-            : 'hover:bg-gray-600 text-gray-500 hover:text-gray-200',
           confirmDelete ? 'opacity-100 text-red-400' : '',
         ].join(' ')}
+        style={{ color: confirmDelete ? undefined : 'var(--color-text-muted)' }}
         onClick={handleDeleteClick}
         title={confirmDelete ? 'Click again to confirm' : 'Delete'}
       >
@@ -128,50 +169,118 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename }: Session
 }
 
 export function SessionList() {
-  const { state, selectSession, newSession, removeSession, updateSessionTitle } = useSession();
+  const { state, selectSession, removeSession, updateSessionTitle, deselectSession, startTypedSession } = useSession();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [collapsedWeeks, setCollapsedWeeks] = useState<Set<string>>(new Set());
 
-  const sorted = [...state.sessions].sort(
-    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-  );
+  const filteredSessions = useMemo(() => {
+    if (!searchQuery.trim()) return state.sessions;
+    const q = searchQuery.toLowerCase();
+    return state.sessions.filter(s =>
+      (s.title || '').toLowerCase().includes(q)
+    );
+  }, [state.sessions, searchQuery]);
 
-  async function handleNew() {
-    await newSession();
+  const weekGroups = useMemo(() => groupByWeek(filteredSessions), [filteredSessions]);
+
+  function toggleWeek(week: string) {
+    setCollapsedWeeks(prev => {
+      const next = new Set(prev);
+      if (next.has(week)) next.delete(week);
+      else next.add(week);
+      return next;
+    });
+  }
+
+  function handleNew() {
+    deselectSession();
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--color-surface-white)' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-gray-700/50">
-        <h1 className="text-sm font-semibold text-white tracking-wide">AI Tuesdays</h1>
+      <div className="flex items-center justify-between px-4 h-11 border-b" style={{ borderColor: 'var(--color-border)' }}>
+        <h1 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+          AI Tuesdays
+        </h1>
         <button
           onClick={handleNew}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-medium transition-colors"
+          className="p-1.5 rounded-lg transition-colors"
+          style={{ color: 'var(--color-text-muted)' }}
           title="New Chat"
         >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New
+          <Plus className="w-4 h-4" strokeWidth={2} />
         </button>
       </div>
 
+      {/* Search bar */}
+      <div className="px-3 py-2">
+        <div
+          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border"
+          style={{
+            borderColor: 'var(--color-border)',
+            backgroundColor: 'var(--color-surface)',
+          }}
+        >
+          <Search className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
+          <input
+            type="text"
+            placeholder="Search sessions..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-transparent border-none outline-none text-xs"
+            style={{
+              color: 'var(--color-text-primary)',
+            }}
+          />
+        </div>
+      </div>
+
       {/* Session list */}
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-        {sorted.length === 0 ? (
-          <p className="text-xs text-gray-500 text-center mt-8 px-4">
-            No conversations yet. Start a new chat to begin.
+      <div className="flex-1 overflow-y-auto px-2 pb-2">
+        {weekGroups.length === 0 ? (
+          <p className="text-xs text-center py-8" style={{ color: 'var(--color-text-placeholder)' }}>
+            No conversations yet
           </p>
         ) : (
-          sorted.map((session) => (
-            <SessionRow
-              key={session.session_id}
-              session={session}
-              isActive={session.session_id === state.activeSessionId}
-              onSelect={() => selectSession(session.session_id)}
-              onDelete={() => removeSession(session.session_id)}
-              onRename={(title) => updateSessionTitle(session.session_id, title)}
-            />
-          ))
+          weekGroups.map(([week, sessions]) => {
+            const isCollapsed = collapsedWeeks.has(week);
+            return (
+              <div key={week} className="mb-1">
+                <button
+                  onClick={() => toggleWeek(week)}
+                  className="flex items-center gap-1 px-2 py-1.5 w-full text-left rounded-md hover:bg-[var(--color-surface-raised)] transition-colors"
+                >
+                  {isCollapsed ? (
+                    <ChevronRight className="w-3 h-3" style={{ color: 'var(--color-text-muted)' }} strokeWidth={2} />
+                  ) : (
+                    <ChevronDown className="w-3 h-3" style={{ color: 'var(--color-text-muted)' }} strokeWidth={2} />
+                  )}
+                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+                    {week}
+                  </span>
+                  <span className="text-xs ml-auto" style={{ color: 'var(--color-text-placeholder)' }}>
+                    {sessions.length}
+                  </span>
+                </button>
+
+                {!isCollapsed && (
+                  <div className="space-y-0.5 mt-0.5">
+                    {sessions.map((session) => (
+                      <SessionRow
+                        key={session.session_id}
+                        session={session}
+                        isActive={session.session_id === state.activeSessionId}
+                        onSelect={() => selectSession(session.session_id)}
+                        onDelete={() => removeSession(session.session_id)}
+                        onRename={(title) => updateSessionTitle(session.session_id, title)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
