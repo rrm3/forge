@@ -32,6 +32,7 @@
 
 body {
   font-family: 'Satoshi', system-ui, -apple-system, sans-serif;
+  font-weight: 500;
   color: var(--color-text-primary);
   background-color: var(--color-surface);
   -webkit-font-smoothing: antialiased;

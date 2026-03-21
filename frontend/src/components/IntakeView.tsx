@@ -1,38 +1,38 @@
 /**
  * IntakeView - Full-screen focused layout for first-run intake.
  *
- * Blocks access to everything else until intake is complete.
- * No sidebar, no action buttons, no session history.
- * Centered chat with warm welcome header and voice toggle.
+ * Shows a splash screen with voice/text choice, then runs the intake
+ * conversation in the chosen mode. No sidebar, no action buttons.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Mic, Send, Square } from 'lucide-react';
+import { Mic, Send, Square, MessageSquare } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSession } from '../state/SessionContext';
 import { MessageBubble, streamingMarkdownComponents } from './MessageBubble';
 import { VoiceMode } from './VoiceMode';
 
+type IntakeStage = 'splash' | 'text' | 'voice';
+
 export function IntakeView() {
   const { state, sendChatMessage, startTypedSession, cancelStreaming } = useSession();
   const { messages = [], isStreaming, streamingText, activeSessionId } = state;
 
+  const [stage, setStage] = useState<IntakeStage>('splash');
   const [inputValue, setInputValue] = useState('');
-  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState<{ role: string; text: string }[]>([]);
   const inputValueRef = useRef(inputValue);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const intakeStarted = useRef(false);
 
-  // Auto-start intake session
-  useEffect(() => {
+  function startIntake(mode: 'text' | 'voice') {
     if (intakeStarted.current) return;
-    if (!state.sessionsLoaded) return;
-
     intakeStarted.current = true;
     startTypedSession('intake');
-  }, [state.sessionsLoaded, startTypedSession]);
+    setStage(mode);
+  }
 
   function handleInputChange(v: string) {
     inputValueRef.current = v;
@@ -66,37 +66,117 @@ export function IntakeView() {
 
   const hasInput = inputValue.trim().length > 0;
 
-  // Voice mode
-  if (voiceActive && activeSessionId) {
+  // Splash screen - voice/text choice
+  if (stage === 'splash') {
     return (
-      <div className="min-h-screen" style={{ backgroundColor: 'var(--color-surface)' }}>
+      <div
+        className="min-h-screen flex flex-col items-center justify-center px-6"
+        style={{ backgroundColor: 'var(--color-surface)' }}
+      >
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold tracking-tight mb-3" style={{ color: 'var(--color-text-primary)' }}>
+            Welcome to AI Tuesdays
+          </h1>
+          <p className="text-lg" style={{ color: 'var(--color-text-muted)' }}>
+            Let's get to know each other. This takes about 10 minutes.
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+          <button
+            onClick={() => startIntake('voice')}
+            className="flex-1 flex flex-col items-center gap-3 px-6 py-6 rounded-2xl border-2 transition-all duration-200 hover:shadow-md"
+            style={{
+              borderColor: 'var(--color-primary)',
+              backgroundColor: 'var(--color-primary-subtle)',
+            }}
+          >
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: 'var(--color-primary)' }}
+            >
+              <Mic className="w-7 h-7 text-white" strokeWidth={1.5} />
+            </div>
+            <div>
+              <p className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                Start with Voice
+              </p>
+              <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                Recommended - feels like a conversation
+              </p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => startIntake('text')}
+            className="flex-1 flex flex-col items-center gap-3 px-6 py-6 rounded-2xl border-2 transition-all duration-200 hover:shadow-md"
+            style={{
+              borderColor: 'var(--color-border)',
+              backgroundColor: 'var(--color-surface-white)',
+            }}
+          >
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: 'var(--color-surface-raised)' }}
+            >
+              <MessageSquare className="w-7 h-7" style={{ color: 'var(--color-text-muted)' }} strokeWidth={1.5} />
+            </div>
+            <div>
+              <p className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                Start with Text
+              </p>
+              <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                Type at your own pace
+              </p>
+            </div>
+          </button>
+        </div>
+
+        <a
+          href="mailto:forge-support@digitalscience.com"
+          className="mt-8 text-sm hover:underline"
+          style={{ color: 'var(--color-text-muted)' }}
+        >
+          Need help?
+        </a>
+      </div>
+    );
+  }
+
+  // Voice mode with transcript visible below
+  if (stage === 'voice' && activeSessionId) {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--color-surface)' }}>
         <VoiceMode
           sessionId={activeSessionId}
           sessionType="intake"
-          onExit={() => setVoiceActive(false)}
+          onExit={() => setStage('text')}
+          transcript={voiceTranscript}
+          onTranscriptUpdate={setVoiceTranscript}
         />
       </div>
     );
   }
 
+  // Text mode - full-screen focused chat
   return (
     <div
       className="min-h-screen flex flex-col"
       style={{ backgroundColor: 'var(--color-surface)' }}
     >
-      {/* Welcome header */}
-      <div className="text-center pt-12 pb-6 px-6">
-        <h1 className="text-3xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>
-          Welcome to AI Tuesdays
+      {/* Compact header */}
+      <div className="text-center pt-6 pb-4 px-6">
+        <h1 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
+          AI Tuesdays
         </h1>
-        <p className="mt-2 text-base" style={{ color: 'var(--color-text-muted)' }}>
-          Let's get to know each other.
+        <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+          Getting to know you
         </p>
       </div>
 
       {/* Chat area */}
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-4 py-4 space-y-1">
+        <div className="mx-auto max-w-2xl px-4 py-2 space-y-1">
           {messages.map((msg, i) => (
             <MessageBubble key={i} message={msg} />
           ))}
@@ -155,14 +235,12 @@ export function IntakeView() {
             />
 
             <div className="absolute bottom-0 right-0 flex items-center gap-1.5 pb-2 pr-2">
-              {/* Voice toggle */}
               {!isStreaming && activeSessionId && (
                 <button
-                  onClick={() => setVoiceActive(true)}
+                  onClick={() => setStage('voice')}
                   className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150"
                   style={{ color: 'var(--color-text-muted)' }}
                   title="Switch to voice"
-                  aria-label="Switch to voice mode"
                 >
                   <Mic className="w-4 h-4" strokeWidth={1.5} />
                 </button>
@@ -171,7 +249,7 @@ export function IntakeView() {
               {isStreaming ? (
                 <button
                   onClick={cancelStreaming}
-                  className="flex items-center justify-center w-8 h-8 rounded-lg text-white transition-colors duration-150"
+                  className="flex items-center justify-center w-8 h-8 rounded-lg text-white"
                   style={{ backgroundColor: 'var(--color-text-secondary)' }}
                   title="Stop"
                 >
@@ -181,7 +259,7 @@ export function IntakeView() {
                 <button
                   onClick={handleSend}
                   disabled={!hasInput}
-                  className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150"
+                  className="flex items-center justify-center w-8 h-8 rounded-lg"
                   style={{
                     backgroundColor: hasInput ? 'var(--color-primary)' : 'transparent',
                     color: hasInput ? '#FFFFFF' : 'var(--color-text-placeholder)',
@@ -196,7 +274,6 @@ export function IntakeView() {
         </div>
       </div>
 
-      {/* Need help link */}
       <div className="text-center pb-4">
         <a
           href="mailto:forge-support@digitalscience.com"

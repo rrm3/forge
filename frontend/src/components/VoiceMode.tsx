@@ -1,8 +1,9 @@
 /**
  * Voice Mode - OpenAI Realtime API integration.
  *
- * Manages the WebRTC/WebSocket connection to OpenAI, handles audio I/O,
- * relays tool calls to the backend, and persists transcripts.
+ * Connects to OpenAI's Realtime API using an ephemeral token from the backend.
+ * Sends microphone audio as base64 PCM16 frames. Receives and plays audio responses.
+ * Relays tool calls to the backend for server-side execution.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -15,12 +16,17 @@ interface VoiceModeProps {
   sessionId: string;
   sessionType?: string;
   onExit: () => void;
+  transcript?: { role: string; text: string }[];
+  onTranscriptUpdate?: (entries: { role: string; text: string }[]) => void;
 }
 
-export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
+// PCM16 audio config matching OpenAI Realtime API requirements
+const SAMPLE_RATE = 24000;
+
+export function VoiceMode({ sessionId, sessionType, onExit, transcript: externalTranscript, onTranscriptUpdate }: VoiceModeProps) {
   const [orbState, setOrbState] = useState<OrbState>('idle');
   const [audioLevel, setAudioLevel] = useState(0);
-  const [transcript, setTranscript] = useState<{ role: string; text: string }[]>([]);
+  const [transcript, setTranscript] = useState<{ role: string; text: string }[]>(externalTranscript || []);
   const [error, setError] = useState<string | null>(null);
   const [micDenied, setMicDenied] = useState(false);
   const [connecting, setConnecting] = useState(true);
@@ -28,9 +34,20 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
   const rtcRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const playbackCtxRef = useRef<AudioContext | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
   const animFrameRef = useRef<number>(0);
+  const transcriptRef = useRef(transcript);
 
-  // Request ephemeral token and connect to OpenAI
+  useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+
+  // Notify parent of transcript changes
+  useEffect(() => {
+    onTranscriptUpdate?.(transcript);
+  }, [transcript, onTranscriptUpdate]);
+
+  // Request ephemeral token and connect
   useEffect(() => {
     let cancelled = false;
 
@@ -56,7 +73,6 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
       }
     });
 
-    // Request the token
     forgeWs.requestVoiceSession(sessionId, sessionType);
 
     return () => {
@@ -83,34 +99,55 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
 
   const connectToRealtime = useCallback(async (token: string) => {
     try {
-      // Request microphone access
+      // Request microphone
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: SAMPLE_RATE,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        });
       } catch {
         setMicDenied(true);
         setConnecting(false);
         return;
       }
+      mediaStreamRef.current = stream;
 
-      // Set up audio analysis
-      const audioCtx = new AudioContext();
+      // Audio context for capture and analysis
+      const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
       audioContextRef.current = audioCtx;
       const source = audioCtx.createMediaStreamSource(stream);
+
+      // Analyser for visualization
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 256;
       source.connect(analyser);
       analyserRef.current = analyser;
 
-      // Connect to OpenAI Realtime
+      // Playback context for AI audio
+      playbackCtxRef.current = new AudioContext({ sampleRate: SAMPLE_RATE });
+
+      // Connect to OpenAI Realtime API with ephemeral token
+      // OpenAI accepts the token via subprotocol headers
       const ws = new WebSocket(
         `wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17`,
-        ['realtime', `openai-insecure-api-key.${token}`, 'openai-beta.realtime-v1'],
+        [
+          'realtime',
+          `openai-insecure-api-key.${token}`,
+          'openai-beta.realtime-v1',
+        ],
       );
 
       ws.onopen = () => {
         setConnecting(false);
         setOrbState('listening');
+
+        // Start capturing and sending audio
+        startAudioCapture(audioCtx, source, ws);
       };
 
       ws.onmessage = (event) => {
@@ -120,24 +157,69 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
         } catch { /* ignore */ }
       };
 
-      ws.onclose = () => {
-        setOrbState('reconnecting');
+      ws.onclose = (e) => {
+        console.log('Realtime WS closed:', e.code, e.reason);
+        if (e.code !== 1000) {
+          setOrbState('reconnecting');
+        }
       };
 
-      ws.onerror = () => {
-        setError('Voice connection failed. Try again.');
+      ws.onerror = (e) => {
+        console.error('Realtime WS error:', e);
+        setError('Voice connection failed. The OpenAI Realtime API may not be available.');
         setConnecting(false);
       };
 
       rtcRef.current = ws;
     } catch (err) {
+      console.error('Voice setup failed:', err);
       setError(`Voice setup failed: ${err}`);
       setConnecting(false);
     }
   }, [sessionId]);
 
+  function startAudioCapture(audioCtx: AudioContext, source: MediaStreamAudioSourceNode, ws: WebSocket) {
+    // Use ScriptProcessorNode to capture raw PCM audio
+    // Buffer size of 4096 at 24kHz = ~170ms chunks
+    const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+    processorRef.current = processor;
+
+    processor.onaudioprocess = (e) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+
+      const inputData = e.inputBuffer.getChannelData(0);
+      // Convert float32 to PCM16
+      const pcm16 = new Int16Array(inputData.length);
+      for (let i = 0; i < inputData.length; i++) {
+        const s = Math.max(-1, Math.min(1, inputData[i]));
+        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+
+      // Convert to base64
+      const bytes = new Uint8Array(pcm16.buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+
+      // Send audio append event
+      ws.send(JSON.stringify({
+        type: 'input_audio_buffer.append',
+        audio: base64,
+      }));
+    };
+
+    source.connect(processor);
+    processor.connect(audioCtx.destination); // Required for ScriptProcessor to work
+  }
+
   const handleRealtimeEvent = useCallback((data: { type: string; [key: string]: unknown }) => {
     switch (data.type) {
+      case 'session.created':
+        console.log('Realtime session created');
+        break;
+
       case 'input_audio_buffer.speech_started':
         setOrbState('listening');
         break;
@@ -146,9 +228,15 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
         setOrbState('idle');
         break;
 
-      case 'response.audio.delta':
+      case 'response.audio.delta': {
         setOrbState('speaking');
+        // Play audio response
+        const audioData = (data as { delta?: string }).delta;
+        if (audioData && playbackCtxRef.current) {
+          playAudioChunk(audioData, playbackCtxRef.current);
+        }
         break;
+      }
 
       case 'response.audio.done':
         setOrbState('listening');
@@ -156,14 +244,13 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
 
       case 'conversation.item.input_audio_transcription.completed': {
         const text = (data as { transcript?: string }).transcript || '';
-        if (text) {
-          setTranscript(prev => [...prev, { role: 'user', text }]);
-          // Persist to backend
+        if (text.trim()) {
+          setTranscript(prev => [...prev, { role: 'user', text: text.trim() }]);
           forgeWs.send({
             action: 'transcript',
             session_id: sessionId,
             role: 'user',
-            content: text,
+            content: text.trim(),
           });
         }
         break;
@@ -171,20 +258,19 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
 
       case 'response.audio_transcript.done': {
         const text = (data as { transcript?: string }).transcript || '';
-        if (text) {
-          setTranscript(prev => [...prev, { role: 'assistant', text }]);
+        if (text.trim()) {
+          setTranscript(prev => [...prev, { role: 'assistant', text: text.trim() }]);
           forgeWs.send({
             action: 'transcript',
             session_id: sessionId,
             role: 'assistant',
-            content: text,
+            content: text.trim(),
           });
         }
         break;
       }
 
       case 'response.function_call_arguments.done': {
-        // Tool call from GPT-4o - relay to backend
         const callId = (data as { call_id?: string }).call_id || '';
         const name = (data as { name?: string }).name || '';
         const args = (data as { arguments?: string }).arguments || '{}';
@@ -202,6 +288,7 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
 
       case 'error': {
         const msg = (data as { error?: { message?: string } }).error?.message || 'Voice error';
+        console.error('Realtime error:', msg);
         setError(msg);
         break;
       }
@@ -209,13 +296,25 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
   }, [sessionId]);
 
   function disconnectRealtime() {
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
     if (rtcRef.current) {
       rtcRef.current.close();
       rtcRef.current = null;
     }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(t => t.stop());
+      mediaStreamRef.current = null;
+    }
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
+    }
+    if (playbackCtxRef.current) {
+      playbackCtxRef.current.close();
+      playbackCtxRef.current = null;
     }
     analyserRef.current = null;
   }
@@ -236,7 +335,7 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
     return (
       <div className="flex flex-col items-center justify-center h-full px-6 text-center">
         <MicOff className="w-12 h-12 mb-4" style={{ color: 'var(--color-text-muted)' }} strokeWidth={1.5} />
-        <h3 className="text-lg font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
+        <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
           Microphone access needed
         </h3>
         <p className="text-sm mb-4 max-w-sm" style={{ color: 'var(--color-text-muted)' }}>
@@ -245,14 +344,14 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
         <div className="flex gap-3">
           <button
             onClick={handleRetry}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
             style={{ backgroundColor: 'var(--color-primary)' }}
           >
             Try Again
           </button>
           <button
             onClick={onExit}
-            className="px-4 py-2 rounded-lg text-sm font-medium border"
+            className="px-4 py-2 rounded-lg text-sm font-semibold border"
             style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}
           >
             Use Text Instead
@@ -269,7 +368,7 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
         {connecting ? (
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--color-primary)' }} />
-            <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Connecting voice...</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>Connecting voice...</span>
           </div>
         ) : (
           <VoiceOrb state={orbState} audioLevel={audioLevel} />
@@ -280,17 +379,13 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
       <div className="text-center mb-4" aria-live="polite">
         {error ? (
           <div>
-            <p className="text-sm mb-2" style={{ color: 'var(--color-error)' }}>{error}</p>
-            <button
-              onClick={handleRetry}
-              className="text-sm font-medium"
-              style={{ color: 'var(--color-primary)' }}
-            >
+            <p className="text-sm font-medium mb-2" style={{ color: 'var(--color-error)' }}>{error}</p>
+            <button onClick={handleRetry} className="text-sm font-semibold" style={{ color: 'var(--color-primary)' }}>
               Try again
             </button>
           </div>
         ) : (
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          <p className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
             {orbState === 'listening' && 'Listening...'}
             {orbState === 'speaking' && 'AI is speaking...'}
             {orbState === 'tool_call' && 'Looking something up...'}
@@ -305,15 +400,13 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
         {transcript.map((entry, i) => (
           <div
             key={i}
-            className={`mb-2 text-sm ${entry.role === 'user' ? 'text-right' : 'text-left'}`}
+            className={`mb-3 ${entry.role === 'user' ? 'text-right' : 'text-left'}`}
           >
             <span
-              className={`inline-block px-3 py-2 rounded-2xl ${
-                entry.role === 'user'
-                  ? 'bg-[var(--color-user-bubble)]'
-                  : ''
+              className={`inline-block px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                entry.role === 'user' ? 'bg-[var(--color-user-bubble)]' : ''
               }`}
-              style={{ color: 'var(--color-text-primary)', maxWidth: '80%' }}
+              style={{ color: 'var(--color-text-primary)', maxWidth: '80%', display: 'inline-block' }}
             >
               {entry.text}
             </span>
@@ -325,7 +418,7 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
       <div className="flex items-center justify-center gap-4 pb-6 pt-3">
         <button
           onClick={onExit}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm border transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-colors"
           style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}
           title="Switch to text"
         >
@@ -344,4 +437,32 @@ export function VoiceMode({ sessionId, sessionType, onExit }: VoiceModeProps) {
       </div>
     </div>
   );
+}
+
+// Play a base64-encoded PCM16 audio chunk
+function playAudioChunk(base64Audio: string, audioCtx: AudioContext) {
+  try {
+    const binary = atob(base64Audio);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const pcm16 = new Int16Array(bytes.buffer);
+
+    // Convert PCM16 to float32
+    const float32 = new Float32Array(pcm16.length);
+    for (let i = 0; i < pcm16.length; i++) {
+      float32[i] = pcm16[i] / 0x8000;
+    }
+
+    const buffer = audioCtx.createBuffer(1, float32.length, SAMPLE_RATE);
+    buffer.getChannelData(0).set(float32);
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioCtx.destination);
+    source.start();
+  } catch {
+    // Ignore audio playback errors
+  }
 }
