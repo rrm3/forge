@@ -152,7 +152,6 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
             model: REALTIME_MODEL,
             instructions: instructions || undefined,
             tools: tools.length > 0 ? tools : undefined,
-            voice: 'alloy',
             input_audio_transcription: { model: 'whisper-1' },
             turn_detection: {
               type: 'server_vad',
