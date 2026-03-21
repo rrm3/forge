@@ -328,15 +328,14 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
   function sendToolResult(callId: string, result: string) {
     console.log(`Sending tool result for ${callId}: ${result.substring(0, 100)}...`);
-    try {
-      sendEvent({
-        type: 'conversation.item.create',
-        item: { type: 'function_call_output', call_id: callId, output: result },
-      });
-      sendEvent({ type: 'response.create' });
-    } catch {
-      // Tool result may arrive after the conversation has moved on - that's OK
-    }
+    // Only send the result - don't send response.create.
+    // The model's response is already in progress and waiting for this
+    // tool result to continue. Sending response.create would conflict
+    // with the active response.
+    sendEvent({
+      type: 'conversation.item.create',
+      item: { type: 'function_call_output', call_id: callId, output: result },
+    });
   }
 
   function executeToolViaBackend(callId: string, name: string, argsStr: string) {
