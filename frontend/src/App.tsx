@@ -30,11 +30,19 @@ function AppContent() {
           setProfileLoaded(true);
         })
         .catch(() => {
-          // Profile may not exist yet (first load) - treat as needs intake
           setProfileLoaded(true);
         });
     }
   }, [user]);
+
+  // Re-check profile after streaming completes (catches intake completion)
+  useEffect(() => {
+    if (user && !state.isStreaming && profileLoaded && !profile?.intake_completed_at) {
+      getProfile()
+        .then((p) => setProfile(p))
+        .catch(() => {});
+    }
+  }, [user, state.isStreaming, profileLoaded, profile?.intake_completed_at]);
 
   // Wait for profile to load before deciding what to show
   if (!profileLoaded) {
