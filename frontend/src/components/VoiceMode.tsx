@@ -148,11 +148,8 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
         dc.send(JSON.stringify({
           type: 'session.update',
           session: {
-            type: 'realtime',
-            model: REALTIME_MODEL,
             instructions: instructions || undefined,
             tools: tools.length > 0 ? tools : undefined,
-            input_audio_transcription: { model: 'whisper-1' },
             turn_detection: {
               type: 'server_vad',
               threshold: 0.6,
