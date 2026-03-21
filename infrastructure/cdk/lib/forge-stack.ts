@@ -256,6 +256,46 @@ export class ForgeStack extends cdk.Stack {
     });
 
     // ---------------------------------------------------------------
+    // WebSocket Lambda (separate function, same Docker image, raw handler)
+    // ---------------------------------------------------------------
+    const wsLogGroup = new logs.LogGroup(this, 'WsLogGroup', {
+      logGroupName: `/aws/lambda/${prefix}-ws`,
+      retention: logs.RetentionDays.TWO_WEEKS,
+    });
+
+    const wsFunction = new lambda.DockerImageFunction(this, 'WsFunction', {
+      functionName: `${prefix}-ws`,
+      code: lambda.DockerImageCode.fromEcr(ecrRepository, {
+        tagOrDigest: 'latest',
+        cmd: ['python', '-m', 'awslambdaric', 'backend.lambda_ws.handler'],
+      }),
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(900), // 15 min for Worker path
+      role: lambdaRole,
+      environment: {
+        OIDC_PROVIDER_URL: oidcProviderUrl,
+        OIDC_CLIENT_ID: oidcClientId,
+        DYNAMODB_TABLE_PREFIX: prefix,
+        AWS_REGION_NAME: this.region,
+        S3_BUCKET: dataBucket.bucketName,
+        LANCE_BACKEND: 's3',
+        LANCE_S3_BUCKET: dataBucket.bucketName,
+        LLM_MODEL: 'bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0',
+        ORGCHART_S3_KEY: 'orgchart/org-chart.db',
+        CONNECTIONS_TABLE: connectionsTable.tableName,
+        LAMBDA_FUNCTION_NAME: `${prefix}-ws`, // self-invoke for Dispatcher-Worker
+      },
+      logGroup: wsLogGroup,
+    });
+
+    // Grant WS Lambda permission to invoke itself (Dispatcher -> Worker)
+    wsFunction.addToRolePolicy(new iam.PolicyStatement({
+      sid: 'SelfInvoke',
+      actions: ['lambda:InvokeFunction'],
+      resources: [wsFunction.functionArn],
+    }));
+
+    // ---------------------------------------------------------------
     // API Gateway WebSocket API
     // ---------------------------------------------------------------
     const wsApi = new apigatewayv2.CfnApi(this, 'WebSocketApi', {
@@ -264,11 +304,11 @@ export class ForgeStack extends cdk.Stack {
       routeSelectionExpression: '$request.body.action',
     });
 
-    // Lambda integration for WebSocket routes
+    // Lambda integration for WebSocket routes (points to WS Lambda, not backend)
     const wsIntegration = new apigatewayv2.CfnIntegration(this, 'WsIntegration', {
       apiId: wsApi.ref,
       integrationType: 'AWS_PROXY',
-      integrationUri: `arn:aws:apigateway:${this.region}:lambda:path/2015-03-31/functions/${backendFunction.functionArn}/invocations`,
+      integrationUri: `arn:aws:apigateway:${this.region}:lambda:path/2015-03-31/functions/${wsFunction.functionArn}/invocations`,
     });
 
     // $connect route
@@ -306,8 +346,8 @@ export class ForgeStack extends cdk.Stack {
       deploymentId: wsDeployment.ref,
     });
 
-    // Grant API Gateway permission to invoke Lambda
-    backendFunction.addPermission('WsApiGatewayInvoke', {
+    // Grant API Gateway permission to invoke WS Lambda
+    wsFunction.addPermission('WsApiGatewayInvoke', {
       principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${wsApi.ref}/*`,
     });
@@ -321,8 +361,8 @@ export class ForgeStack extends cdk.Stack {
       ],
     }));
 
-    // Add WebSocket endpoint to Lambda environment
-    backendFunction.addEnvironment(
+    // Add WebSocket endpoint to WS Lambda environment
+    wsFunction.addEnvironment(
       'WEBSOCKET_API_ENDPOINT',
       `https://${wsApi.ref}.execute-api.${this.region}.amazonaws.com/${wsStage.stageName}`,
     );

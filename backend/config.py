@@ -21,7 +21,16 @@ class Settings(BaseSettings):
     lance_s3_bucket: str = ""
 
     # LLM
-    llm_model: str = "anthropic/claude-sonnet-4-20250514"
+    llm_model: str = "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0"
+
+    # Org chart
+    orgchart_s3_key: str = "orgchart/org-chart.db"
+    orgchart_local_path: str = ""
+
+    # WebSocket (production - API Gateway)
+    connections_table: str = ""
+    websocket_api_endpoint: str = ""
+    lambda_function_name: str = ""  # for Dispatcher self-invoke
 
     # Dev
     dev_mode: bool = False

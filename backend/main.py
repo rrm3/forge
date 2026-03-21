@@ -2,7 +2,6 @@
 
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,85 +17,15 @@ from backend.api.ideas import set_ideas_deps
 from backend.api.websocket import router as ws_router
 from backend.api.websocket import set_ws_deps
 from backend.config import settings
-from backend.orgchart import load_orgchart_from_s3, load_orgchart_local
-from backend.repository.ideas import MemoryIdeaRepository
-from backend.repository.journal import MemoryJournalRepository
-from backend.repository.profiles import MemoryProfileRepository
-from backend.repository.sessions import MemorySessionRepository
-from backend.storage import LocalStorage
-from backend.tools.analyze import register_analyze_tools
-from backend.tools.ideas import register_ideas_tools
-from backend.tools.journal import register_journal_tools
-from backend.tools.profile import register_profile_tools
-from backend.tools.search import register_search_tools
-from backend.tools.registry import ToolRegistry
+from backend.deps import build_repos, build_storage, build_tool_registry, build_orgchart
 
 logger = logging.getLogger(__name__)
 
 
-def _build_repos():
-    """Build repository instances based on config."""
-    if settings.dev_mode:
-        return {
-            "sessions": MemorySessionRepository(),
-            "profiles": MemoryProfileRepository(),
-            "journal": MemoryJournalRepository(),
-            "ideas": MemoryIdeaRepository(),
-        }
-
-    # Production: DynamoDB
-    from backend.repository.ideas import DynamoDBIdeaRepository
-    from backend.repository.journal import DynamoDBJournalRepository
-    from backend.repository.profiles import DynamoDBProfileRepository
-    from backend.repository.sessions import DynamoDBSessionRepository
-
-    prefix = settings.dynamodb_table_prefix
-    region = settings.aws_region
-    return {
-        "sessions": DynamoDBSessionRepository(f"{prefix}-sessions", region),
-        "profiles": DynamoDBProfileRepository(f"{prefix}-profiles", region),
-        "journal": DynamoDBJournalRepository(f"{prefix}-journal", region),
-        "ideas": DynamoDBIdeaRepository(f"{prefix}-ideas", region),
-    }
-
-
-def _build_storage():
-    """Build storage backend based on config."""
-    if settings.dev_mode:
-        local_path = Path("/tmp/forge-storage")
-        local_path.mkdir(parents=True, exist_ok=True)
-        return LocalStorage(local_path)
-
-    from backend.storage import S3Storage
-    return S3Storage(settings.s3_bucket, settings.aws_region)
-
-
-def _build_orgchart():
-    """Load org chart from local file or S3."""
-    if settings.dev_mode:
-        if settings.orgchart_local_path:
-            return load_orgchart_local(settings.orgchart_local_path)
-        logger.info("No org chart configured for dev mode (set ORGCHART_LOCAL_PATH)")
-        return None
-
-    return load_orgchart_from_s3(settings.s3_bucket, settings.orgchart_s3_key)
-
-
-def _build_tool_registry() -> ToolRegistry:
-    """Create tool registry and register all tools."""
-    registry = ToolRegistry()
-    register_search_tools(registry)
-    register_ideas_tools(registry)
-    register_journal_tools(registry)
-    register_profile_tools(registry)
-    register_analyze_tools(registry)
-    return registry
-
-
 # Build dependencies at module level (keep lightweight - no S3 calls)
-repos = _build_repos()
-storage = _build_storage()
-tool_registry = _build_tool_registry()
+repos = build_repos()
+storage = build_storage()
+tool_registry = build_tool_registry()
 
 # Org chart loaded during startup (not at import time to avoid Lambda init timeout)
 orgchart = None
@@ -107,7 +36,7 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     global orgchart
     import asyncio
-    orgchart = await asyncio.get_event_loop().run_in_executor(None, _build_orgchart)
+    orgchart = await asyncio.get_event_loop().run_in_executor(None, build_orgchart)
 
     # Wire orgchart into deps now that it's loaded
     set_profile_deps(repos["profiles"], orgchart)

@@ -1,9 +1,7 @@
-"""WebSocket chat handler - replaces SSE streaming.
+"""WebSocket chat handler for local dev (FastAPI/uvicorn).
 
-Local dev: FastAPI WebSocket endpoint served by uvicorn.
-Production: API Gateway WebSocket API -> Lambda (Dispatcher/Worker pattern).
-
-The message protocol is the same in both modes.
+Production uses lambda_ws.py with API Gateway WebSocket API.
+Both share the same agent executor (backend.agent.executor).
 """
 
 from __future__ import annotations
@@ -11,40 +9,27 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import time
 import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from backend.agent.context import build_system_prompt
-from backend.agent.events import (
-    DoneEvent,
-    ErrorEvent,
-    TextEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-)
-from backend.agent.loop import react_loop
+from backend.agent.executor import run_agent_session
+from backend.api.transport import WebSocketSender
 from backend.auth import CurrentUser, _verify_oidc_token
 from backend.config import settings
-from backend.llm import call_llm
+from backend.deps import AgentDeps
 from backend.models import Message, Session
 from backend.storage import load_memory, load_transcript, save_transcript
-from backend.tools.registry import ToolContext, ToolRegistry
+from backend.tools.registry import ToolContext
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 # Module-level deps, set during app assembly
-_sessions_repo = None
-_profiles_repo = None
-_journal_repo = None
-_ideas_repo = None
-_storage = None
-_tool_registry: ToolRegistry | None = None
-_orgchart = None
+_deps: AgentDeps | None = None
 
 # Active connections: connection_id -> (websocket, user)
 _connections: dict[str, tuple[WebSocket, CurrentUser]] = {}
@@ -55,45 +40,18 @@ _session_locks: dict[str, asyncio.Lock] = {}
 # Cancel events: session_id -> asyncio.Event
 _cancel_events: dict[str, asyncio.Event] = {}
 
-# Token batching interval (seconds)
-_TOKEN_BATCH_INTERVAL = 0.05  # 50ms
-
-# Max frame size for messages sent to client
-_MAX_FRAME_SIZE = 128 * 1024  # 128KB
-
 
 def set_ws_deps(sessions_repo, profiles_repo, journal_repo, ideas_repo, storage, tool_registry, orgchart=None):
-    global _sessions_repo, _profiles_repo, _journal_repo, _ideas_repo, _storage, _tool_registry, _orgchart
-    _sessions_repo = sessions_repo
-    _profiles_repo = profiles_repo
-    _journal_repo = journal_repo
-    _ideas_repo = ideas_repo
-    _storage = storage
-    _tool_registry = tool_registry
-    _orgchart = orgchart
-
-
-async def _send_json(ws: WebSocket, data: dict) -> bool:
-    """Send JSON to client. Returns False if the connection is closed."""
-    try:
-        raw = json.dumps(data)
-        # Frame chunking: split large messages
-        if len(raw) > _MAX_FRAME_SIZE:
-            chunk_id = str(uuid.uuid4())[:8]
-            chunks = [raw[i:i + _MAX_FRAME_SIZE] for i in range(0, len(raw), _MAX_FRAME_SIZE)]
-            for seq, chunk in enumerate(chunks):
-                await ws.send_json({
-                    "type": "chunk",
-                    "chunk_id": chunk_id,
-                    "seq": seq,
-                    "total": len(chunks),
-                    "data": chunk,
-                })
-        else:
-            await ws.send_text(raw)
-        return True
-    except Exception:
-        return False
+    global _deps
+    _deps = AgentDeps(
+        sessions_repo=sessions_repo,
+        profiles_repo=profiles_repo,
+        journal_repo=journal_repo,
+        ideas_repo=ideas_repo,
+        storage=storage,
+        tool_registry=tool_registry,
+        orgchart=orgchart,
+    )
 
 
 async def _authenticate_ws(ws: WebSocket) -> CurrentUser | None:
@@ -108,7 +66,6 @@ async def _authenticate_ws(ws: WebSocket) -> CurrentUser | None:
 
 
 def _get_session_lock(session_id: str) -> asyncio.Lock:
-    """Get or create a lock for a session."""
     if session_id not in _session_locks:
         _session_locks[session_id] = asyncio.Lock()
     return _session_locks[session_id]
@@ -116,8 +73,7 @@ def _get_session_lock(session_id: str) -> asyncio.Lock:
 
 @router.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    """Main WebSocket endpoint for chat, session management, and voice."""
-    # Authenticate
+    """Main WebSocket endpoint for local dev."""
     user = await _authenticate_ws(ws)
     if user is None:
         await ws.close(code=4001, reason="Unauthorized")
@@ -126,13 +82,11 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     conn_id = str(uuid.uuid4())
     _connections[conn_id] = (ws, user)
+    sender = WebSocketSender(ws)
     logger.info("WebSocket connected: user=%s conn=%s", user.user_id, conn_id)
 
     try:
-        # Send connection confirmation
-        await _send_json(ws, {"type": "connected", "user_id": user.user_id})
-
-        # Heartbeat task
+        await sender.send({"type": "connected", "user_id": user.user_id})
         heartbeat_task = asyncio.create_task(_heartbeat_loop(ws))
 
         try:
@@ -141,39 +95,26 @@ async def websocket_endpoint(ws: WebSocket):
                 try:
                     msg = json.loads(raw)
                 except json.JSONDecodeError:
-                    await _send_json(ws, {"type": "error", "message": "Invalid JSON"})
+                    await sender.send({"type": "error", "message": "Invalid JSON"})
                     continue
 
                 action = msg.get("action")
                 if action == "ping":
-                    await _send_json(ws, {"type": "pong"})
+                    await sender.send({"type": "pong"})
                 elif action == "chat":
-                    asyncio.create_task(
-                        _handle_chat(ws, user, msg)
-                    )
+                    asyncio.create_task(_handle_chat(sender, user, msg))
                 elif action == "start_session":
-                    asyncio.create_task(
-                        _handle_start_session(ws, user, msg)
-                    )
+                    asyncio.create_task(_handle_start_session(sender, user, msg))
                 elif action == "cancel":
                     _handle_cancel(msg)
                 elif action == "voice_session":
-                    asyncio.create_task(
-                        _handle_voice_session(ws, user, msg)
-                    )
+                    asyncio.create_task(_handle_voice_session(sender, user, msg))
                 elif action == "tool_call":
-                    asyncio.create_task(
-                        _handle_tool_call(ws, user, msg)
-                    )
+                    asyncio.create_task(_handle_tool_call(sender, user, msg))
                 elif action == "transcript":
-                    asyncio.create_task(
-                        _handle_transcript(ws, user, msg)
-                    )
+                    asyncio.create_task(_handle_transcript(sender, user, msg))
                 else:
-                    await _send_json(ws, {
-                        "type": "error",
-                        "message": f"Unknown action: {action}",
-                    })
+                    await sender.send({"type": "error", "message": f"Unknown action: {action}"})
         finally:
             heartbeat_task.cancel()
     except WebSocketDisconnect:
@@ -185,71 +126,44 @@ async def websocket_endpoint(ws: WebSocket):
 
 
 async def _heartbeat_loop(ws: WebSocket):
-    """Send periodic pings to keep the connection alive."""
     try:
         while True:
-            await asyncio.sleep(300)  # 5 minutes
+            await asyncio.sleep(300)
             await ws.send_json({"type": "ping"})
-    except asyncio.CancelledError:
-        pass
-    except Exception:
+    except (asyncio.CancelledError, Exception):
         pass
 
 
-async def _handle_start_session(ws: WebSocket, user: CurrentUser, msg: dict):
-    """Create a new typed session and start the conversation."""
+async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: dict):
     session_type = msg.get("type", "chat")
-    mode = msg.get("mode", "text")
-
     session_id = str(uuid.uuid4())
-    session = Session(
-        session_id=session_id,
-        user_id=user.user_id,
-        title="",
-        type=session_type,
-    )
-    await _sessions_repo.create(session)
+    session = Session(session_id=session_id, user_id=user.user_id, title="", type=session_type)
+    await _deps.sessions_repo.create(session)
 
-    # Notify client of the new session
-    await _send_json(ws, {
-        "type": "session",
-        "session_id": session_id,
-        "session_type": session_type,
-    })
+    await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
 
-    # For text mode, initiate the AI conversation
+    mode = msg.get("mode", "text")
     if mode == "text":
-        await _run_agent(ws, user, session_id, "", is_new_session=True, session_type=session_type)
+        await _run_agent(sender, user, session_id, "", is_new_session=True, session_type=session_type)
 
 
-async def _handle_chat(ws: WebSocket, user: CurrentUser, msg: dict):
-    """Handle a chat message within an existing session."""
+async def _handle_chat(sender: MessageSender, user: CurrentUser, msg: dict):
     session_id = msg.get("session_id")
     message = msg.get("message", "")
 
     if not session_id:
-        await _send_json(ws, {"type": "error", "message": "Missing session_id"})
+        await sender.send({"type": "error", "message": "Missing session_id"})
         return
 
-    # Session ownership check
-    session = await _sessions_repo.get(user.user_id, session_id)
+    session = await _deps.sessions_repo.get(user.user_id, session_id)
     if session is None:
-        await _send_json(ws, {
-            "type": "error",
-            "session_id": session_id,
-            "message": "Session not found or access denied",
-        })
+        await sender.send({"type": "error", "session_id": session_id, "message": "Session not found or access denied"})
         return
 
-    await _run_agent(
-        ws, user, session_id, message,
-        is_new_session=False,
-        session_type=getattr(session, "type", "chat"),
-    )
+    await _run_agent(sender, user, session_id, message, is_new_session=False, session_type=getattr(session, "type", "chat"))
 
 
 def _handle_cancel(msg: dict):
-    """Signal cancellation for an in-progress session."""
     session_id = msg.get("session_id")
     if session_id:
         event = _cancel_events.get(session_id)
@@ -257,405 +171,137 @@ def _handle_cancel(msg: dict):
             event.set()
 
 
-async def _handle_voice_session(ws: WebSocket, user: CurrentUser, msg: dict):
-    """Create an OpenAI Realtime ephemeral token for voice mode."""
+async def _handle_voice_session(sender: MessageSender, user: CurrentUser, msg: dict):
     session_id = msg.get("session_id")
     session_type = msg.get("type", "chat")
     resume = msg.get("resume", False)
 
     if not session_id:
-        await _send_json(ws, {"type": "error", "message": "Missing session_id for voice session"})
+        await sender.send({"type": "error", "message": "Missing session_id for voice session"})
         return
 
     try:
-        # Load profile and build system prompt
-        profile = await _profiles_repo.get(user.user_id)
-        memory = await load_memory(_storage, user.user_id)
+        profile = await _deps.profiles_repo.get(user.user_id)
+        memory = await load_memory(_deps.storage, user.user_id)
 
         from backend.agent.skills import load_skill
         skill_instructions = None
         if session_type and session_type != "chat":
             skill_instructions = load_skill(session_type)
 
-        system_prompt = build_system_prompt(
-            profile=profile,
-            memory=memory,
-            skill_instructions=skill_instructions,
-        )
+        system_prompt = build_system_prompt(profile=profile, memory=memory, skill_instructions=skill_instructions)
 
-        # Load transcript context for resume
         transcript_context = None
         if resume:
-            transcript = await load_transcript(_storage, user.user_id, session_id)
+            transcript = await load_transcript(_deps.storage, user.user_id, session_id)
             if transcript:
-                lines = []
-                for m in transcript:
-                    lines.append(f"{m.role}: {m.content}")
-                transcript_context = "\n".join(lines)
+                transcript_context = "\n".join(f"{m.role}: {m.content}" for m in transcript)
 
-        # Create the voice session
         from backend.voice import create_voice_session
-        result = await create_voice_session(
-            system_prompt=system_prompt,
-            session_id=session_id,
-            transcript_context=transcript_context,
-        )
+        result = await create_voice_session(system_prompt=system_prompt, session_id=session_id, transcript_context=transcript_context)
 
-        await _send_json(ws, {
+        await sender.send({
             "type": "voice_token",
             "session_id": session_id,
             "token": result["token"],
             "expires_at": result["expires_at"],
         })
-
     except Exception as e:
         logger.exception("Voice session creation failed")
-        await _send_json(ws, {
-            "type": "error",
-            "session_id": session_id,
-            "message": f"Failed to create voice session: {e}",
-        })
+        await sender.send({"type": "error", "session_id": session_id, "message": f"Failed to create voice session: {e}"})
 
 
-async def _handle_tool_call(ws: WebSocket, user: CurrentUser, msg: dict):
-    """Execute a tool call relayed from voice mode (server-side validation)."""
+async def _handle_tool_call(sender: MessageSender, user: CurrentUser, msg: dict):
     tool_name = msg.get("tool")
     tool_args = msg.get("args", {})
     tool_call_id = msg.get("tool_call_id", "")
     session_id = msg.get("session_id")
 
     if not tool_name or not session_id:
-        await _send_json(ws, {"type": "error", "message": "Missing tool or session_id"})
+        await sender.send({"type": "error", "message": "Missing tool or session_id"})
         return
 
-    # Validate: tool must be in the registry
-    if _tool_registry is None:
-        await _send_json(ws, {"type": "error", "message": "Tool registry not available"})
-        return
-
-    schemas = _tool_registry.get_schemas()
+    schemas = _deps.tool_registry.get_schemas()
     valid_tools = {s["name"] for s in schemas}
     if tool_name not in valid_tools:
-        await _send_json(ws, {
-            "type": "tool_result",
-            "session_id": session_id,
-            "tool_call_id": tool_call_id,
-            "result": f"Unknown tool: {tool_name}",
-        })
+        await sender.send({"type": "tool_result", "session_id": session_id, "tool_call_id": tool_call_id, "result": f"Unknown tool: {tool_name}"})
         return
 
-    # Verify session ownership
-    session = await _sessions_repo.get(user.user_id, session_id)
+    session = await _deps.sessions_repo.get(user.user_id, session_id)
     if session is None:
-        await _send_json(ws, {
-            "type": "tool_result",
-            "session_id": session_id,
-            "tool_call_id": tool_call_id,
-            "result": "Session not found or access denied",
-        })
+        await sender.send({"type": "tool_result", "session_id": session_id, "tool_call_id": tool_call_id, "result": "Session not found or access denied"})
         return
 
-    # Build tool context and execute
     context = ToolContext(
-        user_id=user.user_id,
-        session_id=session_id,
-        repos={
-            "sessions": _sessions_repo,
-            "profiles": _profiles_repo,
-            "journal": _journal_repo,
-            "ideas": _ideas_repo,
-        },
-        storage=_storage,
-        config=settings,
+        user_id=user.user_id, session_id=session_id,
+        repos={"sessions": _deps.sessions_repo, "profiles": _deps.profiles_repo, "journal": _deps.journal_repo, "ideas": _deps.ideas_repo},
+        storage=_deps.storage, config=settings,
     )
 
     try:
-        result = await _tool_registry.execute(tool_name, tool_args, context)
+        result = await _deps.tool_registry.execute(tool_name, tool_args, context)
     except Exception as exc:
         logger.exception("Voice tool '%s' failed", tool_name)
         result = f"Error executing {tool_name}: {exc}"
 
-    await _send_json(ws, {
-        "type": "tool_result",
-        "session_id": session_id,
+    await sender.send({
+        "type": "tool_result", "session_id": session_id,
         "tool_call_id": tool_call_id,
         "result": result if isinstance(result, str) else json.dumps(result),
     })
 
 
-async def _handle_transcript(ws: WebSocket, user: CurrentUser, msg: dict):
-    """Persist a voice transcript chunk to the session transcript."""
+async def _handle_transcript(sender: MessageSender, user: CurrentUser, msg: dict):
     session_id = msg.get("session_id")
     role = msg.get("role", "user")
     content = msg.get("content", "")
-
     if not session_id or not content:
         return
 
-    # Verify session ownership
-    session = await _sessions_repo.get(user.user_id, session_id)
+    session = await _deps.sessions_repo.get(user.user_id, session_id)
     if session is None:
         return
 
-    # Load existing transcript and append
-    transcript = await load_transcript(_storage, user.user_id, session_id) or []
-    transcript.append(Message(
-        role=role,
-        content=content,
-        timestamp=datetime.now(UTC),
-    ))
-    await save_transcript(_storage, user.user_id, session_id, transcript)
-
-    # Update session message count
+    transcript = await load_transcript(_deps.storage, user.user_id, session_id) or []
+    transcript.append(Message(role=role, content=content, timestamp=datetime.now(UTC)))
+    await save_transcript(_deps.storage, user.user_id, session_id, transcript)
     session.message_count = len(transcript)
     session.updated_at = datetime.now(UTC)
-    await _sessions_repo.update(session)
+    await _deps.sessions_repo.update(session)
 
 
-async def _run_agent(
-    ws: WebSocket,
-    user: CurrentUser,
-    session_id: str,
-    user_message: str,
-    is_new_session: bool = False,
-    session_type: str = "chat",
-):
-    """Run the ReAct agent loop and stream results via WebSocket.
-
-    Implements session mutex to prevent duplicate Workers.
-    Uses token batching to reduce the number of WebSocket frames.
-    """
+async def _run_agent(sender: MessageSender, user: CurrentUser, session_id: str, user_message: str, is_new_session: bool = False, session_type: str = "chat"):
+    """Run agent with session mutex (local dev in-process lock)."""
     lock = _get_session_lock(session_id)
 
-    # Session mutex: only one agent loop per session at a time
     if lock.locked():
-        await _send_json(ws, {
-            "type": "error",
-            "session_id": session_id,
-            "message": "Session is already processing",
-        })
+        await sender.send({"type": "error", "session_id": session_id, "message": "Session is already processing"})
         return
 
-    async with lock:
-        try:
-            await _run_agent_inner(ws, user, session_id, user_message, is_new_session, session_type)
-        except Exception:
-            logger.exception("Agent loop error: session=%s", session_id)
-            await _send_json(ws, {
-                "type": "error",
-                "session_id": session_id,
-                "message": "Internal error processing message.",
-            })
-        finally:
-            _cancel_events.pop(session_id, None)
-            # Clean up session lock if no longer needed
-            if session_id in _session_locks and not _session_locks[session_id].locked():
-                _session_locks.pop(session_id, None)
-
-
-async def _run_agent_inner(
-    ws: WebSocket,
-    user: CurrentUser,
-    session_id: str,
-    user_message: str,
-    is_new_session: bool,
-    session_type: str,
-):
-    """Inner agent loop execution with token batching."""
-    # Load session transcript
-    transcript: list[Message] = []
-    if not is_new_session:
-        loaded = await load_transcript(_storage, user.user_id, session_id)
-        if loaded:
-            transcript = loaded
-
-    # Load profile (auto-create on first access)
-    profile = await _profiles_repo.get(user.user_id)
-    if profile is None:
-        from backend.models import UserProfile
-        from backend.orgchart import enrich_profile_kwargs
-        kwargs: dict = dict(user_id=user.user_id, email=user.email, name=user.name)
-        if _orgchart and user.email:
-            try:
-                kwargs.update(enrich_profile_kwargs(_orgchart, user.email))
-            except Exception:
-                logger.warning("Org chart lookup failed for %s", user.email, exc_info=True)
-        profile = UserProfile(**kwargs)
-        await _profiles_repo.create(profile)
-
-    memory = await load_memory(_storage, user.user_id)
-
-    # Load session-type prompt
-    from backend.agent.skills import load_skill
-    skill_instructions = None
-    if session_type and session_type != "chat":
-        skill_instructions = load_skill(session_type)
-
-    # Build system prompt
-    system_prompt = build_system_prompt(
-        profile=profile,
-        memory=memory,
-        skill_instructions=skill_instructions,
-    )
-
-    # Build tool context
-    context = ToolContext(
-        user_id=user.user_id,
-        session_id=session_id,
-        repos={
-            "sessions": _sessions_repo,
-            "profiles": _profiles_repo,
-            "journal": _journal_repo,
-            "ideas": _ideas_repo,
-        },
-        storage=_storage,
-        config=settings,
-    )
-
-    # Convert transcript to LLM message format
-    llm_messages = _transcript_to_llm_messages(transcript)
-
-    # Set up cancellation
     cancel_event = asyncio.Event()
     _cancel_events[session_id] = cancel_event
 
-    # Determine the prompt
-    llm_prompt = user_message.strip() if user_message else "The user just opened the app. Begin the conversation."
-    is_silent_start = not user_message.strip()
-
-    # Token batching state
-    token_buffer: list[str] = []
-    last_flush_time = time.monotonic()
-
-    async def flush_tokens():
-        nonlocal token_buffer, last_flush_time
-        if token_buffer:
-            combined = "".join(token_buffer)
-            await _send_json(ws, {
-                "type": "token",
-                "session_id": session_id,
-                "content": combined,
-            })
-            token_buffer = []
-            last_flush_time = time.monotonic()
-
-    # Run the loop
-    first_assistant_text: list[str] = []
-
-    async for event in react_loop(
-        user_message=llm_prompt,
-        messages=llm_messages,
-        system_prompt=system_prompt,
-        tools=_tool_registry,
-        context=context,
-        cancel_event=cancel_event,
-    ):
-        if isinstance(event, TextEvent):
-            first_assistant_text.append(event.text)
-            token_buffer.append(event.text)
-            # Flush if enough time has passed
-            if time.monotonic() - last_flush_time >= _TOKEN_BATCH_INTERVAL:
-                await flush_tokens()
-        elif isinstance(event, ToolCallEvent):
-            await flush_tokens()
-            await _send_json(ws, {
-                "type": "tool_call",
-                "session_id": session_id,
-                "tool": event.tool_name,
-                "tool_call_id": event.tool_call_id,
-                "args": event.arguments,
-            })
-        elif isinstance(event, ToolResultEvent):
-            await _send_json(ws, {
-                "type": "tool_result",
-                "session_id": session_id,
-                "tool_call_id": event.tool_call_id,
-                "result": event.result,
-            })
-        elif isinstance(event, DoneEvent):
-            await flush_tokens()
-            usage_data = None
-            if event.usage:
-                usage_data = event.usage.model_dump()
-            await _send_json(ws, {
-                "type": "done",
-                "session_id": session_id,
-                "usage": usage_data,
-            })
-        elif isinstance(event, ErrorEvent):
-            await flush_tokens()
-            await _send_json(ws, {
-                "type": "error",
-                "session_id": session_id,
-                "message": event.error,
-            })
-
-    # Final flush
-    await flush_tokens()
-
-    # Append messages to transcript
-    now = datetime.now(UTC)
-    if not is_silent_start:
-        transcript.append(Message(
-            role="user",
-            content=user_message.strip(),
-            timestamp=now,
-        ))
-    assistant_text = "".join(first_assistant_text)
-    if assistant_text:
-        transcript.append(Message(
-            role="assistant",
-            content=assistant_text,
-            timestamp=now,
-        ))
-
-    # Save transcript and update session
-    await save_transcript(_storage, user.user_id, session_id, transcript)
-    session = await _sessions_repo.get(user.user_id, session_id)
-    if session:
-        session.message_count = len(transcript)
-        session.updated_at = datetime.now(UTC)
-        await _sessions_repo.update(session)
-
-    # Generate title for new sessions
-    if is_new_session and assistant_text:
+    async with lock:
         try:
-            title = await _generate_title(user_message or "New conversation", assistant_text)
-            if session:
-                session.title = title
-                await _sessions_repo.update(session)
-            # Notify client of the title
-            await _send_json(ws, {
-                "type": "session_update",
-                "session_id": session_id,
-                "title": title,
-            })
+            await run_agent_session(
+                sender=sender,
+                user_id=user.user_id,
+                user_email=user.email,
+                user_name=user.name,
+                session_id=session_id,
+                user_message=user_message,
+                deps=_deps,
+                is_new_session=is_new_session,
+                session_type=session_type,
+                cancel_check=lambda: cancel_event.is_set(),
+            )
         except Exception:
-            logger.warning("Failed to generate session title", exc_info=True)
+            logger.exception("Agent loop error: session=%s", session_id)
+            await sender.send({"type": "error", "session_id": session_id, "message": "Internal error processing message."})
+        finally:
+            _cancel_events.pop(session_id, None)
+            _session_locks.pop(session_id, None)
 
 
-def _transcript_to_llm_messages(transcript: list[Message]) -> list[dict]:
-    """Convert stored Message objects to the LLM's message format."""
-    messages = []
-    for msg in transcript:
-        if msg.role in ("user", "assistant", "system"):
-            messages.append({"role": msg.role, "content": msg.content})
-
-    # Bedrock requires conversations to start with a user message
-    if messages and messages[0].get("role") == "assistant":
-        messages.insert(0, {"role": "user", "content": "(session started)"})
-
-    return messages
-
-
-async def _generate_title(user_msg: str, assistant_msg: str) -> str:
-    """Call the LLM to generate a short session title."""
-    prompt_messages = [
-        {"role": "system", "content": "Generate a short title (max 6 words) for this conversation. Return only the title, no quotes or punctuation."},
-        {"role": "user", "content": user_msg or "User started a new session"},
-        {"role": "assistant", "content": assistant_msg},
-        {"role": "user", "content": "Generate a short title for this conversation."},
-    ]
-    response = await call_llm(prompt_messages)
-    title = (response.content or "New Chat").strip().strip('"').strip("'")
-    return title[:100]
+# Type alias for the handler functions
+from backend.api.transport import MessageSender

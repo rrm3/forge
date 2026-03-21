@@ -85,14 +85,14 @@ class TestFrameChunking:
 
     def test_small_message_not_chunked(self):
         """Messages under 128KB should not be chunked."""
-        from backend.api.websocket import _MAX_FRAME_SIZE
+        from backend.api.transport import MAX_FRAME_SIZE as _MAX_FRAME_SIZE
 
         small_msg = json.dumps({"type": "token", "content": "hello"})
         assert len(small_msg) < _MAX_FRAME_SIZE
 
     def test_large_message_would_be_chunked(self):
         """Messages over 128KB should be chunked."""
-        from backend.api.websocket import _MAX_FRAME_SIZE
+        from backend.api.transport import MAX_FRAME_SIZE as _MAX_FRAME_SIZE
 
         large_content = "x" * (_MAX_FRAME_SIZE + 1000)
         large_msg = json.dumps({"type": "token", "content": large_content})

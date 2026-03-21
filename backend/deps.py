@@ -1,0 +1,113 @@
+"""Shared dependency construction for FastAPI app and Lambda handler.
+
+Both main.py (FastAPI/uvicorn) and lambda_ws.py (raw Lambda handler)
+use these functions to build repos, storage, tools, and orgchart.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from backend.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AgentDeps:
+    """Bundle of all dependencies needed by the agent executor."""
+    sessions_repo: Any = None
+    profiles_repo: Any = None
+    journal_repo: Any = None
+    ideas_repo: Any = None
+    storage: Any = None
+    tool_registry: Any = None
+    orgchart: Any = None
+
+
+def build_repos() -> dict:
+    """Build repository instances based on config."""
+    if settings.dev_mode:
+        from backend.repository.ideas import MemoryIdeaRepository
+        from backend.repository.journal import MemoryJournalRepository
+        from backend.repository.profiles import MemoryProfileRepository
+        from backend.repository.sessions import MemorySessionRepository
+        return {
+            "sessions": MemorySessionRepository(),
+            "profiles": MemoryProfileRepository(),
+            "journal": MemoryJournalRepository(),
+            "ideas": MemoryIdeaRepository(),
+        }
+
+    from backend.repository.ideas import DynamoDBIdeaRepository
+    from backend.repository.journal import DynamoDBJournalRepository
+    from backend.repository.profiles import DynamoDBProfileRepository
+    from backend.repository.sessions import DynamoDBSessionRepository
+
+    prefix = settings.dynamodb_table_prefix
+    region = settings.aws_region
+    return {
+        "sessions": DynamoDBSessionRepository(f"{prefix}-sessions", region),
+        "profiles": DynamoDBProfileRepository(f"{prefix}-profiles", region),
+        "journal": DynamoDBJournalRepository(f"{prefix}-journal", region),
+        "ideas": DynamoDBIdeaRepository(f"{prefix}-ideas", region),
+    }
+
+
+def build_storage():
+    """Build storage backend based on config."""
+    if settings.dev_mode:
+        from backend.storage import LocalStorage
+        local_path = Path("/tmp/forge-storage")
+        local_path.mkdir(parents=True, exist_ok=True)
+        return LocalStorage(local_path)
+
+    from backend.storage import S3Storage
+    return S3Storage(settings.s3_bucket, settings.aws_region)
+
+
+def build_orgchart():
+    """Load org chart from local file or S3."""
+    from backend.orgchart import load_orgchart_from_s3, load_orgchart_local
+
+    if settings.dev_mode:
+        if settings.orgchart_local_path:
+            return load_orgchart_local(settings.orgchart_local_path)
+        logger.info("No org chart configured for dev mode (set ORGCHART_LOCAL_PATH)")
+        return None
+
+    return load_orgchart_from_s3(settings.s3_bucket, settings.orgchart_s3_key)
+
+
+def build_tool_registry():
+    """Create tool registry and register all tools."""
+    from backend.tools.analyze import register_analyze_tools
+    from backend.tools.ideas import register_ideas_tools
+    from backend.tools.journal import register_journal_tools
+    from backend.tools.profile import register_profile_tools
+    from backend.tools.registry import ToolRegistry
+    from backend.tools.search import register_search_tools
+
+    registry = ToolRegistry()
+    register_search_tools(registry)
+    register_ideas_tools(registry)
+    register_journal_tools(registry)
+    register_profile_tools(registry)
+    register_analyze_tools(registry)
+    return registry
+
+
+def build_agent_deps(repos: dict, storage, tool_registry, orgchart=None) -> AgentDeps:
+    """Construct AgentDeps from individual components."""
+    return AgentDeps(
+        sessions_repo=repos["sessions"],
+        profiles_repo=repos["profiles"],
+        journal_repo=repos["journal"],
+        ideas_repo=repos["ideas"],
+        storage=storage,
+        tool_registry=tool_registry,
+        orgchart=orgchart,
+    )
