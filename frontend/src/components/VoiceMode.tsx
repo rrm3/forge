@@ -1,18 +1,16 @@
 /**
  * Voice Mode - OpenAI Realtime API integration.
  *
- * Architecture:
- * 1. Backend creates an OpenAI Realtime session with system prompt + tools
- * 2. Backend returns an ephemeral token
- * 3. Frontend connects to OpenAI's WebSocket with the token
- * 4. Microphone audio is captured, converted to PCM16, sent as base64 frames
- * 5. AI audio responses are queued and played back sequentially
- * 6. Tool calls are relayed to the backend for execution
- * 7. Transcripts are persisted to the backend for session continuity
+ * Key behaviors:
+ * - Mic is muted while AI is speaking (prevents echo/feedback)
+ * - Audio playback is queued sequentially (not simultaneous)
+ * - Transcript streams word-by-word synced with audio
+ * - Pause button mutes mic without disconnecting
+ * - Tool calls relay through backend for server-side execution
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { MicOff, Square, Type } from 'lucide-react';
+import { MicOff, Square, Type, Pause, Play } from 'lucide-react';
 import { VoiceOrb, type OrbState } from './VoiceOrb';
 import { forgeWs } from '../api/websocket';
 import type { ServerMessage } from '../api/websocket';
@@ -35,39 +33,37 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
   const [micDenied, setMicDenied] = useState(false);
   const [connecting, setConnecting] = useState(true);
   const [streamingAssistantText, setStreamingAssistantText] = useState('');
+  const [paused, setPaused] = useState(false);
 
-  // Refs for audio/WebSocket resources
+  // Refs
   const openaiWsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const animFrameRef = useRef<number>(0);
-
-  // Audio playback queue - plays chunks sequentially, not simultaneously
   const playbackNextTime = useRef(0);
   const playbackCtxRef = useRef<AudioContext | null>(null);
 
-  // Notify parent of transcript changes
-  useEffect(() => {
-    onTranscriptUpdate?.(transcript);
-  }, [transcript, onTranscriptUpdate]);
+  // Mic mute flag - true while AI is speaking to prevent echo pickup
+  const micMutedRef = useRef(false);
+  const pausedRef = useRef(false);
 
-  // ---- Core connection lifecycle ----
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
+  useEffect(() => { onTranscriptUpdate?.(transcript); }, [transcript, onTranscriptUpdate]);
+
+  // ---- Connection lifecycle ----
 
   useEffect(() => {
     let cancelled = false;
 
     const unsubMessage = forgeWs.onMessage((msg: ServerMessage) => {
       if (cancelled) return;
-
       if (msg.type === 'voice_token' && 'session_id' in msg && msg.session_id === sessionId) {
-        // Only connect if we don't already have a connection
         if (!openaiWsRef.current || openaiWsRef.current.readyState >= WebSocket.CLOSING) {
           connectToOpenAI(msg.token);
         }
       }
-
       if (msg.type === 'tool_result' && 'session_id' in msg && msg.session_id === sessionId) {
         relayToolResult(
           (msg as { tool_call_id: string }).tool_call_id,
@@ -85,7 +81,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
     };
   }, [sessionId, sessionType]);
 
-  // Audio level visualization loop
+  // Audio level visualization
   useEffect(() => {
     function tick() {
       if (analyserRef.current) {
@@ -100,16 +96,13 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
     return () => cancelAnimationFrame(animFrameRef.current);
   }, []);
 
-  // ---- OpenAI Realtime connection ----
+  // ---- OpenAI connection ----
 
   function connectToOpenAI(token: string) {
-    // Ensure no existing connection
-    if (openaiWsRef.current && openaiWsRef.current.readyState < WebSocket.CLOSING) {
-      return;
-    }
+    if (openaiWsRef.current && openaiWsRef.current.readyState < WebSocket.CLOSING) return;
 
-    setupMicrophone().then((micReady) => {
-      if (!micReady) return;
+    setupMicrophone().then((ok) => {
+      if (!ok) return;
 
       const ws = new WebSocket(
         'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17',
@@ -121,26 +114,21 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
         setConnecting(false);
         setOrbState('idle');
         startAudioCapture(ws);
-        // Don't send response.create here - wait for session.created
       };
 
       ws.onmessage = (event) => {
         try {
-          const parsed = JSON.parse(event.data);
-          // After session is created, trigger the initial greeting
-          if (parsed.type === 'session.created') {
-            console.log('OpenAI Realtime session created');
+          const data = JSON.parse(event.data);
+          if (data.type === 'session.created') {
+            // Session ready - trigger initial greeting
             ws.send(JSON.stringify({ type: 'response.create' }));
           }
-          handleOpenAIEvent(parsed);
-        } catch { /* ignore parse errors */ }
+          handleOpenAIEvent(data);
+        } catch {}
       };
 
       ws.onclose = (e) => {
-        console.log('OpenAI WS closed:', e.code, e.reason);
-        if (e.code !== 1000) {
-          setOrbState('reconnecting');
-        }
+        if (e.code !== 1000) setOrbState('reconnecting');
       };
 
       ws.onerror = () => {
@@ -159,17 +147,14 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
       const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
       audioContextRef.current = ctx;
-
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
       source.connect(analyser);
       analyserRef.current = analyser;
 
-      // Playback context for AI audio
       playbackCtxRef.current = new AudioContext({ sampleRate: SAMPLE_RATE });
       playbackNextTime.current = 0;
-
       return true;
     } catch {
       setMicDenied(true);
@@ -183,15 +168,15 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
     const analyser = analyserRef.current;
     if (!ctx || !analyser) return;
 
-    // ScriptProcessorNode captures raw PCM for sending to OpenAI
     const processor = ctx.createScriptProcessor(4096, 1, 1);
     processorRef.current = processor;
 
     processor.onaudioprocess = (e) => {
       if (ws.readyState !== WebSocket.OPEN) return;
-      const input = e.inputBuffer.getChannelData(0);
+      // Don't send audio while AI is speaking (prevents echo) or while paused
+      if (micMutedRef.current || pausedRef.current) return;
 
-      // Float32 -> PCM16 -> base64
+      const input = e.inputBuffer.getChannelData(0);
       const pcm16 = new Int16Array(input.length);
       for (let i = 0; i < input.length; i++) {
         const s = Math.max(-1, Math.min(1, input[i]));
@@ -201,25 +186,17 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       let binary = '';
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
 
-      ws.send(JSON.stringify({
-        type: 'input_audio_buffer.append',
-        audio: btoa(binary),
-      }));
+      ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: btoa(binary) }));
     };
 
-    // Connect through analyser so both visualization and capture work
     analyser.connect(processor);
     processor.connect(ctx.destination);
   }
 
-  // ---- Handle OpenAI Realtime events ----
+  // ---- OpenAI event handling ----
 
   function handleOpenAIEvent(data: { type: string; [key: string]: unknown }) {
     switch (data.type) {
-      case 'session.created':
-        console.log('OpenAI Realtime session created');
-        break;
-
       case 'input_audio_buffer.speech_started':
         setOrbState('listening');
         break;
@@ -230,29 +207,26 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
       case 'response.audio.delta':
         setOrbState('speaking');
+        micMutedRef.current = true; // Mute mic while AI speaks
         queueAudioChunk((data as { delta?: string }).delta || '');
         break;
 
       case 'response.audio.done':
+        // Unmute mic after a short delay (let audio finish playing)
+        setTimeout(() => { micMutedRef.current = false; }, 500);
         setOrbState('listening');
         break;
 
       case 'response.audio_transcript.delta': {
-        // Stream assistant text word-by-word as audio plays
         const delta = ((data as { delta?: string }).delta || '');
-        if (delta) {
-          setStreamingAssistantText(prev => prev + delta);
-        }
+        if (delta) setStreamingAssistantText(prev => prev + delta);
         break;
       }
 
       case 'conversation.item.input_audio_transcription.completed': {
-        // This is the FINAL user transcript (post-processed by Whisper).
-        // Replace any existing partial user entry at the end of transcript.
         const text = ((data as { transcript?: string }).transcript || '').trim();
         if (text) {
           setTranscript(prev => {
-            // If the last entry is a user entry, replace it (it was a partial)
             if (prev.length > 0 && prev[prev.length - 1].role === 'user') {
               return [...prev.slice(0, -1), { role: 'user', text }];
             }
@@ -263,14 +237,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
         break;
       }
 
-      case 'input_audio_buffer.committed': {
-        // User speech was committed - add a placeholder that will be replaced
-        // by the transcription.completed event above
-        break;
-      }
-
       case 'response.audio_transcript.done': {
-        // Final assistant transcript - commit streaming text and clear buffer
         const text = ((data as { transcript?: string }).transcript || '').trim();
         setStreamingAssistantText('');
         if (text) {
@@ -282,6 +249,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
       case 'response.function_call_arguments.done': {
         setOrbState('tool_call');
+        micMutedRef.current = true;
         const callId = (data as { call_id?: string }).call_id || '';
         const name = (data as { name?: string }).name || '';
         const args = (data as { arguments?: string }).arguments || '{}';
@@ -295,22 +263,22 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       case 'error': {
         const msg = (data as { error?: { message?: string } }).error?.message || 'Voice error';
         console.error('OpenAI Realtime error:', msg);
-        setError(msg);
+        // Don't show transient errors to user, just log
+        if (!msg.includes('active response in progress')) {
+          setError(msg);
+        }
         break;
       }
     }
   }
 
-  // ---- Sequential audio playback queue ----
-  // Each audio.delta chunk is scheduled to play AFTER the previous one finishes,
-  // preventing the garbled simultaneous playback.
+  // ---- Sequential audio playback ----
 
   function queueAudioChunk(base64Audio: string) {
     const ctx = playbackCtxRef.current;
     if (!ctx || !base64Audio) return;
 
     try {
-      // Decode base64 -> PCM16 -> Float32
       const binary = atob(base64Audio);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -318,75 +286,57 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 0x8000;
 
-      // Create audio buffer
       const buffer = ctx.createBuffer(1, float32.length, SAMPLE_RATE);
       buffer.getChannelData(0).set(float32);
 
-      // Schedule playback sequentially
       const now = ctx.currentTime;
       const startTime = Math.max(now, playbackNextTime.current);
-
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       source.connect(ctx.destination);
       source.start(startTime);
-
-      // Next chunk starts after this one ends
       playbackNextTime.current = startTime + buffer.duration;
-    } catch {
-      // Ignore individual chunk playback errors
-    }
+    } catch {}
   }
-
-  // ---- Relay tool results back to OpenAI ----
 
   function relayToolResult(callId: string, result: string) {
     const ws = openaiWsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
     ws.send(JSON.stringify({
       type: 'conversation.item.create',
       item: { type: 'function_call_output', call_id: callId, output: result },
     }));
     ws.send(JSON.stringify({ type: 'response.create' }));
+    // Unmute after tool result so AI can respond
+    setTimeout(() => { micMutedRef.current = false; }, 200);
+  }
+
+  // ---- Pause/resume ----
+
+  function togglePause() {
+    setPaused(p => !p);
   }
 
   // ---- Cleanup ----
 
   function cleanup() {
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
-    }
-    if (openaiWsRef.current) {
-      openaiWsRef.current.close();
-      openaiWsRef.current = null;
-    }
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(t => t.stop());
-      mediaStreamRef.current = null;
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    if (playbackCtxRef.current) {
-      playbackCtxRef.current.close();
-      playbackCtxRef.current = null;
-    }
+    if (processorRef.current) { processorRef.current.disconnect(); processorRef.current = null; }
+    if (openaiWsRef.current) { openaiWsRef.current.close(); openaiWsRef.current = null; }
+    if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
+    if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null; }
+    if (playbackCtxRef.current) { playbackCtxRef.current.close(); playbackCtxRef.current = null; }
     analyserRef.current = null;
     playbackNextTime.current = 0;
+    micMutedRef.current = false;
   }
 
-  // ---- UI ----
+  // ---- Render ----
 
   if (micDenied) {
     return (
       <div className="flex flex-col items-center justify-center h-full px-6 text-center">
         <MicOff className="w-12 h-12 mb-4" style={{ color: 'var(--color-text-muted)' }} strokeWidth={1.5} />
-        <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
-          Microphone access needed
-        </h3>
+        <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>Microphone access needed</h3>
         <p className="text-sm mb-4 max-w-sm" style={{ color: 'var(--color-text-muted)' }}>
           Allow microphone access in your browser settings, then try again.
         </p>
@@ -406,6 +356,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
   return (
     <div className="flex flex-col items-center h-full" style={{ backgroundColor: 'var(--color-surface-white)' }}>
+      {/* Orb */}
       <div className="flex-shrink-0 flex items-center justify-center pt-8 pb-4">
         {connecting ? (
           <div className="flex flex-col items-center gap-3">
@@ -413,65 +364,69 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
             <span className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>Connecting voice...</span>
           </div>
         ) : (
-          <VoiceOrb state={orbState} audioLevel={audioLevel} />
+          <VoiceOrb state={paused ? 'idle' : orbState} audioLevel={paused ? 0 : audioLevel} size={120} />
         )}
       </div>
 
+      {/* Status */}
       <div className="text-center mb-4" aria-live="polite">
         {error ? (
           <div>
             <p className="text-sm font-medium mb-2" style={{ color: 'var(--color-error)' }}>{error}</p>
             <button onClick={() => { setError(null); setConnecting(true); forgeWs.requestVoiceSession(sessionId, sessionType); }}
-              className="text-sm font-semibold" style={{ color: 'var(--color-primary)' }}>
-              Try again
-            </button>
+              className="text-sm font-semibold" style={{ color: 'var(--color-primary)' }}>Try again</button>
           </div>
         ) : (
           <p className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-            {orbState === 'listening' && 'Listening...'}
-            {orbState === 'speaking' && 'AI is speaking...'}
-            {orbState === 'tool_call' && 'Looking something up...'}
-            {orbState === 'idle' && 'Ready'}
-            {orbState === 'reconnecting' && 'Reconnecting...'}
+            {paused ? 'Paused - tap resume when ready' :
+             orbState === 'listening' ? 'Listening...' :
+             orbState === 'speaking' ? 'AI is speaking...' :
+             orbState === 'tool_call' ? 'Looking something up...' :
+             orbState === 'reconnecting' ? 'Reconnecting...' : 'Ready'}
           </p>
         )}
       </div>
 
-      {/* Live transcript */}
+      {/* Transcript */}
       <div className="flex-1 overflow-y-auto w-full max-w-2xl px-4">
         {transcript.map((entry, i) => (
           <div key={i} className={`mb-3 ${entry.role === 'user' ? 'text-right' : 'text-left'}`}>
-            <span
-              className={`inline-block px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                entry.role === 'user' ? 'bg-[var(--color-user-bubble)]' : ''
-              }`}
-              style={{ color: 'var(--color-text-primary)', maxWidth: '80%', display: 'inline-block' }}
-            >
+            <span className={`inline-block px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${entry.role === 'user' ? 'bg-[var(--color-user-bubble)]' : ''}`}
+              style={{ color: 'var(--color-text-primary)', maxWidth: '80%', display: 'inline-block' }}>
               {entry.text}
             </span>
           </div>
         ))}
-        {/* Streaming assistant text - appears word-by-word synced with audio */}
         {streamingAssistantText && (
           <div className="mb-3 text-left">
-            <span
-              className="inline-block px-4 py-2.5 rounded-2xl text-sm leading-relaxed"
-              style={{ color: 'var(--color-text-primary)', maxWidth: '80%', display: 'inline-block' }}
-            >
+            <span className="inline-block px-4 py-2.5 rounded-2xl text-sm leading-relaxed"
+              style={{ color: 'var(--color-text-primary)', maxWidth: '80%', display: 'inline-block' }}>
               {streamingAssistantText}
             </span>
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-center gap-4 pb-6 pt-3">
+      {/* Controls */}
+      <div className="flex items-center justify-center gap-3 pb-6 pt-3">
         <button onClick={onExit}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border"
           style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
           <Type className="w-4 h-4" strokeWidth={1.5} /> Text
         </button>
+        <button onClick={togglePause}
+          className="flex items-center justify-center w-12 h-12 rounded-full border-2 transition-colors"
+          style={{
+            borderColor: paused ? 'var(--color-primary)' : 'var(--color-border)',
+            backgroundColor: paused ? 'var(--color-primary-subtle)' : 'var(--color-surface-white)',
+            color: paused ? 'var(--color-primary)' : 'var(--color-text-muted)',
+          }}
+          title={paused ? 'Resume' : 'Pause'}
+          aria-label={paused ? 'Resume voice' : 'Pause voice'}>
+          {paused ? <Play className="w-5 h-5" strokeWidth={1.5} /> : <Pause className="w-5 h-5" strokeWidth={1.5} />}
+        </button>
         <button onClick={() => { cleanup(); onExit(); }}
-          className="flex items-center justify-center w-12 h-12 rounded-full text-white transition-colors"
+          className="flex items-center justify-center w-12 h-12 rounded-full text-white"
           style={{ backgroundColor: 'var(--color-error)' }}
           aria-label="Stop voice session">
           <Square className="w-5 h-5" fill="currentColor" strokeWidth={0} />
