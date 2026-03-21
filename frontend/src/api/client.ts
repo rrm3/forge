@@ -1,14 +1,19 @@
 import type { Session, Message, UserProfile, JournalEntry, Idea } from './types';
 
 let getTokenFn: (() => Promise<string | null>) | null = null;
+let tokenGetterReady: (() => void) | null = null;
+const tokenGetterPromise = new Promise<void>((resolve) => { tokenGetterReady = resolve; });
 
 export function setTokenGetter(fn: () => Promise<string | null>) {
   getTokenFn = fn;
+  tokenGetterReady?.();
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+  // Wait for the token getter to be wired up (prevents 401 race on startup)
+  await tokenGetterPromise;
   const token = await getTokenFn?.();
   const headers = new Headers(options.headers);
   if (token) headers.set('Authorization', `Bearer ${token}`);

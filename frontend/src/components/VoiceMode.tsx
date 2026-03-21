@@ -47,13 +47,8 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
     onTranscriptUpdate?.(transcript);
   }, [transcript, onTranscriptUpdate]);
 
-  // Request ephemeral token and connect (guarded against strict mode double-fire)
-  const voiceInitialized = useRef(false);
-
+  // Request ephemeral token and connect
   useEffect(() => {
-    if (voiceInitialized.current) return;
-    voiceInitialized.current = true;
-
     let cancelled = false;
 
     const unsubMessage = forgeWs.onMessage((msg: ServerMessage) => {
@@ -63,7 +58,6 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
         }
       }
       if (msg.type === 'tool_result' && 'session_id' in msg && msg.session_id === sessionId) {
-        // Relay tool result back to OpenAI
         if (rtcRef.current?.readyState === WebSocket.OPEN) {
           rtcRef.current.send(JSON.stringify({
             type: 'conversation.item.create',
@@ -83,6 +77,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
     return () => {
       cancelled = true;
       unsubMessage();
+      // Clean up any connection from this effect instance
       disconnectRealtime();
     };
   }, [sessionId, sessionType]);
