@@ -29,7 +29,10 @@ function AppContent() {
           setProfile(p);
           setProfileLoaded(true);
         })
-        .catch(() => {
+        .catch((err) => {
+          // If 401, the auth layer will handle redirect - don't show intake
+          if (err?.message?.includes('401')) return;
+          // Other errors (e.g., profile doesn't exist yet) - proceed to intake
           setProfileLoaded(true);
         });
     }
