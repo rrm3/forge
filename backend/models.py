@@ -28,12 +28,9 @@ class Message(BaseModel):
 
 
 class AIProficiency(BaseModel):
-    """AI proficiency dimensions scored 1-5 by the AI during intake."""
-    operational_fluency: int = 0
-    strategic_delegation: int = 0
-    discernment: int = 0
-    security_awareness: int = 0
-    automation_readiness: int = 0
+    """AI proficiency level (1-5) with rationale, scored by the AI during intake."""
+    level: int = 0  # 1-5 scale
+    rationale: str = ""  # Why this score was given
 
 
 class UserProfile(BaseModel):
@@ -62,6 +59,7 @@ class UserProfile(BaseModel):
     ai_superpower: str = ""
     ai_proficiency: AIProficiency | None = None
     intake_summary: str = ""
+    intake_fields_captured: list[str] = Field(default_factory=list)  # fields set during intake conversation
     intake_completed_at: datetime | None = None
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)

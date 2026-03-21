@@ -107,7 +107,11 @@ async def call_llm(
         "model": model,
         "messages": messages,
         "stream": stream,
+        "aws_region_name": settings.aws_region,
     }
+    if settings.bedrock_access_key_id:
+        kwargs["aws_access_key_id"] = settings.bedrock_access_key_id
+        kwargs["aws_secret_access_key"] = settings.bedrock_secret_access_key
     if tools:
         kwargs["tools"] = tools
 

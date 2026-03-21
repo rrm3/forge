@@ -89,6 +89,10 @@ async def react_loop(
             yield ErrorEvent(error=msg)
             return
 
+        # Separate text from previous iteration with a paragraph break
+        if iteration > 0 and text_parts:
+            yield TextEvent(text="\n\n")
+
         # Yield text deltas that were collected during streaming
         for part in text_parts:
             yield TextEvent(text=part)
@@ -181,7 +185,11 @@ async def _call_llm_streaming(
         "model": model,
         "messages": messages,
         "stream": True,
+        "aws_region_name": settings.aws_region,
     }
+    if settings.bedrock_access_key_id:
+        kwargs["aws_access_key_id"] = settings.bedrock_access_key_id
+        kwargs["aws_secret_access_key"] = settings.bedrock_secret_access_key
     if tools:
         kwargs["tools"] = tools
 

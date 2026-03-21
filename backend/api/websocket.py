@@ -10,19 +10,15 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from backend.agent.context import build_system_prompt
 from backend.agent.executor import run_agent_session
 from backend.api.transport import WebSocketSender
-from backend.auth import CurrentUser, _verify_oidc_token
+from backend.auth import CurrentUser, _masquerade_user, _verify_oidc_token
 from backend.config import settings
 from backend.deps import AgentDeps
-from backend.models import Message, Session
-from backend.storage import load_memory, load_transcript, save_transcript
-from backend.tools.registry import ToolContext
+from backend.models import Session
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +51,26 @@ def set_ws_deps(sessions_repo, profiles_repo, journal_repo, ideas_repo, storage,
 
 
 async def _authenticate_ws(ws: WebSocket) -> CurrentUser | None:
-    """Authenticate WebSocket connection via query string token."""
+    """Authenticate WebSocket connection via query string token.
+
+    In dev_mode, an optional ``masquerade`` query parameter swaps the
+    authenticated identity to the given email address.
+    """
     token = ws.query_params.get("token")
     if not token:
         return None
     try:
-        return _verify_oidc_token(token)
+        user = _verify_oidc_token(token)
     except Exception:
         return None
+
+    # Masquerade: swap identity in dev mode
+    if settings.dev_mode:
+        masquerade_email = ws.query_params.get("masquerade")
+        if masquerade_email:
+            user = _masquerade_user(masquerade_email, user)
+
+    return user
 
 
 def _get_session_lock(session_id: str) -> asyncio.Lock:
@@ -107,12 +115,6 @@ async def websocket_endpoint(ws: WebSocket):
                     asyncio.create_task(_handle_start_session(sender, user, msg))
                 elif action == "cancel":
                     _handle_cancel(msg)
-                elif action == "voice_session":
-                    asyncio.create_task(_handle_voice_session(sender, user, msg))
-                elif action == "tool_call":
-                    asyncio.create_task(_handle_tool_call(sender, user, msg))
-                elif action == "transcript":
-                    asyncio.create_task(_handle_transcript(sender, user, msg))
                 else:
                     await sender.send({"type": "error", "message": f"Unknown action: {action}"})
         finally:
@@ -171,107 +173,6 @@ def _handle_cancel(msg: dict):
             event.set()
 
 
-async def _handle_voice_session(sender: MessageSender, user: CurrentUser, msg: dict):
-    session_id = msg.get("session_id")
-    session_type = msg.get("type", "chat")
-    resume = msg.get("resume", False)
-
-    if not session_id:
-        await sender.send({"type": "error", "message": "Missing session_id for voice session"})
-        return
-
-    try:
-        profile = await _deps.profiles_repo.get(user.user_id)
-        memory = await load_memory(_deps.storage, user.user_id)
-
-        from backend.agent.skills import load_skill
-        skill_instructions = None
-        if session_type and session_type != "chat":
-            skill_instructions = load_skill(session_type)
-
-        system_prompt = build_system_prompt(profile=profile, memory=memory, skill_instructions=skill_instructions)
-
-        transcript_context = None
-        if resume:
-            transcript = await load_transcript(_deps.storage, user.user_id, session_id)
-            if transcript:
-                transcript_context = "\n".join(f"{m.role}: {m.content}" for m in transcript)
-
-        from backend.voice import create_voice_session
-        result = await create_voice_session(system_prompt=system_prompt, session_id=session_id, transcript_context=transcript_context)
-
-        await sender.send({
-            "type": "voice_token",
-            "session_id": session_id,
-            "token": result["token"],
-            "expires_at": result["expires_at"],
-            "instructions": result.get("instructions", ""),
-            "tools": result.get("tools", []),
-        })
-    except Exception as e:
-        logger.exception("Voice session creation failed")
-        await sender.send({"type": "error", "session_id": session_id, "message": f"Failed to create voice session: {e}"})
-
-
-async def _handle_tool_call(sender: MessageSender, user: CurrentUser, msg: dict):
-    tool_name = msg.get("tool")
-    tool_args = msg.get("args", {})
-    tool_call_id = msg.get("tool_call_id", "")
-    session_id = msg.get("session_id")
-
-    if not tool_name or not session_id:
-        await sender.send({"type": "error", "message": "Missing tool or session_id"})
-        return
-
-    schemas = _deps.tool_registry.get_schemas()
-    valid_tools = {s["name"] for s in schemas}
-    if tool_name not in valid_tools:
-        await sender.send({"type": "tool_result", "session_id": session_id, "tool_call_id": tool_call_id, "result": f"Unknown tool: {tool_name}"})
-        return
-
-    session = await _deps.sessions_repo.get(user.user_id, session_id)
-    if session is None:
-        await sender.send({"type": "tool_result", "session_id": session_id, "tool_call_id": tool_call_id, "result": "Session not found or access denied"})
-        return
-
-    context = ToolContext(
-        user_id=user.user_id, session_id=session_id,
-        repos={"sessions": _deps.sessions_repo, "profiles": _deps.profiles_repo, "journal": _deps.journal_repo, "ideas": _deps.ideas_repo},
-        storage=_deps.storage, config=settings,
-    )
-
-    try:
-        result = await _deps.tool_registry.execute(tool_name, tool_args, context)
-    except Exception as exc:
-        logger.exception("Voice tool '%s' failed", tool_name)
-        result = f"Error executing {tool_name}: {exc}"
-
-    await sender.send({
-        "type": "tool_result", "session_id": session_id,
-        "tool_call_id": tool_call_id,
-        "result": result if isinstance(result, str) else json.dumps(result),
-    })
-
-
-async def _handle_transcript(sender: MessageSender, user: CurrentUser, msg: dict):
-    session_id = msg.get("session_id")
-    role = msg.get("role", "user")
-    content = msg.get("content", "")
-    if not session_id or not content:
-        return
-
-    session = await _deps.sessions_repo.get(user.user_id, session_id)
-    if session is None:
-        return
-
-    transcript = await load_transcript(_deps.storage, user.user_id, session_id) or []
-    transcript.append(Message(role=role, content=content, timestamp=datetime.now(UTC)))
-    await save_transcript(_deps.storage, user.user_id, session_id, transcript)
-    session.message_count = len(transcript)
-    session.updated_at = datetime.now(UTC)
-    await _deps.sessions_repo.update(session)
-
-
 async def _run_agent(sender: MessageSender, user: CurrentUser, session_id: str, user_message: str, is_new_session: bool = False, session_type: str = "chat"):
     """Run agent with session mutex (local dev in-process lock)."""
     lock = _get_session_lock(session_id)
@@ -305,5 +206,5 @@ async def _run_agent(sender: MessageSender, user: CurrentUser, session_id: str, 
             _session_locks.pop(session_id, None)
 
 
-# Type alias for the handler functions
-from backend.api.transport import MessageSender
+# Type alias used in handler signatures
+from backend.api.transport import MessageSender  # noqa: E402

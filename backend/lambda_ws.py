@@ -132,10 +132,10 @@ def _handle_default(event, connection_id: str) -> dict:
         return {"statusCode": 200}
 
     # Actions that need the Worker
-    if action in ("chat", "start_session", "voice_session", "tool_call", "transcript"):
+    if action in ("chat", "start_session"):
         # For chat/start_session, set the processing mutex
         session_id = msg.get("session_id")
-        if action in ("chat", "start_session") and session_id:
+        if session_id:
             if not _connections_repo.set_processing(session_id, connection_id):
                 _send_to_connection(connection_id, {
                     "type": "error",
@@ -183,7 +183,7 @@ def _handle_default(event, connection_id: str) -> dict:
 
 
 def _handle_worker(event) -> dict:
-    """Worker: runs the agent loop or handles voice/tool/transcript actions."""
+    """Worker: runs the agent loop for chat and start_session actions."""
     action = event.get("action", "")
     connection_id = event.get("connection_id", "")
     user_data = event.get("user", {})
@@ -195,12 +195,6 @@ def _handle_worker(event) -> dict:
             asyncio.run(_worker_chat(connection_id, user_data, msg))
         elif action == "start_session":
             asyncio.run(_worker_start_session(connection_id, user_data, msg))
-        elif action == "voice_session":
-            asyncio.run(_worker_voice_session(connection_id, user_data, msg))
-        elif action == "tool_call":
-            asyncio.run(_worker_tool_call(connection_id, user_data, msg))
-        elif action == "transcript":
-            asyncio.run(_worker_transcript(connection_id, user_data, msg))
         else:
             _send_to_connection(connection_id, {"type": "error", "message": f"Unknown worker action: {action}"})
     except Exception as e:
@@ -290,112 +284,6 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
             session_type=session_type,
             cancel_check=cancel_check,
         )
-
-
-async def _worker_voice_session(connection_id: str, user_data: dict, msg: dict):
-    """Worker: create an OpenAI Realtime ephemeral token."""
-    from backend.agent.context import build_system_prompt
-    from backend.agent.skills import load_skill
-    from backend.api.transport import ApiGatewayManagementSender
-    from backend.config import settings
-    from backend.storage import load_memory, load_transcript
-    from backend.voice import create_voice_session
-
-    session_id = msg.get("session_id")
-    session_type = msg.get("type", "chat")
-    resume = msg.get("resume", False)
-
-    sender = ApiGatewayManagementSender(connection_id, settings.websocket_api_endpoint, settings.aws_region)
-
-    profile = await _deps.profiles_repo.get(user_data["user_id"])
-    memory = await load_memory(_deps.storage, user_data["user_id"])
-
-    skill_instructions = None
-    if session_type and session_type != "chat":
-        skill_instructions = load_skill(session_type)
-
-    system_prompt = build_system_prompt(profile=profile, memory=memory, skill_instructions=skill_instructions)
-
-    transcript_context = None
-    if resume:
-        transcript = await load_transcript(_deps.storage, user_data["user_id"], session_id)
-        if transcript:
-            transcript_context = "\n".join(f"{m.role}: {m.content}" for m in transcript)
-
-    result = await create_voice_session(system_prompt=system_prompt, session_id=session_id, transcript_context=transcript_context)
-
-    await sender.send({
-        "type": "voice_token", "session_id": session_id,
-        "token": result["token"], "expires_at": result["expires_at"],
-    })
-
-
-async def _worker_tool_call(connection_id: str, user_data: dict, msg: dict):
-    """Worker: execute a tool call from voice mode."""
-    from backend.api.transport import ApiGatewayManagementSender
-    from backend.config import settings
-    from backend.tools.registry import ToolContext
-
-    tool_name = msg.get("tool")
-    tool_args = msg.get("args", {})
-    tool_call_id = msg.get("tool_call_id", "")
-    session_id = msg.get("session_id")
-
-    sender = ApiGatewayManagementSender(connection_id, settings.websocket_api_endpoint, settings.aws_region)
-
-    # Validate tool
-    schemas = _deps.tool_registry.get_schemas()
-    valid_tools = {s["name"] for s in schemas}
-    if tool_name not in valid_tools:
-        await sender.send({"type": "tool_result", "session_id": session_id, "tool_call_id": tool_call_id, "result": f"Unknown tool: {tool_name}"})
-        return
-
-    # Validate session ownership
-    session = await _deps.sessions_repo.get(user_data["user_id"], session_id)
-    if session is None:
-        await sender.send({"type": "tool_result", "session_id": session_id, "tool_call_id": tool_call_id, "result": "Session not found"})
-        return
-
-    context = ToolContext(
-        user_id=user_data["user_id"], session_id=session_id,
-        repos={"sessions": _deps.sessions_repo, "profiles": _deps.profiles_repo, "journal": _deps.journal_repo, "ideas": _deps.ideas_repo},
-        storage=_deps.storage, config=settings,
-    )
-
-    try:
-        result = await _deps.tool_registry.execute(tool_name, tool_args, context)
-    except Exception as exc:
-        result = f"Error: {exc}"
-
-    await sender.send({
-        "type": "tool_result", "session_id": session_id,
-        "tool_call_id": tool_call_id,
-        "result": result if isinstance(result, str) else json.dumps(result),
-    })
-
-
-async def _worker_transcript(connection_id: str, user_data: dict, msg: dict):
-    """Worker: persist a voice transcript chunk."""
-    from backend.models import Message
-    from backend.storage import load_transcript, save_transcript
-    from datetime import UTC, datetime
-
-    session_id = msg.get("session_id")
-    role = msg.get("role", "user")
-    content = msg.get("content", "")
-    if not session_id or not content:
-        return
-
-    session = await _deps.sessions_repo.get(user_data["user_id"], session_id)
-    if session is None:
-        return
-
-    transcript = await load_transcript(_deps.storage, user_data["user_id"], session_id) or []
-    transcript.append(Message(role=role, content=content, timestamp=datetime.now(UTC)))
-    await save_transcript(_deps.storage, user_data["user_id"], session_id, transcript)
-    session.message_count = len(transcript)
-    session.updated_at = datetime.now(UTC)
-    await _deps.sessions_repo.update(session)
 
 
 def _send_to_connection(connection_id: str, data: dict):

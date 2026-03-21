@@ -7,6 +7,7 @@ Used by both FastAPI WebSocket (local dev) and Lambda handler (production).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -34,6 +35,9 @@ logger = logging.getLogger(__name__)
 
 # Token batching interval (seconds)
 _TOKEN_BATCH_INTERVAL = 0.05  # 50ms
+
+# Tools whose calls/results are shown to the client (others hidden unless dev_mode)
+_USER_VISIBLE_TOOLS = {"search", "retrieve_document", "search_profiles"}
 
 
 async def run_agent_session(
@@ -95,6 +99,7 @@ async def run_agent_session(
         profile=profile,
         memory=memory,
         skill_instructions=skill_instructions,
+        session_type=session_type,
     )
 
     # Build tool context
@@ -110,6 +115,38 @@ async def run_agent_session(
         storage=deps.storage,
         config=settings,
     )
+
+    # For intake: run shadow extraction on the user's message BEFORE the agent responds.
+    # This updates profile fields so the system prompt checklist is current.
+    # Skip on the first turn (no user message yet - just the AI greeting).
+    user_message_count = sum(1 for m in transcript if m.role == "user")
+    if session_type == "intake" and user_message.strip() and user_message_count > 0:
+        try:
+            from backend.agent.extraction import extract_profile_data
+
+            # Build messages including the new user message for extraction
+            extraction_messages = _transcript_to_llm_messages(transcript)
+            extraction_messages.append({"role": "user", "content": user_message.strip()})
+
+            extracted = await extract_profile_data(extraction_messages, profile)
+            if extracted:
+                # Track which fields were captured during intake
+                existing_captured = list(profile.intake_fields_captured) if profile.intake_fields_captured else []
+                new_captured = list(set(existing_captured) | set(extracted.keys()))
+                extracted["intake_fields_captured"] = new_captured
+
+                await deps.profiles_repo.update(user_id, extracted)
+                # Re-read profile and rebuild system prompt with updated checklist
+                profile = await deps.profiles_repo.get(user_id) or profile
+                system_prompt = build_system_prompt(
+                    profile=profile,
+                    memory=memory,
+                    skill_instructions=skill_instructions,
+                    session_type=session_type,
+                )
+                logger.info("Shadow extraction updated %d fields for user=%s", len(extracted), user_id)
+        except Exception:
+            logger.warning("Shadow extraction failed, continuing without it", exc_info=True)
 
     # Convert transcript to LLM message format
     llm_messages = _transcript_to_llm_messages(transcript)
@@ -159,25 +196,58 @@ async def run_agent_session(
                     await flush_tokens()
             elif isinstance(event, ToolCallEvent):
                 await flush_tokens()
-                await sender.send({
-                    "type": "tool_call",
-                    "session_id": session_id,
-                    "tool": event.tool_name,
-                    "tool_call_id": event.tool_call_id,
-                    "args": event.arguments,
-                })
+                # Record in transcript for auditability
+                transcript.append(Message(
+                    role="tool_call",
+                    content=json.dumps(event.arguments),
+                    tool_name=event.tool_name,
+                    tool_call_id=event.tool_call_id,
+                    timestamp=datetime.now(UTC),
+                ))
+                # Send to client: search tools always visible, others only in dev mode
+                if event.tool_name in _USER_VISIBLE_TOOLS or settings.dev_mode:
+                    await sender.send({
+                        "type": "tool_call",
+                        "session_id": session_id,
+                        "tool": event.tool_name,
+                        "tool_call_id": event.tool_call_id,
+                        "args": event.arguments,
+                    })
             elif isinstance(event, ToolResultEvent):
-                await sender.send({
-                    "type": "tool_result",
-                    "session_id": session_id,
-                    "tool_call_id": event.tool_call_id,
-                    "result": event.result,
-                })
+                # Record in transcript
+                transcript.append(Message(
+                    role="tool_result",
+                    content=event.result if isinstance(event.result, str) else json.dumps(event.result),
+                    tool_call_id=event.tool_call_id,
+                    timestamp=datetime.now(UTC),
+                ))
+                # Only send result to client for user-visible tools or dev mode
+                if settings.dev_mode:
+                    await sender.send({
+                        "type": "tool_result",
+                        "session_id": session_id,
+                        "tool_call_id": event.tool_call_id,
+                        "result": event.result,
+                    })
             elif isinstance(event, DoneEvent):
                 await flush_tokens()
                 usage_data = None
                 if event.usage:
                     usage_data = event.usage.model_dump()
+                # Send intake checklist state before done (for debug UI)
+                if session_type == "intake":
+                    try:
+                        from backend.agent.context import get_intake_checklist
+                        fresh_profile = await deps.profiles_repo.get(user_id)
+                        if fresh_profile:
+                            await sender.send({
+                                "type": "intake_progress",
+                                "session_id": session_id,
+                                "checklist": get_intake_checklist(fresh_profile),
+                            })
+                    except Exception:
+                        pass
+
                 await sender.send({
                     "type": "done",
                     "session_id": session_id,
@@ -221,6 +291,10 @@ async def run_agent_session(
         session.updated_at = datetime.now(UTC)
         await deps.sessions_repo.update(session)
 
+    # Intake state machine: check required fields and mark complete when done
+    if session_type == "intake":
+        await _check_intake_completion(deps, user_id, transcript)
+
     # Generate title for new sessions
     if is_new_session and assistant_text:
         try:
@@ -261,6 +335,45 @@ def _transcript_to_llm_messages(transcript: list[Message]) -> list[dict]:
         messages.insert(0, {"role": "user", "content": "(session started)"})
 
     return messages
+
+
+# Intake completion: the conversation has covered enough ground when the user
+# has had a substantive exchange (5+ user messages). The structured data
+# extraction can happen in real-time via update_profile calls or as a
+# post-processing batch job over the transcript later.
+_INTAKE_MIN_USER_MESSAGES = 5
+
+
+async def _check_intake_completion(deps: AgentDeps, user_id: str, transcript: list[Message]):
+    """Mark intake complete once the user has had enough conversation.
+
+    The intake is a coverage exercise - did we talk about their work, AI
+    experience, and goals? We measure this by user message count as a proxy
+    for conversational depth. 5 user messages means they've engaged across
+    multiple topics.
+
+    Structured data capture (profile fields) is a bonus - the transcript
+    itself is the primary artifact, and we can extract structured data
+    from it later if needed.
+    """
+    try:
+        profile = await deps.profiles_repo.get(user_id)
+        if not profile or profile.intake_completed_at:
+            return
+
+        user_messages = sum(1 for m in transcript if m.role == "user")
+
+        if user_messages >= _INTAKE_MIN_USER_MESSAGES:
+            await deps.profiles_repo.update(user_id, {
+                "intake_completed_at": datetime.now(UTC).isoformat(),
+                "onboarding_complete": True,
+            })
+            logger.info(
+                "Intake complete: user=%s user_messages=%d",
+                user_id, user_messages,
+            )
+    except Exception:
+        logger.warning("Failed to check intake completion", exc_info=True)
 
 
 async def _generate_title(user_msg: str, assistant_msg: str) -> str:

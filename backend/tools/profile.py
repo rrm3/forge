@@ -37,6 +37,7 @@ UPDATE_PROFILE_SCHEMA = {
                     "goals": {"type": "array", "items": {"type": "string"}},
                     "products": {"type": "array", "items": {"type": "string"}},
                     "daily_tasks": {"type": "string"},
+                    "work_summary": {"type": "string", "description": "User's own description of their day-to-day work"},
                     "core_skills": {"type": "array", "items": {"type": "string"}},
                     "learning_goals": {"type": "array", "items": {"type": "string"}},
                     "ai_tools_used": {"type": "array", "items": {"type": "string"}},
@@ -44,11 +45,8 @@ UPDATE_PROFILE_SCHEMA = {
                     "ai_proficiency": {
                         "type": "object",
                         "properties": {
-                            "operational_fluency": {"type": "integer", "minimum": 1, "maximum": 5},
-                            "strategic_delegation": {"type": "integer", "minimum": 1, "maximum": 5},
-                            "discernment": {"type": "integer", "minimum": 1, "maximum": 5},
-                            "security_awareness": {"type": "integer", "minimum": 1, "maximum": 5},
-                            "automation_readiness": {"type": "integer", "minimum": 1, "maximum": 5},
+                            "level": {"type": "integer", "minimum": 1, "maximum": 5, "description": "AI proficiency level 1-5"},
+                            "rationale": {"type": "string", "description": "Brief explanation of why this level was assigned"},
                         },
                     },
                     "intake_summary": {"type": "string"},
@@ -111,20 +109,25 @@ async def read_profile(context: ToolContext) -> str:
     return "\n".join(lines)
 
 
-async def update_profile(fields: dict, context: ToolContext) -> str:
+async def update_profile(context: ToolContext, fields: dict | None = None, **kwargs) -> str:
     repo = context.repos.get("profiles")
     if repo is None:
         return "Profile repository not available."
 
+    # Handle both {"fields": {...}} and flat {"daily_tasks": "..."} formats
+    # LLMs sometimes flatten the schema
+    if not fields and kwargs:
+        fields = kwargs
     if not fields:
         return "No fields provided to update."
 
     # Strip unknown keys
     allowed = {
         "title", "department", "team", "ai_experience_level", "interests",
-        "tools_used", "goals", "products", "daily_tasks", "core_skills",
-        "learning_goals", "ai_tools_used", "ai_superpower", "ai_proficiency",
-        "intake_summary", "intake_completed_at", "onboarding_complete",
+        "tools_used", "goals", "products", "daily_tasks", "work_summary",
+        "core_skills", "learning_goals", "ai_tools_used", "ai_superpower",
+        "ai_proficiency", "intake_summary", "intake_fields_captured",
+        "intake_completed_at", "onboarding_complete",
     }
     filtered = {k: v for k, v in fields.items() if k in allowed}
     if not filtered:
