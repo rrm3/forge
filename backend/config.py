@@ -22,6 +22,11 @@ class Settings(BaseSettings):
 
     # LLM
     llm_model: str = "bedrock/us.anthropic.claude-opus-4-6-v1"
+    bedrock_access_key_id: str = ""
+    bedrock_secret_access_key: str = ""
+
+    # Gemini (speech-to-text transcription)
+    gemini_api_key: str = ""
 
     # Org chart
     orgchart_s3_key: str = "orgchart/org-chart.db"

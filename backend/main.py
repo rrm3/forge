@@ -14,6 +14,7 @@ from backend.api.journal import router as journal_router
 from backend.api.journal import set_journal_deps
 from backend.api.ideas import router as ideas_router
 from backend.api.ideas import set_ideas_deps
+from backend.api.transcription import router as transcription_router
 from backend.api.websocket import router as ws_router
 from backend.api.websocket import set_ws_deps
 from backend.config import settings
@@ -109,6 +110,7 @@ app.include_router(sessions_router, prefix="/api")
 app.include_router(profile_router, prefix="/api")
 app.include_router(journal_router, prefix="/api")
 app.include_router(ideas_router, prefix="/api")
+app.include_router(transcription_router, prefix="/api")
 
 # WebSocket endpoint (no /api prefix - at root /ws)
 app.include_router(ws_router)
