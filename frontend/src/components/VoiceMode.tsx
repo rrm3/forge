@@ -167,18 +167,8 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
           },
         }));
 
-        // Start the conversation with a user context message rather than
-        // a bare response.create. This gives the model a proper turn to
-        // respond to, avoiding race conditions with tool calls during
-        // auto-generated responses.
-        dc.send(JSON.stringify({
-          type: 'conversation.item.create',
-          item: {
-            type: 'message',
-            role: 'user',
-            content: [{ type: 'input_text', text: 'Begin the intake conversation. Greet me and start Phase 1.' }],
-          },
-        }));
+        // Trigger the initial greeting. Single response.create - no user
+        // message to avoid double-response from VAD auto-triggering.
         dc.send(JSON.stringify({ type: 'response.create' }));
       });
 
@@ -341,7 +331,12 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       case 'error':
         {
           const msg = (event.error as { message?: string })?.message || JSON.stringify(event.error);
-          console.error('Realtime error:', msg);
+          console.warn('Realtime error:', msg);
+          // Tool call timing errors are recoverable - don't show to user
+          if (msg.includes('not found in conversation') || msg.includes('active response in progress')) {
+            // These happen when duplicate responses race. The second attempt succeeds.
+            break;
+          }
           setError(msg);
         }
         break;
