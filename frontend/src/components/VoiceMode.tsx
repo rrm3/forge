@@ -34,6 +34,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
   const [error, setError] = useState<string | null>(null);
   const [micDenied, setMicDenied] = useState(false);
   const [connecting, setConnecting] = useState(true);
+  const [streamingAssistantText, setStreamingAssistantText] = useState('');
 
   // Refs for audio/WebSocket resources
   const openaiWsRef = useRef<WebSocket | null>(null);
@@ -236,6 +237,15 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
         setOrbState('listening');
         break;
 
+      case 'response.audio_transcript.delta': {
+        // Stream assistant text word-by-word as audio plays
+        const delta = ((data as { delta?: string }).delta || '');
+        if (delta) {
+          setStreamingAssistantText(prev => prev + delta);
+        }
+        break;
+      }
+
       case 'conversation.item.input_audio_transcription.completed': {
         // This is the FINAL user transcript (post-processed by Whisper).
         // Replace any existing partial user entry at the end of transcript.
@@ -260,8 +270,9 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       }
 
       case 'response.audio_transcript.done': {
-        // Final assistant transcript for this response turn
+        // Final assistant transcript - commit streaming text and clear buffer
         const text = ((data as { transcript?: string }).transcript || '').trim();
+        setStreamingAssistantText('');
         if (text) {
           setTranscript(prev => [...prev, { role: 'assistant', text }]);
           forgeWs.send({ action: 'transcript', session_id: sessionId, role: 'assistant', content: text });
@@ -440,6 +451,17 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
             </span>
           </div>
         ))}
+        {/* Streaming assistant text - appears word-by-word synced with audio */}
+        {streamingAssistantText && (
+          <div className="mb-3 text-left">
+            <span
+              className="inline-block px-4 py-2.5 rounded-2xl text-sm leading-relaxed"
+              style={{ color: 'var(--color-text-primary)', maxWidth: '80%', display: 'inline-block' }}
+            >
+              {streamingAssistantText}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-center gap-4 pb-6 pt-3">
