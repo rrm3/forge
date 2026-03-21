@@ -164,7 +164,18 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
           },
         }));
 
-        // Trigger initial greeting
+        // Start the conversation with a user context message rather than
+        // a bare response.create. This gives the model a proper turn to
+        // respond to, avoiding race conditions with tool calls during
+        // auto-generated responses.
+        dc.send(JSON.stringify({
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: 'Begin the intake conversation. Greet me and start Phase 1.' }],
+          },
+        }));
         dc.send(JSON.stringify({ type: 'response.create' }));
       });
 
@@ -300,14 +311,8 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       case 'error':
         {
           const msg = (event.error as { message?: string })?.message || JSON.stringify(event.error);
-          console.warn('Realtime event error:', msg);
-          // Suppress transient errors that self-recover
-          const transient = msg.includes('active response') ||
-                            msg.includes('not found in conversation') ||
-                            msg.includes('Tool call ID');
-          if (!transient) {
-            setError(msg);
-          }
+          console.error('Realtime error:', msg);
+          setError(msg);
         }
         break;
     }
