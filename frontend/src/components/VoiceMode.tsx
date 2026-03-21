@@ -173,8 +173,8 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
     processor.onaudioprocess = (e) => {
       if (ws.readyState !== WebSocket.OPEN) return;
-      // Don't send audio while AI is speaking (prevents echo) or while paused
-      if (micMutedRef.current || pausedRef.current) return;
+      // Don't send audio while paused
+      if (pausedRef.current) return;
 
       const input = e.inputBuffer.getChannelData(0);
       const pcm16 = new Int16Array(input.length);
@@ -207,13 +207,10 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
       case 'response.audio.delta':
         setOrbState('speaking');
-        micMutedRef.current = true; // Mute mic while AI speaks
         queueAudioChunk((data as { delta?: string }).delta || '');
         break;
 
       case 'response.audio.done':
-        // Unmute mic after a short delay (let audio finish playing)
-        setTimeout(() => { micMutedRef.current = false; }, 500);
         setOrbState('listening');
         break;
 
@@ -249,7 +246,6 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
 
       case 'response.function_call_arguments.done': {
         setOrbState('tool_call');
-        micMutedRef.current = true;
         const callId = (data as { call_id?: string }).call_id || '';
         const name = (data as { name?: string }).name || '';
         const args = (data as { arguments?: string }).arguments || '{}';
@@ -307,8 +303,6 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
       item: { type: 'function_call_output', call_id: callId, output: result },
     }));
     ws.send(JSON.stringify({ type: 'response.create' }));
-    // Unmute after tool result so AI can respond
-    setTimeout(() => { micMutedRef.current = false; }, 200);
   }
 
   // ---- Pause/resume ----
