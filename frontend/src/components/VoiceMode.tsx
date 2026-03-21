@@ -7,8 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MicOff, Square, Type, Pause, Play } from 'lucide-react';
-import { RealtimeSession, RealtimeAgent, OpenAIRealtimeWebRTC } from '@openai/agents/realtime';
-import { tool } from '@openai/agents/realtime';
+import { RealtimeSession, RealtimeAgent, OpenAIRealtimeWebRTC, tool } from '@openai/agents/realtime';
 import { VoiceOrb, type OrbState } from './VoiceOrb';
 import { forgeWs } from '../api/websocket';
 import type { ServerMessage } from '../api/websocket';
@@ -75,57 +74,54 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
         return;
       }
 
-      // Create a simple agent (the system prompt is already configured server-side
-      // in the ephemeral token, so we just need a basic agent here)
+      // Create agent with tools that relay to our Forge backend
       const agent = new RealtimeAgent({
         name: 'forge',
-        instructions: '', // Server-side prompt takes precedence
+        instructions: 'Follow the instructions from the session configuration.',
         tools: [
-          // Define tools that relay to our backend
           tool({
             name: 'search',
             description: 'Search the knowledge base',
-            parameters: { type: 'object' as const, properties: { query: { type: 'string' as const } }, required: ['query'] },
-            execute: async (args) => {
-              return await relayToolToBackend('search', args);
+            parameters: { type: 'object' as const, properties: { query: { type: 'string' as const } }, required: ['query'] as const },
+            execute: async (_ctx, args) => {
+              return await relayToolToBackend('search', args as Record<string, unknown>);
             },
           }),
           tool({
             name: 'read_profile',
             description: 'Read the user profile',
             parameters: { type: 'object' as const, properties: {} },
-            execute: async (args) => {
-              return await relayToolToBackend('read_profile', args);
+            execute: async (_ctx, _args) => {
+              return await relayToolToBackend('read_profile', {});
             },
           }),
           tool({
             name: 'update_profile',
             description: 'Update the user profile',
-            parameters: { type: 'object' as const, properties: { fields: { type: 'object' as const } }, required: ['fields'] },
-            execute: async (args) => {
-              return await relayToolToBackend('update_profile', args);
+            parameters: { type: 'object' as const, properties: { fields: { type: 'object' as const } }, required: ['fields'] as const },
+            execute: async (_ctx, args) => {
+              return await relayToolToBackend('update_profile', args as Record<string, unknown>);
             },
           }),
           tool({
             name: 'save_journal',
             description: 'Save a journal entry',
-            parameters: { type: 'object' as const, properties: { content: { type: 'string' as const }, tags: { type: 'array' as const, items: { type: 'string' as const } } }, required: ['content'] },
-            execute: async (args) => {
-              return await relayToolToBackend('save_journal', args);
+            parameters: { type: 'object' as const, properties: { content: { type: 'string' as const } }, required: ['content'] as const },
+            execute: async (_ctx, args) => {
+              return await relayToolToBackend('save_journal', args as Record<string, unknown>);
             },
           }),
         ],
       });
 
-      // Create WebRTC transport
+      // Create WebRTC transport (handles mic, speakers, echo cancellation)
       const transport = new OpenAIRealtimeWebRTC();
       transportRef.current = transport;
 
-      // Create session
-      const session = new RealtimeSession({
-        apiKey: token,
-        model: 'gpt-4o-realtime-preview-2024-12-17',
+      // Create session - agent is first arg, options second
+      const session = new RealtimeSession(agent, {
         transport,
+        model: 'gpt-4o-realtime-preview-2024-12-17',
       });
       sessionRef.current = session;
 
@@ -188,8 +184,8 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
         }
       });
 
-      // Connect
-      await session.connect({ agent });
+      // Connect with the ephemeral token
+      await session.connect({ apiKey: token });
       setConnecting(false);
       setOrbState('listening');
 
