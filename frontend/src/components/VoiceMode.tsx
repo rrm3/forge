@@ -242,6 +242,13 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
   // ---- Handle server events from data channel ----
 
   function handleServerEvent(event: { type: string; [key: string]: unknown }) {
+    // Log key events for debugging tool call flow
+    const logEvents = ['response.created', 'response.done', 'response.function_call_arguments.done',
+      'response.output_item.done', 'conversation.item.created'];
+    if (logEvents.includes(event.type)) {
+      console.log(`[RT] ${event.type}`, event.type === 'response.done' ? `status=${(event.response as {status?:string})?.status}` : '');
+    }
+
     switch (event.type) {
       case 'input_audio_buffer.speech_started':
         setOrbState('listening');
