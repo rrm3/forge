@@ -126,7 +126,7 @@ interface SessionContextType {
   removeSession: (id: string) => Promise<void>;
   updateSessionTitle: (id: string, title: string) => Promise<void>;
   sendChatMessage: (message: string) => void;
-  startTypedSession: (type: SessionType) => void;
+  startTypedSession: (type: SessionType, mode?: 'text' | 'voice') => void;
   cancelStreaming: () => void;
 }
 
@@ -290,11 +290,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const startTypedSession = useCallback(
-    (type: SessionType) => {
-      dispatch({ type: 'SET_STREAMING', isStreaming: true });
-      dispatch({ type: 'CLEAR_STREAMING_TEXT' });
-      accumulatedTextRef.current = '';
-      forgeWs.startSession(type, 'text');
+    (type: SessionType, mode: 'text' | 'voice' = 'text') => {
+      if (mode === 'text') {
+        dispatch({ type: 'SET_STREAMING', isStreaming: true });
+        dispatch({ type: 'CLEAR_STREAMING_TEXT' });
+        accumulatedTextRef.current = '';
+      }
+      forgeWs.startSession(type, mode);
     },
     []
   );

@@ -47,13 +47,18 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
     onTranscriptUpdate?.(transcript);
   }, [transcript, onTranscriptUpdate]);
 
-  // Request ephemeral token and connect
+  // Request ephemeral token and connect (guarded against strict mode double-fire)
+  const voiceInitialized = useRef(false);
+
   useEffect(() => {
+    if (voiceInitialized.current) return;
+    voiceInitialized.current = true;
+
     let cancelled = false;
 
     const unsubMessage = forgeWs.onMessage((msg: ServerMessage) => {
       if (msg.type === 'voice_token' && 'session_id' in msg && msg.session_id === sessionId) {
-        if (!cancelled) {
+        if (!cancelled && !rtcRef.current) {
           connectToRealtime(msg.token);
         }
       }

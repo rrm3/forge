@@ -30,7 +30,7 @@ export function IntakeView() {
   function startIntake(mode: 'text' | 'voice') {
     if (intakeStarted.current) return;
     intakeStarted.current = true;
-    startTypedSession('intake');
+    startTypedSession('intake', mode);
     setStage(mode);
   }
 
