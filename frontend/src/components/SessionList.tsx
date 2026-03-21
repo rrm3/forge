@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
-import type { Session, SessionType } from '../api/types';
+import type { Session } from '../api/types';
 
 const SESSION_ICONS: Record<string, typeof Lightbulb> = {
   tip: Lightbulb,
@@ -170,7 +170,7 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename }: Session
 }
 
 export function SessionList() {
-  const { state, selectSession, removeSession, updateSessionTitle, deselectSession, startTypedSession } = useSession();
+  const { state, selectSession, removeSession, updateSessionTitle, deselectSession } = useSession();
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedWeeks, setCollapsedWeeks] = useState<Set<string>>(new Set());
 

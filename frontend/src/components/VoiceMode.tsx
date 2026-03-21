@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, MicOff, Square, Type } from 'lucide-react';
+import { MicOff, Square, Type } from 'lucide-react';
 import { VoiceOrb, type OrbState } from './VoiceOrb';
 import { forgeWs } from '../api/websocket';
 import type { ServerMessage } from '../api/websocket';
