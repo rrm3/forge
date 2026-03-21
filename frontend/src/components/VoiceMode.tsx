@@ -303,8 +303,7 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
           const name = String(event.name ?? '');
           const args = String(event.arguments ?? '{}');
           console.log(`Tool call: ${name} (${callId})`);
-          // Execute tool via backend relay
-          executeToolViaBackend(callId, name, args);
+          executeTool(callId, name, args);
         }
         break;
 
@@ -338,37 +337,69 @@ export function VoiceMode({ sessionId, sessionType, onExit, transcript: external
     });
   }
 
-  function executeToolViaBackend(callId: string, name: string, argsStr: string) {
-    const localCallId = `voice_${Date.now()}`;
-    let resolved = false;
+  // Execute tools as fast as possible - use direct REST calls where we can
+  async function executeTool(callId: string, name: string, argsStr: string) {
+    try {
+      let result: string;
 
-    const unsub = forgeWs.onMessage((msg: ServerMessage) => {
-      if (resolved) return;
-      if (msg.type === 'tool_result' && 'tool_call_id' in msg &&
-          (msg as { tool_call_id: string }).tool_call_id === localCallId) {
-        resolved = true;
-        unsub();
-        const result = (msg as { result: string }).result || 'Done';
-        sendToolResult(callId, result);
+      if (name === 'read_profile') {
+        // Direct REST call - much faster than WebSocket relay
+        const { getProfile } = await import('../api/client');
+        const profile = await getProfile();
+        const lines = [];
+        if (profile.name) lines.push(`Name: ${profile.name}`);
+        if (profile.email) lines.push(`Email: ${profile.email}`);
+        if (profile.title) lines.push(`Title: ${profile.title}`);
+        if (profile.department) lines.push(`Department: ${profile.department}`);
+        if (profile.manager) lines.push(`Manager: ${profile.manager}`);
+        if (profile.team) lines.push(`Team: ${profile.team}`);
+        if (profile.location) lines.push(`Location: ${profile.location}`);
+        if (profile.direct_reports?.length) lines.push(`Direct reports: ${profile.direct_reports.join(', ')}`);
+        if (profile.work_summary) lines.push(`Work: ${profile.work_summary}`);
+        result = lines.join('\n') || 'Profile found but no details available.';
+      } else {
+        // All other tools go through the backend relay
+        result = await executeToolViaBackendRelay(callId, name, argsStr);
       }
-    });
 
-    forgeWs.send({
-      action: 'tool_call',
-      session_id: sessionId,
-      tool: name,
-      tool_call_id: localCallId,
-      args: JSON.parse(argsStr),
-    });
+      sendToolResult(callId, result);
+    } catch (err) {
+      console.error(`Tool ${name} failed:`, err);
+      sendToolResult(callId, `Tool error: ${err}`);
+    }
+  }
 
-    // Timeout - only fire if real result hasn't arrived
-    setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        unsub();
-        sendToolResult(callId, 'Tool call timed out');
-      }
-    }, 15000);
+  function executeToolViaBackendRelay(_openaiCallId: string, name: string, argsStr: string): Promise<string> {
+    return new Promise((resolve) => {
+      const localCallId = `voice_${Date.now()}`;
+      let resolved = false;
+
+      const unsub = forgeWs.onMessage((msg: ServerMessage) => {
+        if (resolved) return;
+        if (msg.type === 'tool_result' && 'tool_call_id' in msg &&
+            (msg as { tool_call_id: string }).tool_call_id === localCallId) {
+          resolved = true;
+          unsub();
+          resolve((msg as { result: string }).result || 'Done');
+        }
+      });
+
+      forgeWs.send({
+        action: 'tool_call',
+        session_id: sessionId,
+        tool: name,
+        tool_call_id: localCallId,
+        args: JSON.parse(argsStr),
+      });
+
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          unsub();
+          resolve('Tool call timed out');
+        }
+      }, 15000);
+    });
   }
 
   function togglePause() {
