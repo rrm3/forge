@@ -139,7 +139,7 @@ async def reset_intake(user: AuthUser):
                     try:
                         await _storage.delete(responses_key)
                     except Exception:
-                        pass
+                        logger.warning("Failed to delete intake responses %s", responses_key)
                 # Delete session metadata
                 await _sessions_repo.delete(user.user_id, s.session_id)
                 logger.info("Deleted intake session %s for user %s", s.session_id, user.user_id)

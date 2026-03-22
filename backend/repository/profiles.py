@@ -144,23 +144,41 @@ class DynamoDBProfileRepository(ProfileRepository):
         )
 
     async def update(self, user_id: str, fields: dict) -> None:
-        """Update specific fields. Automatically sets updated_at."""
+        """Update specific fields. Automatically sets updated_at.
+
+        None values are translated to DynamoDB REMOVE expressions.
+        """
         fields["updated_at"] = datetime.now(UTC).isoformat()
 
-        set_expr = "SET " + ", ".join(f"#{k} = :{k}" for k in fields)
-        expr_names = {f"#{k}": k for k in fields}
-        expr_values = {f":{k}": v for k, v in fields.items()}
+        # Split into SET (non-None) and REMOVE (None) fields
+        set_fields = {k: v for k, v in fields.items() if v is not None}
+        remove_fields = [k for k, v in fields.items() if v is None]
+
+        parts = []
+        expr_names: dict[str, str] = {}
+        expr_values: dict[str, object] = {}
+
+        if set_fields:
+            parts.append("SET " + ", ".join(f"#{k} = :{k}" for k in set_fields))
+            expr_names.update({f"#{k}": k for k in set_fields})
+            expr_values.update({f":{k}": v for k, v in set_fields.items()})
+
+        if remove_fields:
+            parts.append("REMOVE " + ", ".join(f"#{k}" for k in remove_fields))
+            expr_names.update({f"#{k}": k for k in remove_fields})
+
+        kwargs: dict = {
+            "Key": {"user_id": user_id},
+            "UpdateExpression": " ".join(parts),
+            "ExpressionAttributeNames": expr_names,
+        }
+        if expr_values:
+            kwargs["ExpressionAttributeValues"] = expr_values
 
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None,
-            partial(
-                self.table.update_item,
-                Key={"user_id": user_id},
-                UpdateExpression=set_expr,
-                ExpressionAttributeNames=expr_names,
-                ExpressionAttributeValues=expr_values,
-            ),
+            partial(self.table.update_item, **kwargs),
         )
 
     async def delete(self, user_id: str) -> None:

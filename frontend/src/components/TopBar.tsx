@@ -110,6 +110,7 @@ export function TopBar({ profile }: TopBarProps = {}) {
                     window.location.href = '/day1';
                   } catch (err) {
                     console.error('Failed to reset intake:', err);
+                    alert('Failed to reset intake. You may not have admin access.');
                   }
                 }}
                 className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm transition-colors"
