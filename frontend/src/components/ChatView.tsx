@@ -120,35 +120,9 @@ export function ChatView() {
         {isReconnecting ? 'Connection lost. Reconnecting...' : ''}
       </div>
 
-      {/* Idea context banner - visible when chatting about an idea */}
-      {state.ideaContext && (
-        <div
-          className="shrink-0 border-b"
-          style={{ borderColor: 'var(--color-border, #E2E8F0)', backgroundColor: 'var(--color-surface-white, #FFFFFF)' }}
-        >
-          <div className="mx-auto max-w-3xl px-4 py-3 flex items-start gap-3">
-            <Lightbulb
-              className="w-4 h-4 mt-0.5 shrink-0"
-              strokeWidth={1.5}
-              style={{ color: 'var(--color-primary)' }}
-            />
-            <div className="min-w-0">
-              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                {state.ideaContext.title}
-              </div>
-              {state.ideaContext.description && (
-                <div className="text-xs mt-0.5 line-clamp-2" style={{ color: 'var(--color-text-secondary)' }}>
-                  {state.ideaContext.description}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto">
-        {!hasMessages ? (
+        {!hasMessages && !state.ideaContext ? (
           <div className="flex flex-col items-center justify-center h-full px-6 text-center">
             <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
               Send a message to start the conversation.
@@ -156,6 +130,50 @@ export function ChatView() {
           </div>
         ) : (
           <div className="mx-auto max-w-3xl px-4 py-4 space-y-1">
+            {/* Idea context card at the start of the chat */}
+            {state.ideaContext && (
+              <div
+                className="mb-4 rounded-xl border p-4"
+                style={{
+                  backgroundColor: 'var(--color-surface-white, #FFFFFF)',
+                  borderColor: 'var(--color-border, #E2E8F0)',
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <Lightbulb
+                    className="w-4 h-4 mt-0.5 shrink-0"
+                    strokeWidth={1.5}
+                    style={{ color: 'var(--color-primary)' }}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                      {state.ideaContext.title}
+                    </div>
+                    {state.ideaContext.description && (
+                      <div className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                        {state.ideaContext.description}
+                      </div>
+                    )}
+                    {state.ideaContext.tags.length > 0 && (
+                      <div className="flex gap-1.5 mt-2 flex-wrap">
+                        {state.ideaContext.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="text-xs px-2 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: 'var(--color-surface, #F8FAFC)',
+                              color: 'var(--color-text-muted)',
+                            }}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             {messages.filter((msg) => adminMode || !TOOL_ROLES.has(msg.role)).map((msg, i) => (
               <MessageBubble key={i} message={msg} />
             ))}
