@@ -16,6 +16,8 @@ from backend.api.ideas import router as ideas_router
 from backend.api.ideas import set_ideas_deps
 from backend.api.tips import router as tips_router
 from backend.api.tips import set_tips_deps
+from backend.api.user_ideas import router as user_ideas_router
+from backend.api.user_ideas import set_user_ideas_deps
 from backend.api.admin import router as admin_router
 from backend.api.admin import set_admin_deps
 from backend.api.transcription import router as transcription_router
@@ -52,6 +54,7 @@ async def lifespan(app: FastAPI):
         journal_repo=repos["journal"],
         ideas_repo=repos["ideas"],
         tips_repo=repos["tips"],
+        user_ideas_repo=repos["user_ideas"],
         storage=storage,
         tool_registry=tool_registry,
         orgchart=orgchart,
@@ -103,6 +106,7 @@ set_ws_deps(
     journal_repo=repos["journal"],
     ideas_repo=repos["ideas"],
     tips_repo=repos["tips"],
+    user_ideas_repo=repos["user_ideas"],
     storage=storage,
     tool_registry=tool_registry,
     orgchart=orgchart,
@@ -112,6 +116,7 @@ set_profile_deps(repos["profiles"], orgchart)
 set_journal_deps(repos["journal"])
 set_ideas_deps(repos["ideas"])
 set_tips_deps(repos["tips"])
+set_user_ideas_deps(repos["user_ideas"])
 set_admin_deps(DepartmentConfigRepository(storage))
 
 # Include REST routers under /api prefix
@@ -120,6 +125,7 @@ app.include_router(profile_router, prefix="/api")
 app.include_router(journal_router, prefix="/api")
 app.include_router(ideas_router, prefix="/api")
 app.include_router(tips_router, prefix="/api")
+app.include_router(user_ideas_router, prefix="/api")
 app.include_router(transcription_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 

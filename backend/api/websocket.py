@@ -37,7 +37,7 @@ _session_locks: dict[str, asyncio.Lock] = {}
 _cancel_events: dict[str, asyncio.Event] = {}
 
 
-def set_ws_deps(sessions_repo, profiles_repo, journal_repo, ideas_repo, storage, tool_registry, orgchart=None, tips_repo=None):
+def set_ws_deps(sessions_repo, profiles_repo, journal_repo, ideas_repo, storage, tool_registry, orgchart=None, tips_repo=None, user_ideas_repo=None):
     global _deps
     _deps = AgentDeps(
         sessions_repo=sessions_repo,
@@ -45,6 +45,7 @@ def set_ws_deps(sessions_repo, profiles_repo, journal_repo, ideas_repo, storage,
         journal_repo=journal_repo,
         ideas_repo=ideas_repo,
         tips_repo=tips_repo,
+        user_ideas_repo=user_ideas_repo,
         storage=storage,
         tool_registry=tool_registry,
         orgchart=orgchart,

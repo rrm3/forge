@@ -125,6 +125,7 @@ async def run_agent_session(
             "journal": deps.journal_repo,
             "ideas": deps.ideas_repo,
             "tips": deps.tips_repo,
+            "user_ideas": deps.user_ideas_repo,
         },
         storage=deps.storage,
         config=settings,
@@ -329,6 +330,10 @@ async def run_agent_session(
     if session_type == "tip":
         await _check_tip_prepared(transcript, sender, session_id)
 
+    # Detect prepared ideas and send preview data to frontend
+    if session_type in ("brainstorm", "chat", "tip", "stuck"):
+        await _check_idea_prepared(transcript, sender, session_id)
+
     # Intake state machine: check required fields and mark complete when done
     if session_type == "intake":
         await _check_intake_completion(deps, user_id, transcript, sender, session_id, department_config, intake_responses)
@@ -479,6 +484,24 @@ async def _check_tip_prepared(transcript: list[Message], sender: MessageSender, 
                 return
     except Exception:
         logger.warning("Failed to check tip prepared", exc_info=True)
+
+
+async def _check_idea_prepared(transcript: list[Message], sender: MessageSender, session_id: str):
+    """Check if prepare_idea was called in this turn and send preview data to frontend."""
+    try:
+        for msg in reversed(transcript):
+            if msg.role == "tool_call" and msg.tool_name == "prepare_idea":
+                args = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+                await sender.send({
+                    "type": "idea_ready",
+                    "session_id": session_id,
+                    "title": args.get("title", ""),
+                    "description": args.get("description", ""),
+                    "tags": args.get("tags", []),
+                })
+                return
+    except Exception:
+        logger.warning("Failed to check idea prepared", exc_info=True)
 
 
 async def _generate_title(user_msg: str, assistant_msg: str) -> str:

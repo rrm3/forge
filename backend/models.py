@@ -112,6 +112,20 @@ class TipComment(BaseModel):
     created_at: datetime = Field(default_factory=_now)
 
 
+class UserIdea(BaseModel):
+    user_id: str
+    idea_id: str
+    title: str = ""
+    description: str = ""
+    source: str = "manual"  # intake, brainstorm, chat, manual
+    source_session_id: str = ""
+    linked_sessions: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    status: str = "new"  # new, exploring, done
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
 class TokenUsage(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
