@@ -146,16 +146,17 @@ import type { UserProfile } from './api/types';
 function ChatRoute() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { selectSession, state } = useSession();
-  const loadingRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (sessionId && state.activeSessionId !== sessionId && loadingRef.current !== sessionId) {
-      loadingRef.current = sessionId;
-      selectSession(sessionId).finally(() => {
-        loadingRef.current = null;
-      });
+    // Only load session data when the URL param changes.
+    // activeSessionId is intentionally excluded from deps - it changes during
+    // WebSocket session creation and would cause a race condition where this
+    // effect re-selects the old session before the URL updates.
+    if (sessionId && state.activeSessionId !== sessionId) {
+      selectSession(sessionId);
     }
-  }, [sessionId, selectSession, state.activeSessionId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, selectSession]);
 
   return <ChatView />;
 }
