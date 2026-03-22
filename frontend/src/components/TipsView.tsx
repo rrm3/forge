@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ThumbsUp } from 'lucide-react';
-import { listTips, voteTip, unvoteTip } from '../api/client';
+import { listTips, getTip, voteTip, unvoteTip } from '../api/client';
 import type { Tip } from '../api/types';
 import { TipDetail } from './TipDetail';
 import { ProfileChip } from './ProfileChip';
 
 interface TipsViewProps {
-  onBack: () => void;
   userDepartment?: string;
+  initialTipId?: string;
 }
 
 const DEPARTMENTS = [
@@ -65,13 +66,23 @@ function relativeTime(dateStr: string): string {
   return `${diffMonth}mo ago`;
 }
 
-export function TipsView({ onBack, userDepartment }: TipsViewProps) {
+export function TipsView({ userDepartment, initialTipId }: TipsViewProps) {
+  const navigate = useNavigate();
   const [tips, setTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [department, setDepartment] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'popular'>('recent');
   const [selectedTip, setSelectedTip] = useState<Tip | null>(null);
+
+  // Load a specific tip when navigating directly to /tips/:tipId
+  useEffect(() => {
+    if (initialTipId && !selectedTip) {
+      getTip(initialTipId)
+        .then((tip) => setSelectedTip(tip))
+        .catch(() => navigate('/tips', { replace: true }));
+    }
+  }, [initialTipId, selectedTip, navigate]);
 
   const fetchTips = useCallback(async () => {
     setLoading(true);
@@ -150,7 +161,7 @@ export function TipsView({ onBack, userDepartment }: TipsViewProps) {
     return (
       <TipDetail
         tip={selectedTip}
-        onBack={() => { setSelectedTip(null); fetchTips(); }}
+        onBack={() => { setSelectedTip(null); fetchTips(); navigate('/tips'); }}
         onVoteChange={handleVoteChange}
         onTipUpdated={handleTipUpdated}
         onTipDeleted={handleTipDeleted}
@@ -164,7 +175,7 @@ export function TipsView({ onBack, userDepartment }: TipsViewProps) {
       <div className="px-4 md:px-6 pt-5 pb-4">
         <div className="flex items-center gap-3 mb-4">
           <button
-            onClick={onBack}
+            onClick={() => navigate('/')}
             className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150 hover:bg-[var(--color-surface-raised)]"
             aria-label="Go back"
           >
@@ -254,7 +265,7 @@ export function TipsView({ onBack, userDepartment }: TipsViewProps) {
             {tips.map((tip) => (
               <button
                 key={tip.tip_id}
-                onClick={() => setSelectedTip(tip)}
+                onClick={() => { setSelectedTip(tip); navigate(`/tips/${tip.tip_id}`); }}
                 className="w-full text-left rounded-xl border p-4 transition-all duration-200 hover:border-[var(--color-primary)]"
                 style={{
                   backgroundColor: 'var(--color-surface-white)',

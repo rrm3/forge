@@ -6,13 +6,10 @@
  */
 
 import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Save, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { getAdminAccess, getDepartmentConfig, saveDepartmentConfig } from '../api/client';
 import type { DepartmentConfig, DepartmentObjective } from '../api/types';
-
-interface AdminPanelProps {
-  onBack: () => void;
-}
 
 type Tab = 'objectives' | 'context';
 
@@ -20,7 +17,9 @@ function generateId(): string {
   return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 10);
 }
 
-export function AdminPanel({ onBack }: AdminPanelProps) {
+export function AdminPanel() {
+  const navigate = useNavigate();
+  const onBack = () => navigate('/');
   const [departments, setDepartments] = useState<string[]>([]);
   const [selectedDept, setSelectedDept] = useState<string>('');
   const [config, setConfig] = useState<DepartmentConfig | null>(null);

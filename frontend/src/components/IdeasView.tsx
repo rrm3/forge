@@ -6,16 +6,13 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MessageCircle, MoreVertical, Pencil, Trash2, X, Check, Bold, Italic, List } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { listUserIdeas, updateUserIdea, deleteUserIdea } from '../api/client';
+import { useSession } from '../state/SessionContext';
 import type { UserIdea } from '../api/types';
-
-interface IdeasViewProps {
-  onBack: () => void;
-  onChatWithIdea: (idea: UserIdea) => void;
-}
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
@@ -52,7 +49,9 @@ function statusColor(status: string): string {
   }
 }
 
-export function IdeasView({ onBack, onChatWithIdea }: IdeasViewProps) {
+export function IdeasView() {
+  const navigate = useNavigate();
+  const { startTypedSession } = useSession();
   const [ideas, setIdeas] = useState<UserIdea[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -94,7 +93,7 @@ export function IdeasView({ onBack, onChatWithIdea }: IdeasViewProps) {
       <div className="px-4 md:px-6 pt-5 pb-4">
         <div className="flex items-center gap-3 mb-2">
           <button
-            onClick={onBack}
+            onClick={() => navigate('/')}
             className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150 hover:bg-[var(--color-surface-raised)]"
             aria-label="Go back"
           >
@@ -146,7 +145,7 @@ export function IdeasView({ onBack, onChatWithIdea }: IdeasViewProps) {
                 onRequestDelete={() => { setConfirmDeleteId(idea.idea_id); setMenuOpenId(null); }}
                 onConfirmDelete={() => handleDelete(idea.idea_id)}
                 onCancelDelete={() => setConfirmDeleteId(null)}
-                onChat={() => onChatWithIdea(idea)}
+                onChat={() => startTypedSession('chat')}
               />
             ))}
           </div>

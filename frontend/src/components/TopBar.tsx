@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LogOut, BookOpen, UserRoundCog, Settings, Code } from 'lucide-react';
 import { useAuth } from '../auth/useAuth';
 import { useAdminStore } from '../state/adminStore';
@@ -15,11 +16,11 @@ import type { UserProfile } from '../api/types';
 const isDevMode = window.location.hostname === 'localhost';
 
 interface TopBarProps {
-  onAdminClick?: () => void;
   profile?: UserProfile | null;
 }
 
-export function TopBar({ onAdminClick, profile }: TopBarProps = {}) {
+export function TopBar({ profile }: TopBarProps = {}) {
+  const navigate = useNavigate();
   const { isAdmin, adminMode, toggleAdminMode } = useAdminStore();
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
@@ -110,11 +111,11 @@ export function TopBar({ onAdminClick, profile }: TopBarProps = {}) {
               <BookOpen className="w-4 h-4" strokeWidth={1.5} />
               Show Intro
             </button>
-            {isAdmin && onAdminClick && (
+            {isAdmin && (
               <button
                 onClick={() => {
                   setOpen(false);
-                  onAdminClick();
+                  navigate('/admin');
                 }}
                 className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm transition-colors"
                 style={{ color: '#4A5568' }}

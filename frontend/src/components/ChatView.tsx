@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Square, Send, Check, Bold, Italic, List, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -11,11 +12,8 @@ import { IdeaPreviewCard } from './IdeaPreviewCard';
 
 const TOOL_ROLES = new Set(['tool_call', 'tool_result']);
 
-interface ChatViewProps {
-  onShowTips?: () => void;
-}
-
-export function ChatView({ onShowTips }: ChatViewProps) {
+export function ChatView() {
+  const navigate = useNavigate();
   const adminMode = useAdminStore((s) => s.adminMode);
   const { state, dispatch, sendChatMessage, cancelStreaming } = useSession();
   const { messages = [], isStreaming, streamingText, connectionStatus } = state;
@@ -165,7 +163,7 @@ export function ChatView({ onShowTips }: ChatViewProps) {
                 onPublished={() => {
                   dispatch({ type: 'SET_TIP_PUBLISHED' });
                 }}
-                onShowTips={onShowTips}
+                onShowTips={() => navigate('/tips')}
               />
             )}
 
@@ -180,15 +178,13 @@ export function ChatView({ onShowTips }: ChatViewProps) {
                     Tip published!
                   </span>
                 </div>
-                {onShowTips && (
-                  <button
-                    onClick={onShowTips}
-                    className="text-sm font-medium"
-                    style={{ color: 'var(--color-primary)' }}
-                  >
-                    Browse Tips &rarr;
-                  </button>
-                )}
+                <button
+                  onClick={() => navigate('/tips')}
+                  className="text-sm font-medium"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  Browse Tips &rarr;
+                </button>
               </div>
             )}
 

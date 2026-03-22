@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Square, Send, X, ArrowRight, Lightbulb, Compass, Star, Sunrise } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -22,6 +23,7 @@ interface IntakeViewProps {
 }
 
 export function IntakeView({ onComplete }: IntakeViewProps) {
+  const navigate = useNavigate();
   const adminMode = useAdminStore((s) => s.adminMode);
   const { state, sendChatMessage, startTypedSession, cancelStreaming, deselectSession, selectSession } = useSession();
   const { messages = [], isStreaming, streamingText, activeSessionId, intakeComplete } = state;
@@ -152,6 +154,7 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
   function handleContinue() {
     deselectSession();
     onComplete?.();
+    navigate('/');
   }
 
   const handleSend = useCallback(() => {

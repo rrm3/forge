@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck, Home, X } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
 import type { Session } from '../api/types';
@@ -173,14 +174,13 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete
 }
 
 interface SessionListProps {
-  onGoHome?: () => void;
-  onShowIdeas?: () => void;
-  showIdeas?: boolean;
   ideaCount?: number;
 }
 
-export function SessionList({ onGoHome, onShowIdeas, showIdeas, ideaCount }: SessionListProps) {
-  const { state, selectSession, removeSession, updateSessionTitle, deselectSession, startTypedSession } = useSession();
+export function SessionList({ ideaCount }: SessionListProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { state, removeSession, updateSessionTitle, startTypedSession } = useSession();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [collapsedWeeks, setCollapsedWeeks] = useState<Set<string>>(new Set());
@@ -204,14 +204,15 @@ export function SessionList({ onGoHome, onShowIdeas, showIdeas, ideaCount }: Ses
     });
   }
 
-  const isHome = !state.activeSessionId;
+  const isHome = location.pathname === '/';
+  const showIdeas = location.pathname === '/ideas';
 
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--color-surface-white)' }}>
       {/* Home button */}
       <div className="px-2 pt-2">
         <button
-          onClick={onGoHome || (() => deselectSession())}
+          onClick={() => navigate('/')}
           className={[
             'flex items-center gap-2 w-full pl-2 pr-2 rounded-lg transition-colors',
             isHome
@@ -240,7 +241,7 @@ export function SessionList({ onGoHome, onShowIdeas, showIdeas, ideaCount }: Ses
       {/* Ideas button */}
       <div className="px-2 pt-1">
         <button
-          onClick={onShowIdeas}
+          onClick={() => navigate('/ideas')}
           className={[
             'flex items-center gap-2 w-full pl-2 pr-2 rounded-lg transition-colors',
             showIdeas
@@ -328,7 +329,7 @@ export function SessionList({ onGoHome, onShowIdeas, showIdeas, ideaCount }: Ses
                         key={session.session_id}
                         session={session}
                         isActive={session.session_id === state.activeSessionId}
-                        onSelect={() => selectSession(session.session_id)}
+                        onSelect={() => navigate(`/chat/${session.session_id}`)}
                         onDelete={() => removeSession(session.session_id)}
                         onRename={(title) => updateSessionTitle(session.session_id, title)}
                         canDelete={session.type !== 'intake'}

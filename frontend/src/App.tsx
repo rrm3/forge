@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { Routes, Route, Navigate, Outlet, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './auth/useAuth';
 import { SessionProvider } from './state/SessionContext';
 import { useSession } from './state/SessionContext';
@@ -16,14 +17,77 @@ import { getProfile, getAdminAccess, listUserIdeas } from './api/client';
 import { useProfileCache } from './state/profileCache';
 import type { UserProfile } from './api/types';
 
+/** Syncs the :sessionId URL param to the session context. */
+function ChatRoute() {
+  const { sessionId } = useParams<{ sessionId: string }>();
+  const { selectSession, state } = useSession();
+
+  useEffect(() => {
+    if (sessionId && state.activeSessionId !== sessionId) {
+      selectSession(sessionId);
+    }
+  }, [sessionId, selectSession, state.activeSessionId]);
+
+  return <ChatView />;
+}
+
+/** Wraps TipsView and passes the optional :tipId param. */
+function TipsRoute({ userDepartment }: { userDepartment?: string }) {
+  const { tipId } = useParams<{ tipId: string }>();
+  return <TipsView userDepartment={userDepartment} initialTipId={tipId} />;
+}
+
+/** Main layout with sidebar, used for all post-intake routes. */
+function MainLayout({ profile, ideaCount }: { profile: UserProfile | null; ideaCount: number }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { state, deselectSession } = useSession();
+  const prevActiveIdRef = useRef<string | null>(null);
+
+  // When a new session is created (via WS), navigate to its chat URL
+  useEffect(() => {
+    const prev = prevActiveIdRef.current;
+    prevActiveIdRef.current = state.activeSessionId;
+
+    if (
+      state.activeSessionId &&
+      state.activeSessionId !== prev &&
+      location.pathname !== `/chat/${state.activeSessionId}`
+    ) {
+      navigate(`/chat/${state.activeSessionId}`);
+    }
+  }, [state.activeSessionId, location.pathname, navigate]);
+
+  // Deselect session when navigating away from a chat route
+  useEffect(() => {
+    if (!location.pathname.startsWith('/chat/') && state.activeSessionId) {
+      deselectSession();
+    }
+  }, [location.pathname, deselectSession, state.activeSessionId]);
+
+  const sidebar = (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 min-h-0">
+        <SessionList ideaCount={ideaCount} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-screen">
+      <TopBar profile={profile} />
+      <div className="flex-1 min-h-0">
+        <AppShell sidebar={sidebar} content={<Outlet />} />
+      </div>
+    </div>
+  );
+}
+
 function AppContent() {
-  const { loadSessions, deselectSession, startTypedSession, state } = useSession();
+  const { loadSessions, state } = useSession();
   const { user } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [showTips, setShowTips] = useState(false);
-  const [showIdeas, setShowIdeas] = useState(false);
   const [ideaCount, setIdeaCount] = useState(0);
   const setIsAdmin = useAdminStore((s) => s.setIsAdmin);
   const isAdmin = useAdminStore((s) => s.isAdmin);
@@ -63,14 +127,6 @@ function AppContent() {
     }
   }, [user, profileLoaded]);
 
-  // Clear tips/ideas view when a session becomes active
-  useEffect(() => {
-    if (state.activeSessionId) {
-      setShowTips(false);
-      setShowIdeas(false);
-    }
-  }, [state.activeSessionId]);
-
   // Check admin access on mount
   useEffect(() => {
     if (user) {
@@ -88,63 +144,54 @@ function AppContent() {
     );
   }
 
-  const intakeComplete = profile?.intake_completed_at != null;
-
-  if (!intakeComplete) {
-    return (
-      <IntakeView
-        onComplete={() => {
-          getProfile()
-            .then((p) => setProfile(p))
-            .catch(() => {});
-        }}
-      />
-    );
-  }
-
-  if (showAdmin && isAdmin) {
-    return (
-      <div className="flex flex-col h-screen">
-        <TopBar onAdminClick={() => setShowAdmin(false)} profile={profile} />
-        <AdminPanel onBack={() => setShowAdmin(false)} />
-      </div>
-    );
-  }
-
-  const handleGoHome = () => {
-    deselectSession();
-    setShowTips(false);
-    setShowIdeas(false);
-  };
-
-  const sidebar = (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 min-h-0">
-        <SessionList
-          onGoHome={handleGoHome}
-          onShowIdeas={() => { deselectSession(); setShowTips(false); setShowIdeas(true); }}
-          showIdeas={showIdeas && !state.activeSessionId}
-          ideaCount={ideaCount}
-        />
-      </div>
-    </div>
-  );
-
-  const content = state.activeSessionId
-    ? <ChatView onShowTips={() => { deselectSession(); setShowTips(true); setShowIdeas(false); }} />
-    : showIdeas
-      ? <IdeasView onBack={() => setShowIdeas(false)} onChatWithIdea={() => { setShowIdeas(false); startTypedSession('chat'); }} />
-      : showTips
-        ? <TipsView onBack={() => setShowTips(false)} userDepartment={profile?.department} />
-        : <HomeScreen onShowTips={() => setShowTips(true)} />;
+  const intakeComplete = profile?.intake_completed_at != null || state.intakeComplete;
 
   return (
-    <div className="flex flex-col h-screen">
-      <TopBar onAdminClick={() => setShowAdmin(true)} profile={profile} />
-      <div className="flex-1 min-h-0">
-        <AppShell sidebar={sidebar} content={content} />
-      </div>
-    </div>
+    <Routes>
+      {/* Intake / Day 1 */}
+      <Route
+        path="/day1"
+        element={
+          intakeComplete
+            ? <Navigate to="/" replace />
+            : <IntakeView onComplete={() => {
+                getProfile().then((p) => setProfile(p)).catch(() => {});
+              }} />
+        }
+      />
+
+      {/* Admin */}
+      <Route
+        path="/admin"
+        element={
+          isAdmin ? (
+            <div className="flex flex-col h-screen">
+              <TopBar profile={profile} />
+              <AdminPanel />
+            </div>
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+
+      {/* Main layout (all post-intake routes) */}
+      <Route
+        path="/*"
+        element={
+          !intakeComplete
+            ? <Navigate to="/day1" replace />
+            : <MainLayout profile={profile} ideaCount={ideaCount} />
+        }
+      >
+        <Route index element={<HomeScreen />} />
+        <Route path="chat/:sessionId" element={<ChatRoute />} />
+        <Route path="tips" element={<TipsRoute userDepartment={profile?.department} />} />
+        <Route path="tips/:tipId" element={<TipsRoute userDepartment={profile?.department} />} />
+        <Route path="ideas" element={<IdeasView />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
   );
 }
 
