@@ -65,13 +65,22 @@ jobs:
         env:
           FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME }}
         run: |
-          aws lambda update-function-code \
+          VERSION=$(aws lambda update-function-code \
             --function-name "${FUNCTION_NAME}" \
             --image-uri "${{ steps.build.outputs.image_uri }}" \
-            --publish
+            --publish \
+            --query 'Version' --output text)
 
           aws lambda wait function-updated \
             --function-name "${FUNCTION_NAME}"
+
+          echo "Published version: ${VERSION}"
+
+          # Keep 2 warm instances to avoid cold start delays
+          aws lambda put-provisioned-concurrency-config \
+            --function-name "${FUNCTION_NAME}" \
+            --qualifier "${VERSION}" \
+            --provisioned-concurrent-executions 2 || true
 
       - name: Update WebSocket Lambda function
         env:
@@ -81,13 +90,22 @@ jobs:
             echo "WS_LAMBDA_FUNCTION_NAME secret not set — skipping WS Lambda deploy"
             exit 0
           fi
-          aws lambda update-function-code \
+          VERSION=$(aws lambda update-function-code \
             --function-name "${WS_FUNCTION_NAME}" \
             --image-uri "${{ steps.build.outputs.image_uri }}" \
-            --publish
+            --publish \
+            --query 'Version' --output text)
 
           aws lambda wait function-updated \
             --function-name "${WS_FUNCTION_NAME}"
+
+          echo "Published version: ${VERSION}"
+
+          # Keep 2 warm instances for WebSocket connections
+          aws lambda put-provisioned-concurrency-config \
+            --function-name "${WS_FUNCTION_NAME}" \
+            --qualifier "${VERSION}" \
+            --provisioned-concurrent-executions 2 || true
 
   deploy-frontend:
     name: Deploy Frontend

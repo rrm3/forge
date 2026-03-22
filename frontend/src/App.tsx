@@ -1,6 +1,32 @@
 import { useEffect, useState, useRef } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './auth/useAuth';
+
+/** Loading spinner that uses inline styles to avoid browser deprioritization during cold starts. */
+function LoadingScreen() {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 12,
+      backgroundColor: 'var(--color-surface)',
+    }}>
+      <style>{`@keyframes forge-spin { to { transform: rotate(360deg) } }`}</style>
+      <div style={{
+        width: 24,
+        height: 24,
+        border: '2px solid var(--color-primary)',
+        borderTopColor: 'transparent',
+        borderRadius: '50%',
+        animation: 'forge-spin 0.8s linear infinite',
+      }} />
+      <p style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>Loading...</p>
+    </div>
+  );
+}
 import { SessionProvider } from './state/SessionContext';
 import { useSession } from './state/SessionContext';
 import { useAdminStore } from './state/adminStore';
@@ -145,11 +171,7 @@ function AppContent() {
   }, [user, setIsAdmin]);
 
   if (!profileLoaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--color-surface)' }}>
-        <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--color-primary)' }} />
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   const intakeComplete = profile?.intake_completed_at != null || state.intakeComplete;
@@ -229,11 +251,7 @@ function App() {
   }
 
   if (isLoading || !isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--color-surface)' }}>
-        <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--color-primary)' }} />
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
