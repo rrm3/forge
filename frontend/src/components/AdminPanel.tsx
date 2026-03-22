@@ -32,6 +32,7 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
   const [editLabel, setEditLabel] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editExtractionKey, setEditExtractionKey] = useState('');
+  const [extractionKeyLocked, setExtractionKeyLocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
@@ -74,6 +75,7 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
     setEditLabel(obj.label);
     setEditDescription(obj.description);
     setEditExtractionKey(obj.extraction_key);
+    setExtractionKeyLocked(!!obj.extraction_key);
     setTimeout(() => labelInputRef.current?.focus(), 50);
   }
 
@@ -82,6 +84,7 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
     setEditLabel('');
     setEditDescription('');
     setEditExtractionKey('');
+    setExtractionKeyLocked(false);
   }
 
   async function saveObjective(id: string) {
@@ -261,11 +264,11 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
 
         {/* Department picker */}
         {departments.length > 1 ? (
-          <div className="mb-6 mt-3">
+          <div className="relative inline-block mb-6 mt-3">
             <select
               value={selectedDept}
               onChange={(e) => setSelectedDept(e.target.value)}
-              className="rounded-[10px] border px-3 py-2 text-sm"
+              className="appearance-none rounded-md border pl-3 pr-8 py-2 text-sm"
               style={{
                 borderColor: 'var(--color-border)',
                 backgroundColor: '#FFFFFF',
@@ -278,6 +281,11 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
+            <ChevronDown
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ width: 14, height: 14, color: 'var(--color-text-muted)' }}
+              strokeWidth={1.5}
+            />
           </div>
         ) : (
           <p
@@ -304,11 +312,11 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
         {/* Save feedback */}
         {saveMessage && (
           <div
-            className="mb-4 px-3 py-2 rounded-[10px] text-sm font-medium"
+            className="mb-4 px-3 py-2 rounded-md text-sm font-medium"
             style={{
               backgroundColor: saveMessage.includes('Failed') ? '#FEF2F2' : '#F0FDF4',
               color: saveMessage.includes('Failed') ? 'var(--color-error)' : 'var(--color-success)',
-              fontFamily: "'Satoshi', system-ui, sans-serif",
+              fontFamily: "'Inter', system-ui, sans-serif",
             }}
           >
             {saveMessage}
@@ -323,7 +331,7 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
               return (
                 <div
                   key={obj.id}
-                  className="rounded-[10px] border overflow-hidden"
+                  className="rounded-lg border overflow-hidden"
                   style={{
                     backgroundColor: '#FFFFFF',
                     borderColor: isExpanded ? 'var(--color-primary)' : 'var(--color-border)',
@@ -342,18 +350,19 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                     }}
                   >
                     <span
-                      className="text-sm font-medium"
+                      className="text-sm"
                       style={{
                         color: 'var(--color-text-primary)',
-                        fontFamily: "'Satoshi', system-ui, sans-serif",
+                        fontFamily: "'Inter', system-ui, sans-serif",
+                        fontWeight: 450,
                       }}
                     >
                       {obj.label}
                     </span>
                     {isExpanded ? (
-                      <ChevronUp className="w-4 h-4" style={{ color: 'var(--color-text-muted)' }} strokeWidth={1.5} />
+                      <ChevronUp className="w-4 h-4 shrink-0 ml-3" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
                     ) : (
-                      <ChevronDown className="w-4 h-4" style={{ color: 'var(--color-text-muted)' }} strokeWidth={1.5} />
+                      <ChevronDown className="w-4 h-4 shrink-0 ml-3" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
                     )}
                   </button>
 
@@ -363,7 +372,7 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                       <div className="pt-3">
                         <label
                           className="block text-xs font-medium mb-1"
-                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Inter', system-ui, sans-serif" }}
                         >
                           Label
                         </label>
@@ -372,11 +381,11 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                           type="text"
                           value={editLabel}
                           onChange={(e) => setEditLabel(e.target.value)}
-                          className="w-full rounded-[10px] border px-3 py-2 text-sm outline-none transition-colors"
+                          className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors"
                           style={{
                             borderColor: 'var(--color-border)',
                             color: 'var(--color-text-primary)',
-                            fontFamily: "'Satoshi', system-ui, sans-serif",
+                            fontFamily: "'Inter', system-ui, sans-serif",
                           }}
                           onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
                           onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
@@ -386,7 +395,7 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                       <div>
                         <label
                           className="block text-xs font-medium mb-1"
-                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Inter', system-ui, sans-serif" }}
                         >
                           Description
                         </label>
@@ -394,11 +403,11 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                           value={editDescription}
                           onChange={(e) => setEditDescription(e.target.value)}
                           rows={3}
-                          className="w-full rounded-[10px] border px-3 py-2 text-sm outline-none resize-y transition-colors"
+                          className="w-full rounded-md border px-3 py-2 text-sm outline-none resize-y transition-colors"
                           style={{
                             borderColor: 'var(--color-border)',
                             color: 'var(--color-text-primary)',
-                            fontFamily: "'Satoshi', system-ui, sans-serif",
+                            fontFamily: "'Inter', system-ui, sans-serif",
                           }}
                           onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
                           onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
@@ -408,7 +417,7 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                       <div>
                         <label
                           className="block text-xs font-medium mb-1"
-                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Inter', system-ui, sans-serif" }}
                         >
                           Extraction key
                         </label>
@@ -416,21 +425,26 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                           type="text"
                           value={editExtractionKey}
                           onChange={(e) => setEditExtractionKey(e.target.value)}
+                          disabled={extractionKeyLocked}
                           placeholder="e.g. ai_tools_used"
-                          className="w-full rounded-[10px] border px-3 py-2 text-sm outline-none transition-colors"
+                          className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors"
                           style={{
                             borderColor: 'var(--color-border)',
-                            color: 'var(--color-text-primary)',
-                            fontFamily: "'Satoshi', system-ui, sans-serif",
+                            color: extractionKeyLocked ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+                            backgroundColor: extractionKeyLocked ? 'var(--color-surface-raised)' : undefined,
+                            fontFamily: "'Inter', system-ui, sans-serif",
+                            cursor: extractionKeyLocked ? 'not-allowed' : undefined,
                           }}
-                          onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                          onFocus={(e) => { if (!extractionKeyLocked) e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
                           onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
                         />
                         <p
                           className="text-xs mt-1"
-                          style={{ color: 'var(--color-text-placeholder)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                          style={{ color: 'var(--color-text-placeholder)', fontFamily: "'Inter', system-ui, sans-serif" }}
                         >
-                          Profile field where extracted data is stored
+                          {extractionKeyLocked
+                            ? 'This key is locked. Changing it would orphan existing profile data in DynamoDB.'
+                            : 'DynamoDB profile field where extracted data is stored (e.g. work_summary, ai_tools_used). This cannot be changed after saving.'}
                         </p>
                       </div>
 
@@ -439,12 +453,12 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                         <button
                           onClick={() => saveObjective(obj.id)}
                           disabled={saving || !editLabel.trim()}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-[10px] text-sm font-medium transition-colors"
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
                           style={{
                             backgroundColor: saving || !editLabel.trim() ? 'var(--color-border)' : 'var(--color-primary)',
                             color: '#FFFFFF',
                             cursor: saving || !editLabel.trim() ? 'not-allowed' : 'pointer',
-                            fontFamily: "'Satoshi', system-ui, sans-serif",
+                            fontFamily: "'Inter', system-ui, sans-serif",
                           }}
                         >
                           <Save className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -452,11 +466,11 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                         </button>
                         <button
                           onClick={collapseCard}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-[10px] text-sm font-medium transition-colors"
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
                           style={{
                             color: 'var(--color-text-muted)',
                             cursor: 'pointer',
-                            fontFamily: "'Satoshi', system-ui, sans-serif",
+                            fontFamily: "'Inter', system-ui, sans-serif",
                           }}
                           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
@@ -468,11 +482,11 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                           <button
                             onClick={() => deleteObjective(obj.id)}
                             disabled={saving}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-[10px] text-sm font-medium ml-auto transition-colors"
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium ml-auto transition-colors"
                             style={{
                               color: 'var(--color-error)',
                               cursor: saving ? 'not-allowed' : 'pointer',
-                              fontFamily: "'Satoshi', system-ui, sans-serif",
+                              fontFamily: "'Inter', system-ui, sans-serif",
                             }}
                             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
                             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
@@ -492,12 +506,12 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
             <button
               onClick={addObjective}
               disabled={saving}
-              className="flex items-center justify-center gap-2 w-full rounded-[10px] border-2 border-dashed px-4 py-3 text-sm font-medium transition-colors"
+              className="flex items-center justify-center gap-2 w-full rounded-lg border-2 border-dashed px-4 py-3 text-sm font-medium transition-colors"
               style={{
                 borderColor: 'var(--color-border)',
                 color: 'var(--color-text-muted)',
                 cursor: saving ? 'not-allowed' : 'pointer',
-                fontFamily: "'Satoshi', system-ui, sans-serif",
+                fontFamily: "'Inter', system-ui, sans-serif",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = 'var(--color-primary)';
@@ -520,7 +534,7 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
             <div>
               <label
                 className="block text-xs font-medium mb-2"
-                style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                style={{ color: 'var(--color-text-muted)', fontFamily: "'Inter', system-ui, sans-serif" }}
               >
                 Department context prompt
               </label>
@@ -532,11 +546,11 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                 }}
                 rows={12}
                 placeholder="Provide context about this department that the AI coach should know. Markdown supported."
-                className="w-full rounded-[10px] border px-4 py-3 text-sm outline-none resize-y transition-colors"
+                className="w-full rounded-md border px-4 py-3 text-sm outline-none resize-y transition-colors"
                 style={{
                   borderColor: 'var(--color-border)',
                   color: 'var(--color-text-primary)',
-                  fontFamily: "'Satoshi', system-ui, sans-serif",
+                  fontFamily: "'Inter', system-ui, sans-serif",
                   lineHeight: 1.6,
                 }}
                 onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
@@ -544,7 +558,7 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
               />
               <p
                 className="text-xs mt-1"
-                style={{ color: 'var(--color-text-placeholder)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                style={{ color: 'var(--color-text-placeholder)', fontFamily: "'Inter', system-ui, sans-serif" }}
               >
                 This text is included in the AI system prompt for all users in this department.
               </p>
@@ -554,12 +568,12 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
               <button
                 onClick={saveContext}
                 disabled={saving || !contextDirty}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-[10px] text-sm font-medium transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
                 style={{
                   backgroundColor: saving || !contextDirty ? 'var(--color-border)' : 'var(--color-primary)',
                   color: '#FFFFFF',
                   cursor: saving || !contextDirty ? 'not-allowed' : 'pointer',
-                  fontFamily: "'Satoshi', system-ui, sans-serif",
+                  fontFamily: "'Inter', system-ui, sans-serif",
                 }}
               >
                 <Save className="w-3.5 h-3.5" strokeWidth={1.5} />
