@@ -146,10 +146,13 @@ async def call_llm(
         creds = _get_role_credentials()
         kwargs.update(creds)
     elif settings.bedrock_access_key_id:
-        # Fallback: static IAM keys (local dev)
+        # Static IAM keys (local dev or production fallback)
         kwargs["aws_access_key_id"] = settings.bedrock_access_key_id
         kwargs["aws_secret_access_key"] = settings.bedrock_secret_access_key
-        kwargs["aws_session_token"] = None
+        # Must unset the Lambda-injected session token from env
+        import os
+        os.environ.pop("AWS_SESSION_TOKEN", None)
+        os.environ.pop("AWS_SECURITY_TOKEN", None)
     if tools:
         kwargs["tools"] = tools
     if max_tokens is not None:
