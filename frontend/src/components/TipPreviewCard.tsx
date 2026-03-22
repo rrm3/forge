@@ -32,6 +32,7 @@ export function TipPreviewCard({ initial, onPublished }: TipPreviewCardProps) {
   const [tagInput, setTagInput] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   function wrapSelection(before: string, after: string) {
@@ -64,6 +65,7 @@ export function TipPreviewCard({ initial, onPublished }: TipPreviewCardProps) {
       onPublished();
     } catch (err) {
       console.error('Failed to publish tip:', err);
+      setError('Failed to publish. Please try again.');
       setPublishing(false);
     }
   }
@@ -217,7 +219,12 @@ export function TipPreviewCard({ initial, onPublished }: TipPreviewCardProps) {
         </div>
       </div>
 
-      {/* Publish button */}
+      {/* Error + Publish button */}
+      <div className="px-5 pb-4">
+        {error && (
+          <p className="text-xs mb-2" style={{ color: 'var(--color-error, #DC2626)' }}>{error}</p>
+        )}
+      </div>
       <div className="px-5 pb-4">
         <button
           onClick={handlePublish}

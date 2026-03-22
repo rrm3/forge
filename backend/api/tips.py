@@ -6,7 +6,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.auth import AuthUser
 from backend.models import TipComment
@@ -24,8 +24,8 @@ def set_tips_deps(tips_repo):
 
 
 class CreateTipRequest(BaseModel):
-    title: str
-    content: str
+    title: str = Field(max_length=200)
+    content: str = Field(max_length=10000)
     tags: list[str] = []
     department: str = "Everyone"
 

@@ -115,7 +115,12 @@ class DynamoDBTipRepository(TipRepository):
         )
 
     async def list(self, department: str | None = None, sort_by: str = "recent", limit: int = 50) -> list[Tip]:
-        """Scan all tips (small table), filter by department in Python, sort in Python."""
+        """Scan all tips, filter by department in Python, sort in Python.
+
+        Note: DynamoDB scan returns max 1MB per call. At ~5-10KB per tip this
+        handles ~100-200 tips per scan. For 700 employees this is plenty.
+        If the table grows past ~200 tips, add LastEvaluatedKey pagination.
+        """
         loop = asyncio.get_event_loop()
         try:
             response = await loop.run_in_executor(
