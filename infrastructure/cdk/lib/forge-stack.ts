@@ -298,6 +298,52 @@ export class ForgeStack extends cdk.Stack {
       retention: logs.RetentionDays.TWO_WEEKS,
     });
 
+    // Separate role for WS Lambda to avoid circular dependency with the shared role
+    const wsLambdaRole = new iam.Role(this, 'WsLambdaRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+    });
+
+    // WS Lambda needs the same permissions as the backend
+    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'DynamoDBAccess',
+      actions: [
+        'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem',
+        'dynamodb:DeleteItem', 'dynamodb:Query', 'dynamodb:Scan',
+        'dynamodb:BatchGetItem', 'dynamodb:BatchWriteItem',
+      ],
+      resources: [
+        `arn:aws:dynamodb:${this.region}:${this.account}:table/forge-*`,
+        `arn:aws:dynamodb:${this.region}:${this.account}:table/forge-*/index/*`,
+      ],
+    }));
+    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'S3Access',
+      actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
+      resources: [dataBucket.bucketArn, `${dataBucket.bucketArn}/*`],
+    }));
+    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'BedrockAccess',
+      actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+      resources: [
+        `arn:aws:bedrock:*::foundation-model/anthropic.claude-*`,
+        `arn:aws:bedrock:*::foundation-model/cohere.embed-*`,
+        `arn:aws:bedrock:*:${this.account}:inference-profile/us.anthropic.*`,
+      ],
+    }));
+    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'SSMAccess',
+      actions: ['ssm:GetParameter', 'ssm:GetParameters'],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/forge/*`],
+    }));
+    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'WebSocketManagementApi',
+      actions: ['execute-api:ManageConnections'],
+      resources: [`arn:aws:execute-api:${this.region}:${this.account}:*/*`],
+    }));
+
     const wsFunction = new lambda.DockerImageFunction(this, 'WsFunction', {
       functionName: `${prefix}-ws`,
       code: lambda.DockerImageCode.fromEcr(ecrRepository, {
@@ -306,7 +352,7 @@ export class ForgeStack extends cdk.Stack {
       }),
       memorySize: 1024,
       timeout: cdk.Duration.seconds(900), // 15 min for Worker path
-      role: lambdaRole,
+      role: wsLambdaRole,
       environment: {
         OIDC_PROVIDER_URL: oidcProviderUrl,
         OIDC_CLIENT_ID: oidcClientId,
@@ -324,10 +370,10 @@ export class ForgeStack extends cdk.Stack {
     });
 
     // Grant WS Lambda permission to invoke itself (Dispatcher -> Worker)
-    wsFunction.addToRolePolicy(new iam.PolicyStatement({
+    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
       sid: 'SelfInvoke',
       actions: ['lambda:InvokeFunction'],
-      resources: [wsFunction.functionArn],
+      resources: [`arn:aws:lambda:${this.region}:${this.account}:function:${prefix}-ws`],
     }));
 
     // ---------------------------------------------------------------
@@ -387,19 +433,15 @@ export class ForgeStack extends cdk.Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${wsApi.ref}/*`,
     });
 
-    // Grant Lambda permission to post to WebSocket connections (Management API)
-    lambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'WebSocketManagementApi',
-      actions: ['execute-api:ManageConnections'],
-      resources: [
-        `arn:aws:execute-api:${this.region}:${this.account}:${wsApi.ref}/*`,
-      ],
-    }));
+    // WebSocket ManageConnections permission is on wsLambdaRole (above)
 
-    // Add WebSocket endpoint to WS Lambda environment
+    // Add WebSocket endpoint to WS Lambda environment.
+    // Use Fn.join to avoid a circular dependency (wsFunction -> wsApi -> wsFunction).
     wsFunction.addEnvironment(
       'WEBSOCKET_API_ENDPOINT',
-      `https://${wsApi.ref}.execute-api.${this.region}.amazonaws.com/${wsStage.stageName}`,
+      cdk.Fn.join('', [
+        'https://', wsApi.ref, '.execute-api.', this.region, '.amazonaws.com/v1',
+      ]),
     );
 
     // ---------------------------------------------------------------

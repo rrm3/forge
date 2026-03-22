@@ -107,6 +107,7 @@ jobs:
           VITE_OIDC_PROVIDER_URL: ${{ secrets.OIDC_PROVIDER_URL }}
           VITE_OIDC_CLIENT_ID: ${{ secrets.OIDC_CLIENT_ID }}
           VITE_API_URL: ""
+          VITE_WS_URL: ${{ secrets.WS_API_URL }}
         run: |
           npm ci
           npm run build
