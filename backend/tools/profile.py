@@ -133,6 +133,15 @@ async def update_profile(context: ToolContext, fields: dict | None = None, **kwa
     if not filtered:
         return f"No valid fields to update. Allowed fields: {', '.join(sorted(allowed))}"
 
+    # Coerce list→string for fields that expect strings (LLMs sometimes send lists)
+    _string_fields = {
+        "title", "department", "team", "ai_experience_level", "daily_tasks",
+        "work_summary", "ai_superpower", "intake_summary", "intake_completed_at",
+    }
+    for key in _string_fields:
+        if key in filtered and isinstance(filtered[key], list):
+            filtered[key] = "; ".join(str(v) for v in filtered[key])
+
     profile = await repo.get(context.user_id)
     if profile is None:
         return "Profile not found. Cannot update a profile that doesn't exist."

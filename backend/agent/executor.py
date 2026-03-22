@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -27,7 +28,7 @@ from backend.api.transport import MessageSender
 from backend.config import settings
 from backend.deps import AgentDeps
 from backend.llm import call_llm
-from backend.models import Message
+from backend.models import Message, UserIdea
 from backend.repository.department_config import DepartmentConfigRepository
 from backend.storage import load_intake_responses, load_memory, load_transcript, save_intake_responses, save_transcript
 from backend.tools.registry import ToolContext
@@ -331,7 +332,7 @@ async def run_agent_session(
         await _check_tip_prepared(transcript, sender, session_id)
 
     # Detect prepared ideas and send preview data to frontend
-    if session_type in ("brainstorm", "chat", "tip", "stuck"):
+    if session_type in ("brainstorm", "chat", "tip", "stuck", "intake"):
         await _check_idea_prepared(transcript, sender, session_id)
 
     # Intake state machine: check required fields and mark complete when done
@@ -415,7 +416,7 @@ async def _check_intake_completion(
                 await sender.send({
                     "type": "intake_complete",
                     "session_id": session_id,
-                    "suggestions": suggestions,
+                    "suggestions": [s.get("title", "") if isinstance(s, dict) else str(s) for s in suggestions],
                 })
             return
 
@@ -442,29 +443,109 @@ async def _check_intake_completion(
             else:
                 logger.info("Intake complete: user=%s fields_captured=%s", user_id, captured)
 
-            # Score AI proficiency from the full transcript
-            try:
-                from backend.agent.extraction import score_ai_proficiency
-                llm_messages = _transcript_to_llm_messages(transcript)
-                proficiency = await score_ai_proficiency(llm_messages)
-                if proficiency:
-                    await deps.profiles_repo.update(user_id, {
-                        "ai_proficiency": proficiency,
-                    })
-                    logger.info("AI proficiency scored: user=%s level=%d", user_id, proficiency["level"])
-            except Exception:
-                logger.warning("AI proficiency scoring failed, continuing", exc_info=True)
+            # Extract suggestions (Haiku, fast) and save as UserIdeas
+            suggestions = await _extract_suggestions(transcript)
+            if suggestions and deps.user_ideas_repo and session_id:
+                for suggestion in suggestions:
+                    title = suggestion.get("title", "")
+                    description = suggestion.get("description", "")
+                    if title:
+                        idea = UserIdea(
+                            user_id=user_id,
+                            idea_id=str(uuid.uuid4()),
+                            title=title,
+                            description=description,
+                            source="intake",
+                            source_session_id=session_id,
+                            tags=["intake"],
+                        )
+                        try:
+                            await deps.user_ideas_repo.create(idea)
+                            logger.info("Created intake idea: user=%s title=%s", user_id, title)
+                        except Exception:
+                            logger.warning("Failed to create intake idea: %s", title, exc_info=True)
 
-            # Notify the frontend so it can show the completion card
+            # Notify the frontend immediately so it can show the completion card
             if sender and session_id:
-                suggestions = await _extract_suggestions(transcript)
                 await sender.send({
                     "type": "intake_complete",
                     "session_id": session_id,
-                    "suggestions": suggestions,
+                    "suggestions": [s.get("title", "") for s in suggestions],
                 })
+
+            # Fire-and-forget: Opus enrichment of profile + objective summaries
+            objectives = department_config.get("objectives", []) if department_config else []
+            asyncio.create_task(
+                _enrich_profile_async(deps, user_id, transcript, objectives)
+            )
     except Exception:
         logger.warning("Failed to check intake completion", exc_info=True)
+
+
+async def _enrich_profile_async(
+    deps: AgentDeps,
+    user_id: str,
+    transcript: list[Message],
+    objectives: list[dict],
+):
+    """Background task: Opus enrichment of profile and objective summaries.
+
+    Runs after intake completes. Updates profile fields and objective responses
+    with thorough summaries based on the full transcript. Fire-and-forget.
+    """
+    try:
+        from backend.agent.extraction import enrich_profile_with_opus, LIST_FIELDS
+
+        llm_messages = _transcript_to_llm_messages(transcript)
+        result = await enrich_profile_with_opus(llm_messages, objectives)
+        if not result:
+            logger.warning("Opus enrichment returned nothing for user=%s", user_id)
+            return
+
+        # Update profile fields
+        profile_fields = result.get("profile", {})
+        if profile_fields:
+            # Filter to known fields and coerce types
+            allowed = {
+                "work_summary", "daily_tasks", "products", "ai_tools_used",
+                "core_skills", "learning_goals", "ai_superpower", "goals",
+                "intake_summary",
+            }
+            filtered = {k: v for k, v in profile_fields.items() if k in allowed and v}
+
+            # Coerce string fields that came back as lists
+            string_fields = allowed - LIST_FIELDS
+            for key in string_fields:
+                if key in filtered and isinstance(filtered[key], list):
+                    filtered[key] = "; ".join(str(v) for v in filtered[key])
+
+            if filtered:
+                await deps.profiles_repo.update(user_id, filtered)
+                logger.info("Opus enrichment updated profile: user=%s fields=%s", user_id, list(filtered.keys()))
+
+        # Update objective summaries in intake responses
+        obj_summaries = result.get("objectives", {})
+        if obj_summaries:
+            from backend.storage import load_intake_responses, save_intake_responses
+            intake_responses = await load_intake_responses(deps.storage, user_id)
+            updated = False
+            for obj_id, summary in obj_summaries.items():
+                if obj_id in intake_responses and isinstance(summary, str) and summary:
+                    intake_responses[obj_id]["value"] = summary
+                    updated = True
+            if updated:
+                await save_intake_responses(deps.storage, user_id, intake_responses)
+                logger.info("Opus enrichment updated %d objective summaries for user=%s", len(obj_summaries), user_id)
+
+        # Score AI proficiency (Opus has the full context, better than Haiku)
+        from backend.agent.extraction import score_ai_proficiency
+        proficiency = await score_ai_proficiency(llm_messages)
+        if proficiency:
+            await deps.profiles_repo.update(user_id, {"ai_proficiency": proficiency})
+            logger.info("AI proficiency scored: user=%s level=%d", user_id, proficiency["level"])
+
+    except Exception:
+        logger.warning("Opus enrichment failed for user=%s", user_id, exc_info=True)
 
 
 async def _check_tip_prepared(transcript: list[Message], sender: MessageSender, session_id: str):

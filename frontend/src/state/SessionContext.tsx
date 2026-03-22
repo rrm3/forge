@@ -249,11 +249,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           break;
 
         case 'tool_call':
-          // Could show tool call indicator in future
+          if (msg.session_id === activeSessionIdRef.current) {
+            const toolCallMsg: Message = {
+              role: 'tool_call',
+              content: JSON.stringify(msg.args),
+              tool_name: msg.tool,
+              tool_call_id: msg.tool_call_id,
+              timestamp: new Date().toISOString(),
+            };
+            dispatch({ type: 'ADD_MESSAGE', message: toolCallMsg });
+          }
           break;
 
         case 'tool_result':
-          // Could show tool result in future
+          if (msg.session_id === activeSessionIdRef.current) {
+            const toolResultMsg: Message = {
+              role: 'tool_result',
+              content: typeof msg.result === 'string' ? msg.result : JSON.stringify(msg.result),
+              tool_call_id: msg.tool_call_id,
+              timestamp: new Date().toISOString(),
+            };
+            dispatch({ type: 'ADD_MESSAGE', message: toolResultMsg });
+          }
           break;
 
         case 'done': {

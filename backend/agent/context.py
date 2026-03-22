@@ -170,7 +170,7 @@ def _build_intake_progress(
         lines.append("DO NOT ask any more questions. DO NOT continue the conversation.")
         lines.append("Give a brief, warm wrap-up acknowledging what you learned about them,")
         lines.append("then give 2-3 personalized suggestions for their first AI Tuesday.")
-        lines.append("Format suggestions as bullet points so they're easy to scan.")
+        lines.append("Ideas are automatically saved from your suggestions.")
         lines.append("End your message there. No follow-up questions.")
         return "\n".join(lines)
 
@@ -320,7 +320,7 @@ def _build_intake_checklist(profile: UserProfile) -> str:
         lines.append("DO NOT ask any more questions. DO NOT continue the conversation.")
         lines.append("Give a brief, warm wrap-up acknowledging what you learned about them,")
         lines.append("then give 2-3 personalized suggestions for their first AI Tuesday.")
-        lines.append("Format suggestions as bullet points so they're easy to scan.")
+        lines.append("Ideas are automatically saved from your suggestions.")
         lines.append("End your message there. No follow-up questions.")
     elif len(remaining) <= 2:
         # Almost done - be very directive

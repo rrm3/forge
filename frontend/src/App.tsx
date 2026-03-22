@@ -196,17 +196,23 @@ function AppContent() {
     return <LoadingScreen />;
   }
 
-  const intakeComplete = profile?.intake_completed_at != null || state.intakeComplete;
+  // For routing: only redirect away from /day1 if the profile was already complete
+  // on page load. During the session, IntakeView handles showing the completion card
+  // and the user clicks "Let's get started" to navigate away.
+  const intakeAlreadyComplete = profile?.intake_completed_at != null;
+  const intakeComplete = intakeAlreadyComplete || state.intakeComplete;
 
   return (
     <Routes>
-      {/* Intake / Day 1 - always renders IntakeView (it handles its own completion card) */}
+      {/* Intake / Day 1 - redirects home only if already completed before this session */}
       <Route
         path="/day1"
         element={
-          <IntakeView onComplete={() => {
-            getProfile().then((p) => setProfile(p)).catch(() => {});
-          }} />
+          intakeAlreadyComplete
+            ? <Navigate to="/" replace />
+            : <IntakeView profile={profile} onComplete={() => {
+                getProfile().then((p) => setProfile(p)).catch(() => {});
+              }} />
         }
       />
 

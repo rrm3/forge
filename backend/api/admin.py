@@ -208,6 +208,20 @@ async def get_user_intake(user_id: str, user: AuthUser):
     from backend.storage import load_intake_responses
     intake_responses = await load_intake_responses(_storage, user_id) if _storage else {}
 
+    # Resolve objective UUIDs to human-readable labels
+    if intake_responses and profile.department:
+        from backend.repository.department_config import DepartmentConfigRepository
+        dept_repo = DepartmentConfigRepository(_storage)
+        dept_config = await dept_repo.get_department_config(
+            profile.department.lower().replace(" ", "-")
+        )
+        if dept_config:
+            label_map = {o["id"]: o["label"] for o in dept_config.get("objectives", [])}
+            intake_responses = {
+                label_map.get(k, k): v
+                for k, v in intake_responses.items()
+            }
+
     return {
         "profile": profile.model_dump(mode="json"),
         "intake_responses": intake_responses,

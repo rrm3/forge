@@ -67,11 +67,15 @@ const INTAKE_LABELS: Record<string, string> = {
 function formatIntakeValue(value: unknown): string {
   if (Array.isArray(value)) return value.join(', ');
   if (typeof value === 'object' && value !== null) {
-    // Handle nested objects like {value: "...", ...}
+    // Handle nested objects like {value: "...", captured_at: "..."}
     const v = (value as Record<string, unknown>).value;
-    if (typeof v === 'string') return v;
+    if (typeof v === 'string') {
+      if (v === 'answered') return 'Captured, processing...';
+      return v;
+    }
     return JSON.stringify(value);
   }
+  if (value === 'answered') return 'Captured, processing...';
   return String(value ?? '');
 }
 

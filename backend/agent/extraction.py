@@ -225,9 +225,9 @@ REMAINING_OBJECTIVES_PLACEHOLDER
 Already completed (do not re-evaluate):
 COMPLETED_OBJECTIVES_PLACEHOLDER
 
-Based on what the USER said in the conversation below, determine which of the remaining objectives have been adequately covered.
+Based on what the USER said in the conversation below, determine which remaining objectives the user has answered.
 
-Return a JSON object where keys are objective IDs and values are short summaries (under 50 words) of what the user said that covers that objective. Only include objectives that ARE covered. If none are newly covered, return {}.
+Return a JSON object where keys are objective IDs and values are true. Only include objectives that ARE covered. If none are newly covered, return {}.
 
 IMPORTANT: Only evaluate based on USER messages, not the AI's questions or statements.
 
@@ -241,13 +241,16 @@ async def evaluate_objectives(
 ) -> dict:
     """Evaluate which intake objectives have been covered in the conversation.
 
+    Fast yes/no check using Haiku. Detailed summaries are generated later
+    by the post-completion Opus pass.
+
     Args:
         transcript_messages: The conversation as role/content dicts.
         objectives: List of objective dicts from department config, each with id, label, description.
         current_responses: Already-captured responses {objective_id: {value, captured_at}}.
 
     Returns:
-        Dict of newly completed objectives: {objective_id: {"value": "summary", "captured_at": "ISO datetime"}}
+        Dict of newly completed objectives: {objective_id: {"value": "answered", "captured_at": "ISO datetime"}}
         Only includes objectives that are NEW (not already in current_responses).
     """
     if not transcript_messages or not objectives:
@@ -306,15 +309,15 @@ async def evaluate_objectives(
         if not isinstance(extracted, dict):
             return {}
 
-        # Filter to valid remaining objective IDs and wrap with metadata
+        # Filter to valid remaining objective IDs
         now = datetime.now(UTC).isoformat()
         result = {}
-        for obj_id, summary in extracted.items():
+        for obj_id, val in extracted.items():
             if obj_id not in valid_remaining_ids:
                 continue
-            if not summary or not isinstance(summary, str):
+            if not val:
                 continue
-            result[obj_id] = {"value": summary, "captured_at": now}
+            result[obj_id] = {"value": "answered", "captured_at": now}
 
         if result:
             logger.info("Objectives completed: %s", list(result.keys()))
@@ -329,23 +332,134 @@ async def evaluate_objectives(
         return {}
 
 
+# ---------------------------------------------------------------------------
+# Post-completion Opus enrichment
+# ---------------------------------------------------------------------------
+
+_ENRICHMENT_PROMPT = """\
+You are a profile analyst. Read the full intake conversation and extract comprehensive, accurate information about this person.
+
+Extract the following fields based ONLY on what the USER said (never from the AI's questions or assumptions):
+
+PROFILE FIELDS:
+- work_summary: 2-3 sentence description of what they actually do day-to-day
+- daily_tasks: Specific tasks and responsibilities (string, semicolon-separated if multiple)
+- products: Products, projects, or systems they work on (list of strings)
+- ai_tools_used: AI tools they've personally used (list of strings)
+- core_skills: Skills they described having (list of strings)
+- learning_goals: Things they want to learn (list of strings)
+- ai_superpower: What AI capability they'd want most (string)
+- goals: Their goals for the program (list of strings)
+- intake_summary: A concise narrative (3-5 sentences) summarizing who this person is, what they do, their AI experience, and what they want to get out of the program
+
+OBJECTIVE SUMMARIES:
+For each objective ID listed below, write a thorough summary (50-100 words) of what the user shared that addresses it. Use specifics from the conversation.
+
+OBJECTIVES_PLACEHOLDER
+
+Return a JSON object with two keys:
+- "profile": object with the profile fields above (omit any field the user didn't address)
+- "objectives": object mapping objective_id to summary string
+
+Return ONLY valid JSON. No explanation, no markdown, no code fences."""
+
+
+async def enrich_profile_with_opus(
+    transcript_messages: list[dict],
+    objectives: list[dict] | None = None,
+) -> dict | None:
+    """Run a thorough Opus pass over the full transcript to extract rich profile data.
+
+    Called asynchronously after intake completes. Returns a dict with:
+    - "profile": dict of profile fields to update
+    - "objectives": dict of objective_id -> detailed summary
+
+    Returns None on failure.
+    """
+    if not transcript_messages:
+        return None
+
+    # Build objectives section
+    if objectives:
+        obj_lines = [f"- {o['id']}: {o['label']} - {o.get('description', '')}" for o in objectives]
+        obj_text = "\n".join(obj_lines)
+    else:
+        obj_text = "(none)"
+
+    system = _ENRICHMENT_PROMPT.replace("OBJECTIVES_PLACEHOLDER", obj_text)
+
+    # Include full conversation (both user and assistant for context)
+    formatted = []
+    for msg in transcript_messages:
+        role = msg.get("role", "unknown").upper()
+        content = msg.get("content", "")
+        if role in ("USER", "ASSISTANT"):
+            formatted.append(f"{role}: {content}")
+    conversation = "\n\n".join(formatted)
+
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": conversation},
+    ]
+
+    text = ""
+    try:
+        from backend.config import settings
+        response = await call_llm(messages, model=settings.llm_model, stream=False)
+        if not response.content:
+            return None
+
+        text = response.content.strip()
+        # Strip markdown code fences (```json ... ``` or ``` ... ```)
+        if text.startswith("```"):
+            # Remove opening fence line
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+
+        result = json.loads(text)
+        if not isinstance(result, dict):
+            logger.warning("Opus enrichment returned non-dict: %s", type(result))
+            return None
+
+        logger.info(
+            "Opus enrichment complete: profile_fields=%s, objectives=%s",
+            list(result.get("profile", {}).keys()),
+            list(result.get("objectives", {}).keys()),
+        )
+        return result
+
+    except json.JSONDecodeError:
+        logger.warning("Opus enrichment returned invalid JSON: %s", text[:500] if text else "(empty)")
+        return None
+    except Exception:
+        logger.warning("Opus enrichment failed", exc_info=True)
+        return None
+
+
 _SUGGESTIONS_PROMPT = """\
 You are extracting personalized AI activity suggestions from an intake conversation.
 
 Read the conversation and identify 2-4 specific, actionable suggestions the AI coach gave the user for their AI Tuesdays. These are things the user could work on in their first sessions.
 
-Return a JSON array of strings. Each string should be a short (under 20 words), concrete suggestion phrased as an activity, not a question.
+Return a JSON array of objects, each with:
+- "title": short activity title (under 15 words)
+- "description": 1-2 sentence explanation connecting the suggestion to what the user shared
 
-Good: "Build a knowledge-connecting agent for cross-portfolio discovery"
-Bad: "Would you like to explore building agents?"
+Example:
+[{"title": "Build a decision context agent", "description": "Pull relevant context from Confluence and Slack to prep for prioritization calls, saving the manual gathering you described."}]
 
 If the conversation doesn't contain clear suggestions, return an empty array.
 
 No markdown, no code fences, just a JSON array."""
 
 
-async def extract_suggestions(transcript_messages: list[dict]) -> list[str]:
-    """Extract structured suggestions from the intake conversation."""
+async def extract_suggestions(transcript_messages: list[dict]) -> list[dict]:
+    """Extract structured suggestions from the intake conversation.
+
+    Returns list of dicts with 'title' and 'description' keys.
+    """
     if not transcript_messages:
         return []
 
@@ -380,7 +494,17 @@ async def extract_suggestions(transcript_messages: list[dict]) -> list[str]:
         if not isinstance(result, list):
             return []
 
-        return [str(s) for s in result if s][:4]
+        # Normalize: accept both old string format and new object format
+        suggestions = []
+        for item in result[:4]:
+            if isinstance(item, str) and item:
+                suggestions.append({"title": item, "description": ""})
+            elif isinstance(item, dict) and item.get("title"):
+                suggestions.append({
+                    "title": str(item["title"]),
+                    "description": str(item.get("description", "")),
+                })
+        return suggestions
 
     except (json.JSONDecodeError, ValueError):
         logger.warning("Suggestion extraction returned invalid JSON")
