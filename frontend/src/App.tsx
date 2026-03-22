@@ -21,19 +21,24 @@ import type { UserProfile } from './api/types';
 function ChatRoute() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { selectSession, state } = useSession();
+  const loadingRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (sessionId && state.activeSessionId !== sessionId) {
-      selectSession(sessionId);
+    if (sessionId && state.activeSessionId !== sessionId && loadingRef.current !== sessionId) {
+      loadingRef.current = sessionId;
+      selectSession(sessionId).finally(() => {
+        loadingRef.current = null;
+      });
     }
   }, [sessionId, selectSession, state.activeSessionId]);
 
   return <ChatView />;
 }
 
-/** Wraps TipsView and passes the optional :tipId param. */
+/** Wraps TipsView and passes the optional tipId from the URL path. */
 function TipsRoute({ userDepartment }: { userDepartment?: string }) {
-  const { tipId } = useParams<{ tipId: string }>();
+  const { '*': splat } = useParams();
+  const tipId = splat || undefined;
   return <TipsView userDepartment={userDepartment} initialTipId={tipId} />;
 }
 
@@ -189,8 +194,7 @@ function AppContent() {
       >
         <Route index element={<HomeScreen />} />
         <Route path="chat/:sessionId" element={<ChatRoute />} />
-        <Route path="tips" element={<TipsRoute userDepartment={profile?.department} />} />
-        <Route path="tips/:tipId" element={<TipsRoute userDepartment={profile?.department} />} />
+        <Route path="tips/*" element={<TipsRoute userDepartment={profile?.department} />} />
         <Route path="ideas" element={<IdeasView />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
