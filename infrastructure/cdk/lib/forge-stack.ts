@@ -14,6 +14,8 @@ import { Construct } from 'constructs';
 
 interface ForgeStackProps extends cdk.StackProps {
   environment: string;
+  domainName?: string;
+  acmCertificateArn?: string;
 }
 
 export class ForgeStack extends cdk.Stack {
@@ -23,12 +25,12 @@ export class ForgeStack extends cdk.Stack {
     const { environment } = props;
     const prefix = `forge-${environment}`;
 
-    // Context parameters
+    // Context parameters (domain/cert come from props with context override)
     const oidcProviderUrl = this.node.tryGetContext('oidcProviderUrl') || '';
     const oidcClientId = this.node.tryGetContext('oidcClientId') || '';
     const githubRepo = this.node.tryGetContext('githubRepo') || 'rrm3/forge';
-    const domainName = this.node.tryGetContext('domainName') || '';
-    const acmCertificateArn = this.node.tryGetContext('acmCertificateArn') || '';
+    const domainName = props.domainName || '';
+    const acmCertificateArn = props.acmCertificateArn || '';
 
     const tags: Record<string, string> = {
       Environment: environment,
