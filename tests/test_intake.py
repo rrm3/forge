@@ -52,12 +52,12 @@ class TestIntakePrompt:
         content = load_skill("intake")
         assert content is not None
         assert "Intake" in content
-        assert "Phase 1" in content
-        assert "Phase 6" in content
+        assert "read_profile" in content
+        assert "update_profile" in content
 
     def test_intake_prompt_has_resume_handling(self):
         content = load_skill("intake")
-        assert "Resume" in content
+        assert "Resume" in content or "resume" in content.lower()
 
     def test_intake_prompt_has_auto_save(self):
         content = load_skill("intake")

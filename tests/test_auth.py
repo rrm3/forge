@@ -4,73 +4,45 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
+from starlette.datastructures import Headers
 
 from backend.auth import CurrentUser, _DEV_USERS, _verify_oidc_token, verify_token
 
 
-class TestDevMode:
-    """Tests for dev_mode bypass."""
-
-    @pytest.mark.asyncio
-    async def test_dev_mode_defaults_to_alice(self):
-        with patch("backend.auth.settings") as mock_settings:
-            mock_settings.dev_mode = True
-            user = await verify_token(authorization=None, x_dev_user_id=None)
-        assert user.user_id == "alice"
-        assert user.email == "alice@example.com"
-        assert user.name == "Alice"
-
-    @pytest.mark.asyncio
-    async def test_dev_mode_accepts_x_dev_user_id(self):
-        with patch("backend.auth.settings") as mock_settings:
-            mock_settings.dev_mode = True
-            user = await verify_token(authorization=None, x_dev_user_id="bob")
-        assert user.user_id == "bob"
-        assert user.email == "bob@example.com"
-        assert user.name == "Bob"
-
-    @pytest.mark.asyncio
-    async def test_dev_mode_unknown_user_falls_back_to_email(self):
-        with patch("backend.auth.settings") as mock_settings:
-            mock_settings.dev_mode = True
-            user = await verify_token(authorization=None, x_dev_user_id="unknown-user")
-        assert user.user_id == "unknown-user"
-        assert user.email == "unknown-user@example.com"
-
-    @pytest.mark.asyncio
-    async def test_dev_mode_ignores_bearer_token(self):
-        """In dev_mode, even a real-looking token should be bypassed."""
-        with patch("backend.auth.settings") as mock_settings:
-            mock_settings.dev_mode = True
-            user = await verify_token(
-                authorization="Bearer some.jwt.token", x_dev_user_id="carol"
-            )
-        assert user.user_id == "carol"
+def _make_request(headers: dict | None = None) -> Request:
+    """Build a minimal Starlette Request with the given headers."""
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/",
+        "headers": [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()],
+    }
+    return Request(scope)
 
 
 class TestAuthErrors:
-    """Tests for auth error cases in production mode."""
+    """Tests for auth error cases."""
 
     @pytest.mark.asyncio
     async def test_missing_authorization_header_raises_401(self):
-        with patch("backend.auth.settings") as mock_settings:
-            mock_settings.dev_mode = False
-            with pytest.raises(HTTPException) as exc_info:
-                await verify_token(authorization=None, x_dev_user_id=None)
+        request = _make_request()
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token(request=request, authorization=None)
         assert exc_info.value.status_code == 401
         assert "Missing" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_non_bearer_scheme_raises_401(self):
-        with patch("backend.auth.settings") as mock_settings:
-            mock_settings.dev_mode = False
-            with pytest.raises(HTTPException) as exc_info:
-                await verify_token(authorization="Basic dXNlcjpwYXNz", x_dev_user_id=None)
+        request = _make_request()
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token(request=request, authorization="Basic dXNlcjpwYXNz")
         assert exc_info.value.status_code == 401
         assert "Invalid authorization header format" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_invalid_jwt_raises_401(self):
+        request = _make_request()
         with patch("backend.auth.settings") as mock_settings:
             mock_settings.dev_mode = False
             mock_settings.oidc_provider_url = "https://id-staging.digital-science.us"
@@ -82,12 +54,14 @@ class TestAuthErrors:
 
                 with pytest.raises(HTTPException) as exc_info:
                     await verify_token(
-                        authorization="Bearer invalid.jwt.token", x_dev_user_id=None
+                        request=request,
+                        authorization="Bearer invalid.jwt.token",
                     )
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
     async def test_expired_token_raises_401(self):
+        request = _make_request()
         with patch("backend.auth.settings") as mock_settings:
             mock_settings.dev_mode = False
             mock_settings.oidc_provider_url = "https://id-staging.digital-science.us"
@@ -106,10 +80,63 @@ class TestAuthErrors:
 
                     with pytest.raises(HTTPException) as exc_info:
                         await verify_token(
-                            authorization="Bearer some.jwt.token", x_dev_user_id=None
+                            request=request,
+                            authorization="Bearer some.jwt.token",
                         )
         assert exc_info.value.status_code == 401
         assert "expired" in exc_info.value.detail.lower()
+
+
+class TestMasquerade:
+    """Tests for dev_mode masquerade behavior."""
+
+    @pytest.mark.asyncio
+    async def test_masquerade_swaps_identity(self):
+        """In dev_mode with X-Masquerade-As header, identity is swapped."""
+        request = _make_request({"X-Masquerade-As": "bob@example.com"})
+        mock_user = CurrentUser(user_id="real-sub", email="real@example.com", name="Real User")
+
+        with patch("backend.auth.settings") as mock_settings:
+            mock_settings.dev_mode = True
+            with patch("backend.auth._verify_oidc_token", return_value=mock_user):
+                user = await verify_token(
+                    request=request,
+                    authorization="Bearer fake.jwt.token",
+                )
+        assert user.email == "bob@example.com"
+        assert user.user_id != "real-sub"
+
+    @pytest.mark.asyncio
+    async def test_no_masquerade_without_header(self):
+        """Without X-Masquerade-As, identity stays as the real user."""
+        request = _make_request()
+        mock_user = CurrentUser(user_id="real-sub", email="real@example.com", name="Real User")
+
+        with patch("backend.auth.settings") as mock_settings:
+            mock_settings.dev_mode = True
+            with patch("backend.auth._verify_oidc_token", return_value=mock_user):
+                user = await verify_token(
+                    request=request,
+                    authorization="Bearer fake.jwt.token",
+                )
+        assert user.user_id == "real-sub"
+        assert user.email == "real@example.com"
+
+    @pytest.mark.asyncio
+    async def test_masquerade_ignored_in_production(self):
+        """In production mode, X-Masquerade-As is ignored."""
+        request = _make_request({"X-Masquerade-As": "bob@example.com"})
+        mock_user = CurrentUser(user_id="real-sub", email="real@example.com", name="Real User")
+
+        with patch("backend.auth.settings") as mock_settings:
+            mock_settings.dev_mode = False
+            with patch("backend.auth._verify_oidc_token", return_value=mock_user):
+                user = await verify_token(
+                    request=request,
+                    authorization="Bearer fake.jwt.token",
+                )
+        assert user.user_id == "real-sub"
+        assert user.email == "real@example.com"
 
 
 class TestCurrentUser:

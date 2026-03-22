@@ -5,6 +5,7 @@ import pyarrow as pa
 from backend.lance.schemas import (
     BUILTIN_SCHEMAS,
     CURRICULUM_SCHEMA,
+    DEPARTMENT_RESOURCES_SCHEMA,
     DOCUMENT_ID_FIELDS,
     PROFILES_SCHEMA,
     VECTOR_DIM,
@@ -87,12 +88,41 @@ class TestProfilesSchema:
         assert vec_field.type == VECTOR_TYPE
 
 
+class TestDepartmentResourcesSchema:
+    def test_has_required_fields(self):
+        names = DEPARTMENT_RESOURCES_SCHEMA.names
+        expected = [
+            "id",
+            "document_id",
+            "department",
+            "section",
+            "source_file",
+            "content",
+            "metadata",
+            "created_at",
+            "vector",
+        ]
+        assert names == expected
+
+    def test_id_not_nullable(self):
+        assert not DEPARTMENT_RESOURCES_SCHEMA.field("id").nullable
+
+    def test_content_not_nullable(self):
+        assert not DEPARTMENT_RESOURCES_SCHEMA.field("content").nullable
+
+    def test_vector_column_type(self):
+        vec_field = DEPARTMENT_RESOURCES_SCHEMA.field("vector")
+        assert vec_field.type == VECTOR_TYPE
+
+
 class TestBuiltinMappings:
-    def test_builtin_schemas_contains_both_collections(self):
+    def test_builtin_schemas_contains_all_collections(self):
         assert "curriculum" in BUILTIN_SCHEMAS
         assert "profiles" in BUILTIN_SCHEMAS
-        assert len(BUILTIN_SCHEMAS) == 2
+        assert "department_resources" in BUILTIN_SCHEMAS
+        assert len(BUILTIN_SCHEMAS) == 3
 
     def test_document_id_fields(self):
         assert DOCUMENT_ID_FIELDS["curriculum"] == "document_key"
         assert DOCUMENT_ID_FIELDS["profiles"] == "user_id"
+        assert DOCUMENT_ID_FIELDS["department_resources"] == "document_id"

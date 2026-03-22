@@ -33,16 +33,19 @@ class TestProfileSchemaExpansion:
         assert profile.intake_completed_at is None
 
     def test_ai_proficiency_model(self):
-        """AIProficiency model should have 5 dimensions."""
+        """AIProficiency model should have level and rationale."""
         prof = AIProficiency(
-            operational_fluency=3,
-            strategic_delegation=4,
-            discernment=3,
-            security_awareness=2,
-            automation_readiness=1,
+            level=3,
+            rationale="Regular chatbot user with some customization",
         )
-        assert prof.operational_fluency == 3
-        assert prof.automation_readiness == 1
+        assert prof.level == 3
+        assert "chatbot" in prof.rationale
+
+    def test_ai_proficiency_defaults(self):
+        """AIProficiency defaults to level 0 and empty rationale."""
+        prof = AIProficiency()
+        assert prof.level == 0
+        assert prof.rationale == ""
 
     def test_profile_with_all_fields(self):
         """Profile should accept all v2 fields."""
@@ -56,17 +59,14 @@ class TestProfileSchemaExpansion:
             ai_tools_used=["ChatGPT", "Claude"],
             ai_superpower="Build prototypes users can test",
             ai_proficiency=AIProficiency(
-                operational_fluency=3,
-                strategic_delegation=4,
-                discernment=3,
-                security_awareness=2,
-                automation_readiness=1,
+                level=3,
+                rationale="Uses AI regularly with some customization",
             ),
             intake_summary="Alice is a PM with strong delegation instincts.",
             intake_completed_at=datetime(2026, 3, 25, 10, 30, tzinfo=UTC),
         )
         assert profile.products == ["Dimensions", "Figshare"]
-        assert profile.ai_proficiency.strategic_delegation == 4
+        assert profile.ai_proficiency.level == 3
         assert profile.intake_completed_at is not None
 
     @pytest.mark.asyncio
@@ -84,11 +84,8 @@ class TestProfileSchemaExpansion:
         # Save proficiency
         await repos["profiles"].update("u1", {
             "ai_proficiency": {
-                "operational_fluency": 3,
-                "strategic_delegation": 2,
-                "discernment": 4,
-                "security_awareness": 3,
-                "automation_readiness": 1,
+                "level": 3,
+                "rationale": "Regular user with customization",
             }
         })
         loaded = await repos["profiles"].get("u1")

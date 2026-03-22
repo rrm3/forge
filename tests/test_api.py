@@ -13,13 +13,22 @@ from fastapi.testclient import TestClient
 # Force dev_mode before importing the app
 os.environ["DEV_MODE"] = "true"
 
+from backend.auth import CurrentUser, verify_token
 from backend.main import app, repos, storage
 from backend.models import Idea, JournalEntry, Session, UserProfile
 from backend.storage import save_transcript
 from backend.models import Message
 
 
-DEV_HEADERS = {"X-Dev-User-Id": "alice"}
+# Override auth dependency to return a fake user for tests
+_test_user = CurrentUser(user_id="alice", email="alice@example.com", name="Alice")
+
+
+async def _override_verify_token():
+    return _test_user
+
+
+app.dependency_overrides[verify_token] = _override_verify_token
 
 
 @pytest.fixture(autouse=True)
@@ -59,7 +68,7 @@ class TestHealth:
 
 class TestSessions:
     def test_create_session(self, client):
-        resp = client.post("/api/sessions", headers=DEV_HEADERS)
+        resp = client.post("/api/sessions")
         assert resp.status_code == 200
         data = resp.json()
         assert "session_id" in data
@@ -67,56 +76,55 @@ class TestSessions:
         assert data["title"] == ""
 
     def test_list_sessions_empty(self, client):
-        resp = client.get("/api/sessions", headers=DEV_HEADERS)
+        resp = client.get("/api/sessions")
         assert resp.status_code == 200
         assert resp.json() == []
 
     def test_list_sessions(self, client):
         # Create two sessions
-        client.post("/api/sessions", headers=DEV_HEADERS)
-        client.post("/api/sessions", headers=DEV_HEADERS)
+        client.post("/api/sessions")
+        client.post("/api/sessions")
 
-        resp = client.get("/api/sessions", headers=DEV_HEADERS)
+        resp = client.get("/api/sessions")
         assert resp.status_code == 200
         assert len(resp.json()) == 2
 
     def test_get_session(self, client):
-        create_resp = client.post("/api/sessions", headers=DEV_HEADERS)
+        create_resp = client.post("/api/sessions")
         sid = create_resp.json()["session_id"]
 
-        resp = client.get(f"/api/sessions/{sid}", headers=DEV_HEADERS)
+        resp = client.get(f"/api/sessions/{sid}")
         assert resp.status_code == 200
         data = resp.json()
         assert data["session_id"] == sid
         assert data["transcript"] == []
 
     def test_get_session_not_found(self, client):
-        resp = client.get("/api/sessions/nonexistent", headers=DEV_HEADERS)
+        resp = client.get("/api/sessions/nonexistent")
         assert resp.status_code == 404
 
     def test_delete_session(self, client):
-        create_resp = client.post("/api/sessions", headers=DEV_HEADERS)
+        create_resp = client.post("/api/sessions")
         sid = create_resp.json()["session_id"]
 
-        resp = client.delete(f"/api/sessions/{sid}", headers=DEV_HEADERS)
+        resp = client.delete(f"/api/sessions/{sid}")
         assert resp.status_code == 200
         assert resp.json()["status"] == "deleted"
 
         # Verify it's gone
-        resp = client.get(f"/api/sessions/{sid}", headers=DEV_HEADERS)
+        resp = client.get(f"/api/sessions/{sid}")
         assert resp.status_code == 404
 
     def test_delete_session_not_found(self, client):
-        resp = client.delete("/api/sessions/nonexistent", headers=DEV_HEADERS)
+        resp = client.delete("/api/sessions/nonexistent")
         assert resp.status_code == 404
 
     def test_rename_session(self, client):
-        create_resp = client.post("/api/sessions", headers=DEV_HEADERS)
+        create_resp = client.post("/api/sessions")
         sid = create_resp.json()["session_id"]
 
         resp = client.patch(
             f"/api/sessions/{sid}",
-            headers=DEV_HEADERS,
             json={"title": "My Chat"},
         )
         assert resp.status_code == 200
@@ -125,7 +133,6 @@ class TestSessions:
     def test_rename_session_not_found(self, client):
         resp = client.patch(
             "/api/sessions/nonexistent",
-            headers=DEV_HEADERS,
             json={"title": "Nope"},
         )
         assert resp.status_code == 404
@@ -146,7 +153,7 @@ class TestSessions:
         loop.run_until_complete(repos["sessions"].create(s2))
         loop.close()
 
-        resp = client.get("/api/sessions", headers=DEV_HEADERS)
+        resp = client.get("/api/sessions")
         data = resp.json()
         assert len(data) == 2
         assert data[0]["session_id"] == "s2"
@@ -173,48 +180,44 @@ class TestProfile:
 
     def test_get_profile(self, client):
         self._seed_profile()
-        resp = client.get("/api/profile", headers=DEV_HEADERS)
+        resp = client.get("/api/profile")
         assert resp.status_code == 200
         data = resp.json()
         assert data["name"] == "Alice"
         assert data["department"] == "R&D"
 
-    def test_get_profile_not_found(self, client):
-        resp = client.get("/api/profile", headers=DEV_HEADERS)
-        assert resp.status_code == 404
+    def test_get_profile_auto_creates(self, client):
+        """Profile is auto-created on first access from auth claims."""
+        resp = client.get("/api/profile")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["user_id"] == "alice"
+        assert data["email"] == "alice@example.com"
 
     def test_update_profile(self, client):
         self._seed_profile()
         resp = client.put(
             "/api/profile",
-            headers=DEV_HEADERS,
             json={"title": "Senior Engineer"},
         )
         assert resp.status_code == 200
         assert resp.json()["title"] == "Senior Engineer"
 
-    def test_update_profile_not_found(self, client):
+    def test_update_profile_auto_creates(self, client):
+        """Profile is auto-created on update if it doesn't exist."""
         resp = client.put(
             "/api/profile",
-            headers=DEV_HEADERS,
-            json={"title": "Nope"},
+            json={"title": "New Title"},
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        assert resp.json()["title"] == "New Title"
 
     def test_update_profile_empty_body(self, client):
         resp = client.put(
             "/api/profile",
-            headers=DEV_HEADERS,
             json={},
         )
         assert resp.status_code == 400
-
-    def test_profile_requires_auth(self, client):
-        """Profile endpoint returns 401 without dev header when not in dev mode.
-        In dev mode it defaults to alice, so this just verifies the route is callable."""
-        resp = client.get("/api/profile")
-        # In dev mode, defaults to alice - should be 404 (no profile seeded)
-        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +226,7 @@ class TestProfile:
 
 class TestJournal:
     def test_list_journal_empty(self, client):
-        resp = client.get("/api/journal", headers=DEV_HEADERS)
+        resp = client.get("/api/journal")
         assert resp.status_code == 200
         assert resp.json() == []
 
@@ -239,7 +242,7 @@ class TestJournal:
         loop.run_until_complete(repos["journal"].create(entry))
         loop.close()
 
-        resp = client.get("/api/journal", headers=DEV_HEADERS)
+        resp = client.get("/api/journal")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 1
@@ -258,7 +261,7 @@ class TestJournal:
             loop.run_until_complete(repos["journal"].create(entry))
         loop.close()
 
-        resp = client.get("/api/journal?limit=3", headers=DEV_HEADERS)
+        resp = client.get("/api/journal?limit=3")
         assert resp.status_code == 200
         assert len(resp.json()) == 3
 
@@ -274,7 +277,7 @@ class TestJournal:
         loop.run_until_complete(repos["journal"].create(entry))
         loop.close()
 
-        resp = client.get("/api/journal", headers=DEV_HEADERS)
+        resp = client.get("/api/journal")
         assert resp.status_code == 200
         assert resp.json() == []
 
@@ -285,7 +288,7 @@ class TestJournal:
 
 class TestIdeas:
     def test_list_ideas_empty(self, client):
-        resp = client.get("/api/ideas", headers=DEV_HEADERS)
+        resp = client.get("/api/ideas")
         assert resp.status_code == 200
         assert resp.json() == []
 
@@ -303,7 +306,7 @@ class TestIdeas:
         loop.run_until_complete(repos["ideas"].create(idea))
         loop.close()
 
-        resp = client.get("/api/ideas", headers=DEV_HEADERS)
+        resp = client.get("/api/ideas")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 1
@@ -330,7 +333,7 @@ class TestIdeas:
         loop.run_until_complete(repos["ideas"].create(closed_idea))
         loop.close()
 
-        resp = client.get("/api/ideas?status=open", headers=DEV_HEADERS)
+        resp = client.get("/api/ideas?status=open")
         data = resp.json()
         assert len(data) == 1
         assert data[0]["status"] == "open"
@@ -348,7 +351,7 @@ class TestIdeas:
             loop.run_until_complete(repos["ideas"].create(idea))
         loop.close()
 
-        resp = client.get("/api/ideas?limit=2", headers=DEV_HEADERS)
+        resp = client.get("/api/ideas?limit=2")
         assert len(resp.json()) == 2
 
 

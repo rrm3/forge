@@ -338,7 +338,9 @@ class TestReactLoop:
         assert tool_result_events[0].result == "Echo: ping"
 
         assert len(text_events) > 0
-        assert "".join(e.text for e in text_events) == "Got it!"
+        # The loop inserts a "\n\n" separator before text on iteration > 0
+        full_text = "".join(e.text for e in text_events)
+        assert full_text.strip() == "Got it!"
 
         assert len(done_events) == 1
         # Usage should be accumulated across both calls

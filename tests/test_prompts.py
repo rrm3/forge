@@ -10,8 +10,8 @@ class TestSessionTypePrompts:
     def test_load_tip_prompt(self):
         content = load_skill("tip")
         assert content is not None
-        assert "Share a Tip" in content
-        assert "save_journal" in content
+        assert "Tip" in content
+        assert "prepare_tip" in content
 
     def test_load_stuck_prompt(self):
         content = load_skill("stuck")
@@ -46,9 +46,13 @@ class TestSessionTypePrompts:
             assert content is not None, f"Failed to load {session_type}"
             assert "## Tone" in content, f"{session_type} prompt missing Tone section"
 
-    def test_all_prompts_have_conversation_flow(self):
-        """Every session-type prompt should include a Conversation Flow section."""
+    def test_all_prompts_have_flow_section(self):
+        """Every session-type prompt should include a flow/process section."""
         for session_type in ["tip", "stuck", "brainstorm", "wrapup"]:
             content = load_skill(session_type)
             assert content is not None, f"Failed to load {session_type}"
-            assert "## Conversation Flow" in content, f"{session_type} prompt missing Conversation Flow"
+            has_flow = (
+                "## Conversation Flow" in content
+                or "## The Process" in content
+            )
+            assert has_flow, f"{session_type} prompt missing flow/process section"
