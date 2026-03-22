@@ -2,8 +2,70 @@ import { useEffect, useState, useRef } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './auth/useAuth';
 
+const LOADING_MESSAGES = [
+  'Warming up the neurons...',
+  'Brewing a fresh pot of AI...',
+  'Convincing the hamsters to run faster...',
+  'Reticulating splines...',
+  'Calibrating the flux capacitor...',
+  'Asking the cloud nicely...',
+  'Untangling the neural net...',
+  'Feeding the machine learning...',
+  'Polishing the algorithms...',
+  'Spinning up something clever...',
+  'Consulting the oracle...',
+  'Waking up the robots...',
+  'Defragmenting the imagination...',
+  'Loading the good vibes...',
+  'Sharpening the pixels...',
+  'Tuning the hyperparameters...',
+  'Summoning the AI overlords...',
+  'Doing some light reading (all of Wikipedia)...',
+  'Putting on our thinking cap...',
+  'Compiling the witty remarks...',
+  'Herding the electrons...',
+  'Training on your patience...',
+  'Optimizing the coffee-to-code ratio...',
+  'Shuffling the training data...',
+  'Negotiating with the cloud servers...',
+  'Downloading more RAM...',
+  'Aligning the attention heads...',
+  'Crunching the really big numbers...',
+  'Warming the GPU seats...',
+  'Asking ChatGPT for directions (just kidding)...',
+  'Teaching old models new tricks...',
+  'Inflating the word embeddings...',
+  'Backpropagating through time...',
+  'Searching for the meaning of life (found 42)...',
+  'Running on vibes and gradient descent...',
+  'Performing interpretive matrix multiplication...',
+  'Checking if P equals NP (still no)...',
+  'Dusting off the transformer blocks...',
+  'Rounding up the floating points...',
+  'Counting all the parameters...',
+  'Rehearsing small talk...',
+  'Stretching before the sprint...',
+  'Queuing up the inspiration...',
+  'Double-checking the ones and zeros...',
+  'Winding up the inference engine...',
+  'Preheating the silicon...',
+  'Juggling tensors...',
+  'Composing a loading haiku...',
+  'Synchronizing the butterflies...',
+  'Almost there, probably...',
+];
+
 /** Loading spinner styled to match DS Identity's auth loading screen. */
 function LoadingScreen() {
+  const [msgIndex, setMsgIndex] = useState(() => Math.floor(Math.random() * LOADING_MESSAGES.length));
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setMsgIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
+    }, 3000);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -22,7 +84,10 @@ function LoadingScreen() {
       backgroundRepeat: 'no-repeat',
       backgroundAttachment: 'fixed',
     }}>
-      <style>{`@keyframes forge-spin { to { transform: rotate(360deg) } }`}</style>
+      <style>{`
+        @keyframes forge-spin { to { transform: rotate(360deg) } }
+        @keyframes forge-fade { 0% { opacity: 0; transform: translateY(4px); } 100% { opacity: 1; transform: translateY(0); } }
+      `}</style>
       <div style={{
         width: '100%',
         maxWidth: 476,
@@ -30,8 +95,10 @@ function LoadingScreen() {
         borderRadius: 16,
         boxShadow: '0px 4px 6px -4px rgba(0, 0, 0, 0.1), 0px 1px 29px -3px rgba(0, 0, 0, 0.16)',
         display: 'flex',
-        justifyContent: 'center',
-        padding: '52px 52px',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 16,
+        padding: '40px 52px',
       }}>
         <div style={{
           width: 32,
@@ -41,6 +108,18 @@ function LoadingScreen() {
           borderRadius: '50%',
           animation: 'forge-spin 0.6s linear infinite',
         }} />
+        <div
+          key={msgIndex}
+          style={{
+            fontFamily: 'Satoshi, sans-serif',
+            fontSize: 14,
+            fontWeight: 500,
+            color: '#64748B',
+            animation: 'forge-fade 0.3s ease-out',
+          }}
+        >
+          {LOADING_MESSAGES[msgIndex]}
+        </div>
       </div>
     </div>
   );
