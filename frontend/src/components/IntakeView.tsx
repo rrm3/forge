@@ -327,7 +327,11 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
                 borderColor: 'var(--color-border)',
               }}
             >
-              <div className="p-2">
+              <div className="p-2 cursor-text" onClick={(e) => {
+                if ((e.target as HTMLElement).tagName !== 'TEXTAREA') {
+                  textareaRef.current?.focus();
+                }
+              }}>
                 <textarea
                   ref={textareaRef}
                   rows={1}
