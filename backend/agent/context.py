@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.models import UserProfile
+from backend.models import UserIdea, UserProfile
 
 _BASE_PROMPT = (
     "You are an AI assistant for Digital Science's AI Tuesdays program. "
@@ -26,6 +26,7 @@ def build_system_prompt(
     session_type: str = "chat",
     department_config: dict | None = None,
     intake_responses: dict | None = None,
+    idea: UserIdea | None = None,
 ) -> str:
     """Build a system prompt with optional profile, memory, and skill content.
 
@@ -100,7 +101,43 @@ def build_system_prompt(
             # Fallback: no department config available, use legacy checklist
             parts.append(_build_intake_checklist(profile))
 
+    # Idea context for idea-focused chats
+    if idea:
+        idea_section = _build_idea_context(idea)
+        if idea_section:
+            parts.append(idea_section)
+
     return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Idea context
+# ---------------------------------------------------------------------------
+
+def _build_idea_context(idea: UserIdea) -> str:
+    """Build a system prompt section for idea-focused coaching chats."""
+    lines = [
+        "## Idea Context",
+        f"The user wants to explore this idea: **{idea.title}**",
+    ]
+    if idea.description:
+        lines.append(f"\n{idea.description}")
+    if idea.tags:
+        lines.append(f"\nTags: {', '.join(idea.tags)}")
+    lines.append(f"Status: {idea.status}")
+    lines.append(f"Idea ID: {idea.idea_id}")
+    lines.append("")
+    lines.append(
+        "Your role is to coach them on this idea. Help them refine it, break it into "
+        "actionable steps, identify what they'd need to build or learn, and think through "
+        "how it connects to their actual work. Be specific and practical."
+    )
+    lines.append(
+        "When the idea evolves during conversation, call `update_idea` with the idea_id "
+        "above to update the description, status, or tags. This keeps the idea record "
+        "in sync with what you discuss."
+    )
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

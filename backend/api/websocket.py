@@ -140,6 +140,7 @@ async def _heartbeat_loop(ws: WebSocket):
 
 async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: dict):
     session_type = msg.get("type", "chat")
+    idea_id = msg.get("idea_id")
     session_id = str(uuid.uuid4())
     title = "Getting Started" if session_type == "intake" else ""
     session = Session(session_id=session_id, user_id=user.user_id, title=title, type=session_type)
@@ -147,9 +148,16 @@ async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: d
 
     await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
 
+    # If starting a chat linked to an idea, look it up and link the session
+    idea = None
+    if idea_id and _deps.user_ideas_repo:
+        idea = await _deps.user_ideas_repo.get(user.user_id, idea_id)
+        if idea:
+            await _deps.user_ideas_repo.link_session(user.user_id, idea_id, session_id)
+
     mode = msg.get("mode", "text")
     if mode == "text":
-        await _run_agent(sender, user, session_id, "", is_new_session=True, session_type=session_type)
+        await _run_agent(sender, user, session_id, "", is_new_session=True, session_type=session_type, idea=idea)
 
 
 async def _handle_chat(sender: MessageSender, user: CurrentUser, msg: dict):
@@ -176,7 +184,7 @@ def _handle_cancel(msg: dict):
             event.set()
 
 
-async def _run_agent(sender: MessageSender, user: CurrentUser, session_id: str, user_message: str, is_new_session: bool = False, session_type: str = "chat"):
+async def _run_agent(sender: MessageSender, user: CurrentUser, session_id: str, user_message: str, is_new_session: bool = False, session_type: str = "chat", idea=None):
     """Run agent with session mutex (local dev in-process lock)."""
     lock = _get_session_lock(session_id)
 
@@ -200,6 +208,7 @@ async def _run_agent(sender: MessageSender, user: CurrentUser, session_id: str, 
                 is_new_session=is_new_session,
                 session_type=session_type,
                 cancel_check=lambda: cancel_event.is_set(),
+                idea=idea,
             )
         except Exception:
             logger.exception("Agent loop error: session=%s", session_id)

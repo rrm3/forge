@@ -14,7 +14,7 @@ import { createUserIdea } from '../api/client';
 interface IdeaPreviewCardProps {
   initial: { title: string; description: string; tags: string[] };
   sessionId: string;
-  onSaved: () => void;
+  onSaved: (saved?: { idea_id: string; title: string; description: string; tags: string[] }) => void;
   onSkip: () => void;
 }
 
@@ -25,6 +25,7 @@ export function IdeaPreviewCard({ initial, sessionId, onSaved, onSkip }: IdeaPre
   const [tagInput, setTagInput] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -55,14 +56,16 @@ export function IdeaPreviewCard({ initial, sessionId, onSaved, onSkip }: IdeaPre
     setSaving(true);
     setError(null);
     try {
-      await createUserIdea({
+      const result = await createUserIdea({
         title,
         description,
         tags,
         source: 'brainstorm',
         source_session_id: sessionId,
       });
-      onSaved();
+      setSaved(true);
+      setSaving(false);
+      onSaved({ idea_id: result.idea_id, title, description, tags });
     } catch (err) {
       console.error('Failed to save idea:', err);
       setError('Failed to save. Please try again.');
@@ -81,26 +84,28 @@ export function IdeaPreviewCard({ initial, sessionId, onSaved, onSkip }: IdeaPre
           <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
             Idea to explore
           </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsEditing(!isEditing)}
-              className="text-xs font-medium px-2 py-1 rounded-md transition-colors"
-              style={{
-                color: isEditing ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                backgroundColor: isEditing ? 'var(--color-primary-subtle)' : 'transparent',
-              }}
-            >
-              {isEditing ? 'Preview' : 'Edit'}
-            </button>
-            <button
-              onClick={onSkip}
-              className="text-xs font-medium px-2 py-1 rounded-md transition-colors hover:bg-[var(--color-surface-raised)]"
-              style={{ color: 'var(--color-text-muted)' }}
-              title="Dismiss"
-            >
-              <X className="w-3.5 h-3.5" strokeWidth={2} />
-            </button>
-          </div>
+          {!saved && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsEditing(!isEditing)}
+                className="text-xs font-medium px-2 py-1 rounded-md transition-colors"
+                style={{
+                  color: isEditing ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  backgroundColor: isEditing ? 'var(--color-primary-subtle)' : 'transparent',
+                }}
+              >
+                {isEditing ? 'Preview' : 'Edit'}
+              </button>
+              <button
+                onClick={onSkip}
+                className="text-xs font-medium px-2 py-1 rounded-md transition-colors hover:bg-[var(--color-surface-raised)]"
+                style={{ color: 'var(--color-text-muted)' }}
+                title="Dismiss"
+              >
+                <X className="w-3.5 h-3.5" strokeWidth={2} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -215,28 +220,35 @@ export function IdeaPreviewCard({ initial, sessionId, onSaved, onSkip }: IdeaPre
         {error && (
           <p className="text-xs mb-2" style={{ color: 'var(--color-error, #DC2626)' }}>{error}</p>
         )}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleSave}
-            disabled={saving || !title.trim() || !description.trim()}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
-            style={{ backgroundColor: 'var(--color-primary)' }}
-          >
-            {saving ? (
-              <div className="w-4 h-4 border-2 border-t-transparent border-white rounded-full animate-spin" />
-            ) : (
-              <Bookmark className="w-4 h-4" strokeWidth={2} />
-            )}
-            {saving ? 'Saving...' : 'Save Idea'}
-          </button>
-          <button
-            onClick={onSkip}
-            className="text-sm font-medium transition-colors"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
-            Skip
-          </button>
-        </div>
+        {saved ? (
+          <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-success, #059669)' }}>
+            <Bookmark className="w-4 h-4" strokeWidth={2} />
+            <span className="font-medium">Saved to your Ideas</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSave}
+              disabled={saving || !title.trim() || !description.trim()}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
+              style={{ backgroundColor: 'var(--color-primary)' }}
+            >
+              {saving ? (
+                <div className="w-4 h-4 border-2 border-t-transparent border-white rounded-full animate-spin" />
+              ) : (
+                <Bookmark className="w-4 h-4" strokeWidth={2} />
+              )}
+              {saving ? 'Saving...' : 'Save Idea'}
+            </button>
+            <button
+              onClick={onSkip}
+              className="text-sm font-medium transition-colors"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              Skip
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -53,6 +53,7 @@ async def run_agent_session(
     is_new_session: bool = False,
     session_type: str = "chat",
     cancel_check: Callable[[], bool] | None = None,
+    idea: UserIdea | None = None,
 ) -> None:
     """Run the ReAct agent loop for a session, streaming results via sender.
 
@@ -67,6 +68,7 @@ async def run_agent_session(
         is_new_session: Whether this is a new session (triggers title generation).
         session_type: Session type (chat, tip, stuck, brainstorm, wrapup, intake).
         cancel_check: Optional callable that returns True if the session is cancelled.
+        idea: Optional UserIdea to provide context for idea-focused chat.
     """
     # Load session transcript
     transcript: list[Message] = []
@@ -114,6 +116,7 @@ async def run_agent_session(
         session_type=session_type,
         department_config=department_config,
         intake_responses=intake_responses,
+        idea=idea,
     )
 
     # Build tool context

@@ -192,7 +192,7 @@ export function ChatView() {
               <IdeaPreviewCard
                 initial={state.ideaReady}
                 sessionId={state.activeSessionId || ''}
-                onSaved={() => dispatch({ type: 'SET_IDEA_READY', idea: null })}
+                onSaved={() => {}}
                 onSkip={() => dispatch({ type: 'SET_IDEA_READY', idea: null })}
               />
             )}
@@ -213,7 +213,11 @@ export function ChatView() {
               borderColor: 'var(--color-border)',
             }}
           >
-            <div className="p-2">
+            <div className="p-2 cursor-text" onClick={(e) => {
+              if ((e.target as HTMLElement).tagName !== 'TEXTAREA') {
+                textareaRef.current?.focus();
+              }
+            }}>
               <textarea
                 ref={textareaRef}
                 rows={1}

@@ -38,6 +38,7 @@ interface SessionState {
   tipReady: { title: string; content: string; tags: string[]; department: string } | null;
   tipPublished: boolean;
   ideaReady: { title: string; description: string; tags: string[] } | null;
+  ideaContext: { idea_id: string; title: string; description: string; tags: string[] } | null;
 }
 
 type SessionAction =
@@ -57,6 +58,7 @@ type SessionAction =
   | { type: 'SET_TIP_READY'; tip: { title: string; content: string; tags: string[]; department: string } }
   | { type: 'SET_TIP_PUBLISHED' }
   | { type: 'SET_IDEA_READY'; idea: { title: string; description: string; tags: string[] } | null }
+  | { type: 'SET_IDEA_CONTEXT'; idea: { idea_id: string; title: string; description: string; tags: string[] } | null }
   | { type: 'DESELECT_SESSION' };
 
 const initialState: SessionState = {
@@ -73,6 +75,7 @@ const initialState: SessionState = {
   tipReady: null,
   tipPublished: false,
   ideaReady: null,
+  ideaContext: null,
 };
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
@@ -148,8 +151,11 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
     case 'SET_IDEA_READY':
       return { ...state, ideaReady: action.idea };
 
+    case 'SET_IDEA_CONTEXT':
+      return { ...state, ideaContext: action.idea };
+
     case 'DESELECT_SESSION':
-      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false, tipReady: null, tipPublished: false, ideaReady: null };
+      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false, tipReady: null, tipPublished: false, ideaReady: null, ideaContext: null };
 
     default:
       return state;
@@ -165,7 +171,7 @@ interface SessionContextType {
   removeSession: (id: string) => Promise<void>;
   updateSessionTitle: (id: string, title: string) => Promise<void>;
   sendChatMessage: (message: string) => void;
-  startTypedSession: (type: SessionType) => void;
+  startTypedSession: (type: SessionType, ideaId?: string) => void;
   cancelStreaming: () => void;
 }
 
@@ -413,11 +419,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const startTypedSession = useCallback(
-    (type: SessionType) => {
+    (type: SessionType, ideaId?: string) => {
       dispatch({ type: 'SET_STREAMING', isStreaming: true });
       dispatch({ type: 'CLEAR_STREAMING_TEXT' });
       accumulatedTextRef.current = '';
-      forgeWs.startSession(type);
+      forgeWs.startSession(type, ideaId);
     },
     []
   );

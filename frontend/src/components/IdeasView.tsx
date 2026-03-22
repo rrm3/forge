@@ -51,7 +51,7 @@ function statusColor(status: string): string {
 
 export function IdeasView() {
   const navigate = useNavigate();
-  const { startTypedSession } = useSession();
+  const { startTypedSession, dispatch } = useSession();
   const [ideas, setIdeas] = useState<UserIdea[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -145,7 +145,14 @@ export function IdeasView() {
                 onRequestDelete={() => { setConfirmDeleteId(idea.idea_id); setMenuOpenId(null); }}
                 onConfirmDelete={() => handleDelete(idea.idea_id)}
                 onCancelDelete={() => setConfirmDeleteId(null)}
-                onChat={() => startTypedSession('chat')}
+                onChat={() => {
+                  dispatch({
+                    type: 'SET_IDEA_CONTEXT',
+                    idea: { idea_id: idea.idea_id, title: idea.title, description: idea.description, tags: idea.tags },
+                  });
+                  startTypedSession('chat', idea.idea_id);
+                  navigate('/');
+                }}
               />
             ))}
           </div>
