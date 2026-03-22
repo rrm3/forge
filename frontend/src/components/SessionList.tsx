@@ -100,9 +100,10 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete
     e.stopPropagation();
     if (confirmDelete) {
       onDelete();
+      setConfirmDelete(false);
     } else {
       setConfirmDelete(true);
-      setTimeout(() => setConfirmDelete(false), 2000);
+      setTimeout(() => setConfirmDelete(false), 3000);
     }
   }
 
@@ -149,25 +150,23 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete
       </div>
 
       {canDelete && (
-        <button
-          className={[
-            'shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity',
-            confirmDelete ? 'opacity-100 text-red-400' : '',
-          ].join(' ')}
-          style={{ color: confirmDelete ? undefined : 'var(--color-text-muted)' }}
-          onClick={handleDeleteClick}
-          title={confirmDelete ? 'Click again to confirm' : 'Delete'}
-        >
-          {confirmDelete ? (
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-            </svg>
-          ) : (
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          )}
-        </button>
+        confirmDelete ? (
+          <button
+            className="shrink-0 px-1.5 py-0.5 rounded text-xs font-medium text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
+            onClick={handleDeleteClick}
+          >
+            Delete?
+          </button>
+        ) : (
+          <button
+            className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ color: 'var(--color-text-muted)' }}
+            onClick={handleDeleteClick}
+            title="Delete"
+          >
+            <X className="w-3.5 h-3.5" strokeWidth={2} />
+          </button>
+        )
       )}
     </div>
   );
@@ -331,9 +330,13 @@ export function SessionList({ ideaCount }: SessionListProps) {
                         isActive={session.session_id === state.activeSessionId}
                         onSelect={() => navigate(`/chat/${session.session_id}`)}
                         onDelete={async () => {
-                          const wasActive = session.session_id === state.activeSessionId;
-                          await removeSession(session.session_id);
-                          if (wasActive) navigate('/');
+                          try {
+                            const wasActive = session.session_id === state.activeSessionId;
+                            await removeSession(session.session_id);
+                            if (wasActive) navigate('/');
+                          } catch (err) {
+                            console.error('Failed to delete session:', err);
+                          }
                         }}
                         onRename={(title) => updateSessionTitle(session.session_id, title)}
                         canDelete={session.type !== 'intake'}
