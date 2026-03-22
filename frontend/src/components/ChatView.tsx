@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Square, Send, Check } from 'lucide-react';
+import { Square, Send, Check, Lightbulb } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSession } from '../state/SessionContext';
@@ -119,6 +119,32 @@ export function ChatView() {
         {isStreaming ? 'AI is responding...' : ''}
         {isReconnecting ? 'Connection lost. Reconnecting...' : ''}
       </div>
+
+      {/* Idea context banner - visible when chatting about an idea */}
+      {state.ideaContext && (
+        <div
+          className="shrink-0 border-b"
+          style={{ borderColor: 'var(--color-border, #E2E8F0)', backgroundColor: 'var(--color-surface-white, #FFFFFF)' }}
+        >
+          <div className="mx-auto max-w-3xl px-4 py-3 flex items-start gap-3">
+            <Lightbulb
+              className="w-4 h-4 mt-0.5 shrink-0"
+              strokeWidth={1.5}
+              style={{ color: 'var(--color-primary)' }}
+            />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                {state.ideaContext.title}
+              </div>
+              {state.ideaContext.description && (
+                <div className="text-xs mt-0.5 line-clamp-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  {state.ideaContext.description}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto">
