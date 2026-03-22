@@ -300,8 +300,10 @@ export function VoiceButton({
           const ext = audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
           formData.append('file', audioBlob, `recording.${ext}`);
 
+          const token = localStorage.getItem('oidc_id_token');
           const response = await fetch(`${API_BASE}/api/transcribe`, {
             method: 'POST',
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {},
             body: formData,
           });
 
@@ -477,29 +479,20 @@ export function VoiceButton({
     return null;
   };
 
-  // ---- Render: Idle state (gradient mic button) ----
+  // ---- Render: Idle state (simple icon button, matches acumentum) ----
   if (!isRecording) {
     return (
       <div className="inline-flex flex-col items-center">
-        <div className="relative">
-          {/* Pulse ring (behind the button, sized to match) */}
-          <div
-            className="absolute inset-0 rounded-full voice-pulse-ring pointer-events-none"
-            style={{ border: '2px solid #E8F4F8' }}
-          />
-          <button
-            onClick={startRecording}
-            disabled={disabled}
-            className="voice-mic-btn voice-mic-gradient relative flex items-center justify-center rounded-full
-              w-14 h-14 md:w-10 md:h-10
-              transition-colors duration-150"
-            title={tooltipText}
-            aria-label="Record voice message (CapsLock)"
-            role="button"
-          >
-            <Mic className="w-5 h-5 text-white" strokeWidth={1.5} />
-          </button>
-        </div>
+        <button
+          onClick={startRecording}
+          disabled={disabled}
+          className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150 hover:bg-[var(--color-surface-raised)]"
+          style={{ color: 'var(--color-text-muted)' }}
+          title={tooltipText}
+          aria-label="Record voice message (CapsLock)"
+        >
+          <Mic className="w-5 h-5" strokeWidth={1.5} />
+        </button>
         {renderError()}
       </div>
     );

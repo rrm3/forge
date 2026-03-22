@@ -150,3 +150,241 @@ def _format_conversation(messages: list[dict]) -> str:
         if role == "user":
             lines.append(f"USER: {content}")
     return "\n\n".join(lines)
+
+
+_PROFICIENCY_PROMPT = """\
+You are scoring a user's AI proficiency based on their intake conversation.
+
+Score on a 1-5 scale:
+1 - Aware: Knows AI exists, hasn't used it meaningfully
+2 - Experimenting: Has tried ChatGPT or similar for basic tasks (writing, search)
+3 - Practicing: Uses AI tools regularly, can prompt effectively, understands limitations
+4 - Proficient: Has built workflows around AI, uses multiple tools, understands technical concepts (embeddings, RAG, agents)
+5 - Advanced: Builds AI applications, fine-tunes models, deep technical understanding, teaches others
+
+Base your score ONLY on what the user themselves described doing, not on their job title or aspirations.
+
+Return ONLY a JSON object with two fields:
+- "level": integer 1-5
+- "rationale": one sentence explaining why
+
+No markdown, no code fences, just JSON."""
+
+
+async def score_ai_proficiency(transcript_messages: list[dict]) -> dict | None:
+    """Score the user's AI proficiency from the full intake transcript.
+
+    Called once after intake completes. Returns {"level": int, "rationale": str}
+    or None if scoring fails.
+    """
+    user_text = _format_conversation(transcript_messages)
+    if not user_text:
+        return None
+
+    messages = [
+        {"role": "system", "content": _PROFICIENCY_PROMPT},
+        {"role": "user", "content": user_text},
+    ]
+
+    try:
+        response = await call_llm(messages, model=EXTRACTION_MODEL, stream=False)
+        if not response.content:
+            return None
+
+        text = response.content.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+
+        result = json.loads(text)
+        if not isinstance(result, dict) or "level" not in result:
+            return None
+
+        level = int(result["level"])
+        if level < 1 or level > 5:
+            return None
+
+        return {"level": level, "rationale": result.get("rationale", "")}
+
+    except (json.JSONDecodeError, ValueError, TypeError):
+        logger.warning("AI proficiency scoring returned invalid response")
+        return None
+    except Exception:
+        logger.warning("AI proficiency scoring failed", exc_info=True)
+        return None
+
+
+_OBJECTIVES_PROMPT_TEMPLATE = """\
+You are evaluating whether an intake conversation has covered specific objectives.
+
+Objectives to evaluate:
+REMAINING_OBJECTIVES_PLACEHOLDER
+
+Already completed (do not re-evaluate):
+COMPLETED_OBJECTIVES_PLACEHOLDER
+
+Based on what the USER said in the conversation below, determine which of the remaining objectives have been adequately covered.
+
+Return a JSON object where keys are objective IDs and values are short summaries (under 50 words) of what the user said that covers that objective. Only include objectives that ARE covered. If none are newly covered, return {}.
+
+IMPORTANT: Only evaluate based on USER messages, not the AI's questions or statements.
+
+Return ONLY valid JSON. No explanation, no markdown, no code fences."""
+
+
+async def evaluate_objectives(
+    transcript_messages: list[dict],
+    objectives: list[dict],
+    current_responses: dict,
+) -> dict:
+    """Evaluate which intake objectives have been covered in the conversation.
+
+    Args:
+        transcript_messages: The conversation as role/content dicts.
+        objectives: List of objective dicts from department config, each with id, label, description.
+        current_responses: Already-captured responses {objective_id: {value, captured_at}}.
+
+    Returns:
+        Dict of newly completed objectives: {objective_id: {"value": "summary", "captured_at": "ISO datetime"}}
+        Only includes objectives that are NEW (not already in current_responses).
+    """
+    if not transcript_messages or not objectives:
+        return {}
+
+    # Split objectives into remaining vs completed
+    completed_ids = set(current_responses.keys())
+    remaining = [o for o in objectives if o["id"] not in completed_ids]
+    completed = [o for o in objectives if o["id"] in completed_ids]
+
+    if not remaining:
+        return {}
+
+    # Build the prompt
+    remaining_lines = []
+    for o in remaining:
+        remaining_lines.append(f"- {o['id']}: {o['label']} - {o.get('description', '')}")
+    remaining_text = "\n".join(remaining_lines) if remaining_lines else "(none)"
+
+    completed_lines = []
+    for o in completed:
+        completed_lines.append(f"- {o['id']}: {o['label']}")
+    completed_text = "\n".join(completed_lines) if completed_lines else "(none)"
+
+    system = _OBJECTIVES_PROMPT_TEMPLATE.replace(
+        "REMAINING_OBJECTIVES_PLACEHOLDER", remaining_text
+    ).replace(
+        "COMPLETED_OBJECTIVES_PLACEHOLDER", completed_text
+    )
+
+    # Include last 6 messages, USER-only via _format_conversation
+    recent = transcript_messages[-6:] if len(transcript_messages) > 6 else transcript_messages
+
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": _format_conversation(recent)},
+    ]
+
+    valid_remaining_ids = {o["id"] for o in remaining}
+
+    try:
+        response = await call_llm(messages, model=EXTRACTION_MODEL, stream=False)
+        if not response.content:
+            return {}
+
+        text = response.content.strip()
+        # Strip markdown fences if present
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+
+        extracted = json.loads(text)
+
+        if not isinstance(extracted, dict):
+            return {}
+
+        # Filter to valid remaining objective IDs and wrap with metadata
+        now = datetime.now(UTC).isoformat()
+        result = {}
+        for obj_id, summary in extracted.items():
+            if obj_id not in valid_remaining_ids:
+                continue
+            if not summary or not isinstance(summary, str):
+                continue
+            result[obj_id] = {"value": summary, "captured_at": now}
+
+        if result:
+            logger.info("Objectives completed: %s", list(result.keys()))
+
+        return result
+
+    except json.JSONDecodeError:
+        logger.warning("Objective evaluation returned invalid JSON")
+        return {}
+    except Exception:
+        logger.warning("Objective evaluation failed", exc_info=True)
+        return {}
+
+
+_SUGGESTIONS_PROMPT = """\
+You are extracting personalized AI activity suggestions from an intake conversation.
+
+Read the conversation and identify 2-4 specific, actionable suggestions the AI coach gave the user for their AI Tuesdays. These are things the user could work on in their first sessions.
+
+Return a JSON array of strings. Each string should be a short (under 20 words), concrete suggestion phrased as an activity, not a question.
+
+Good: "Build a knowledge-connecting agent for cross-portfolio discovery"
+Bad: "Would you like to explore building agents?"
+
+If the conversation doesn't contain clear suggestions, return an empty array.
+
+No markdown, no code fences, just a JSON array."""
+
+
+async def extract_suggestions(transcript_messages: list[dict]) -> list[str]:
+    """Extract structured suggestions from the intake conversation."""
+    if not transcript_messages:
+        return []
+
+    # Include full conversation - assistant messages have the suggestions
+    recent = transcript_messages[-10:] if len(transcript_messages) > 10 else transcript_messages
+    formatted = []
+    for msg in recent:
+        role = msg.get("role", "unknown").upper()
+        content = msg.get("content", "")
+        if role in ("USER", "ASSISTANT"):
+            formatted.append(f"{role}: {content}")
+    conversation = "\n\n".join(formatted)
+
+    messages = [
+        {"role": "system", "content": _SUGGESTIONS_PROMPT},
+        {"role": "user", "content": conversation},
+    ]
+
+    try:
+        response = await call_llm(messages, model=EXTRACTION_MODEL, stream=False)
+        if not response.content:
+            return []
+
+        text = response.content.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+
+        result = json.loads(text)
+        if not isinstance(result, list):
+            return []
+
+        return [str(s) for s in result if s][:4]
+
+    except (json.JSONDecodeError, ValueError):
+        logger.warning("Suggestion extraction returned invalid JSON")
+        return []
+    except Exception:
+        logger.warning("Suggestion extraction failed", exc_info=True)
+        return []

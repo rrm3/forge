@@ -33,6 +33,9 @@ interface SessionState {
   streamingText: string;
   connectionStatus: ConnectionStatus;
   intakeChecklist: IntakeChecklistItem[];
+  intakeComplete: boolean;
+  intakeSuggestions: string[];
+  tipPublished: { title: string; content: string; tags: string[]; department: string } | null;
 }
 
 type SessionAction =
@@ -48,6 +51,8 @@ type SessionAction =
   | { type: 'CLEAR_STREAMING_TEXT' }
   | { type: 'SET_CONNECTION_STATUS'; status: ConnectionStatus }
   | { type: 'SET_INTAKE_CHECKLIST'; checklist: IntakeChecklistItem[] }
+  | { type: 'SET_INTAKE_COMPLETE'; suggestions: string[] }
+  | { type: 'SET_TIP_PUBLISHED'; tip: { title: string; content: string; tags: string[]; department: string } }
   | { type: 'DESELECT_SESSION' };
 
 const initialState: SessionState = {
@@ -59,6 +64,9 @@ const initialState: SessionState = {
   streamingText: '',
   connectionStatus: 'disconnected',
   intakeChecklist: [],
+  intakeComplete: false,
+  intakeSuggestions: [],
+  tipPublished: null,
 };
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
@@ -122,8 +130,14 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
     case 'SET_INTAKE_CHECKLIST':
       return { ...state, intakeChecklist: action.checklist };
 
+    case 'SET_INTAKE_COMPLETE':
+      return { ...state, intakeComplete: true, intakeSuggestions: action.suggestions };
+
+    case 'SET_TIP_PUBLISHED':
+      return { ...state, tipPublished: action.tip };
+
     case 'DESELECT_SESSION':
-      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false };
+      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false, tipPublished: null };
 
     default:
       return state;
@@ -259,6 +273,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               checklist: (msg as { checklist: IntakeChecklistItem[] }).checklist,
             });
           }
+          break;
+
+        case 'intake_complete':
+          dispatch({
+            type: 'SET_INTAKE_COMPLETE',
+            suggestions: (msg as { suggestions: string[] }).suggestions || [],
+          });
+          break;
+
+        case 'tip_published':
+          dispatch({
+            type: 'SET_TIP_PUBLISHED',
+            tip: {
+              title: (msg as any).title || '',
+              content: (msg as any).content || '',
+              tags: (msg as any).tags || [],
+              department: (msg as any).department || 'Everyone',
+            },
+          });
           break;
 
         case 'error':

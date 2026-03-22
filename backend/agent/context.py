@@ -24,6 +24,8 @@ def build_system_prompt(
     memory: str | None = None,
     skill_instructions: str | None = None,
     session_type: str = "chat",
+    department_config: dict | None = None,
+    intake_responses: dict | None = None,
 ) -> str:
     """Build a system prompt with optional profile, memory, and skill content.
 
@@ -32,6 +34,8 @@ def build_system_prompt(
         memory: Persistent user/project memory to include.
         skill_instructions: Markdown content of an active skill.
         session_type: Session type (chat, intake, tip, stuck, etc.)
+        department_config: Department config with prompt and objectives.
+        intake_responses: Current intake responses (objective_id -> {value, captured_at}).
 
     Returns:
         The assembled system prompt string.
@@ -75,33 +79,186 @@ def build_system_prompt(
     if skill_instructions:
         parts.append(skill_instructions)
 
-    # For intake sessions, inject a live checklist of what's been captured vs what's missing
-    if session_type == "intake" and profile:
-        parts.append(_build_intake_checklist(profile))
+    # For intake sessions, inject department context + objectives + progress
+    if session_type == "intake":
+        if department_config is not None:
+            # Layer 2: Department context
+            dept_ctx = _build_department_context(department_config)
+            if dept_ctx:
+                parts.append(dept_ctx)
+
+            # Layer 3: Intake objectives
+            objectives_section = _build_intake_objectives(department_config)
+            if objectives_section:
+                parts.append(objectives_section)
+
+            # Layer 4: Turn progress
+            progress_section = _build_intake_progress(department_config, intake_responses)
+            if progress_section:
+                parts.append(progress_section)
+        elif profile:
+            # Fallback: no department config available, use legacy checklist
+            parts.append(_build_intake_checklist(profile))
 
     return "\n\n".join(parts)
 
 
-# Required fields for intake completion, with human-readable labels
-_INTAKE_FIELDS = [
-    ("work_summary", "What they work on day-to-day"),
-    ("daily_tasks", "Their daily tasks and responsibilities"),
-    ("ai_tools_used", "AI tools they've tried"),
-    ("ai_proficiency", "AI proficiency level (internal, 1-5 score + rationale)"),
-    ("core_skills", "Their core skills"),
-    ("learning_goals", "What they want to learn"),
-    ("goals", "Goals for the 12 weeks"),
-]
+# ---------------------------------------------------------------------------
+# Layer 2: Department context
+# ---------------------------------------------------------------------------
+
+def _build_department_context(department_config: dict) -> str | None:
+    """Return the department prompt as a section, or None if empty."""
+    prompt = department_config.get("prompt", "")
+    if not prompt or not prompt.strip():
+        return None
+    return f"## Department Context\n{prompt.strip()}"
 
 
-def get_intake_checklist(profile: UserProfile) -> list[dict]:
-    """Return the intake checklist as structured data for the debug UI."""
+# ---------------------------------------------------------------------------
+# Layer 3: Intake objectives
+# ---------------------------------------------------------------------------
+
+def _build_intake_objectives(department_config: dict) -> str | None:
+    """Return objectives formatted as instructions for the AI."""
+    objectives = department_config.get("objectives", [])
+    if not objectives:
+        return None
+    lines = ["## Intake Objectives", "Cover these topics during the conversation:"]
+    for obj in objectives:
+        label = obj.get("label", "")
+        description = obj.get("description", "")
+        lines.append(f"- **{label}**: {description}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Layer 4: Turn progress
+# ---------------------------------------------------------------------------
+
+def _build_intake_progress(
+    department_config: dict,
+    intake_responses: dict | None,
+) -> str | None:
+    """Return done/remaining status built from intake responses."""
+    objectives = department_config.get("objectives", [])
+    if not objectives:
+        return None
+
+    responses = intake_responses or {}
+    done = []
+    remaining = []
+
+    for obj in objectives:
+        obj_id = obj.get("id", "")
+        label = obj.get("label", "")
+        description = obj.get("description", "")
+
+        if obj_id in responses:
+            value = responses[obj_id].get("value", "")
+            summary = _truncate(value, 120)
+            done.append(f"  [x] {label}: {summary}")
+        else:
+            remaining.append((label, description))
+
+    lines = ["## Intake Progress"]
+
+    if not remaining:
+        # All objectives complete
+        lines.append("")
+        lines.append("**ALL OBJECTIVES COMPLETE. THE INTAKE IS DONE.**")
+        lines.append("DO NOT ask any more questions. DO NOT continue the conversation.")
+        lines.append("Give a brief, warm wrap-up acknowledging what you learned about them,")
+        lines.append("then give 2-3 personalized suggestions for their first AI Tuesday.")
+        lines.append("Format suggestions as bullet points so they're easy to scan.")
+        lines.append("End your message there. No follow-up questions.")
+        return "\n".join(lines)
+
+    if done:
+        lines.append("**Completed:**")
+        lines.extend(done)
+
+    if len(remaining) <= 2:
+        # Almost done
+        lines.append("")
+        lines.append(f"**Almost done - only {len(remaining)} item(s) left:**")
+        for label, description in remaining:
+            lines.append(f"  [ ] {label}: {description}")
+        lines.append("")
+        lines.append("Ask about the remaining topic(s), then wrap up. Do not keep going after these.")
+    else:
+        lines.append("**Remaining (steer the conversation toward these):**")
+        for label, description in remaining:
+            lines.append(f"  [ ] {label}: {description}")
+
+    return "\n".join(lines)
+
+
+def _truncate(text: str, max_len: int = 120) -> str:
+    """Truncate text to max_len, adding ellipsis if needed."""
+    if not text:
+        return ""
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3] + "..."
+
+
+# ---------------------------------------------------------------------------
+# Intake checklist (structured data for debug UI)
+# ---------------------------------------------------------------------------
+
+def get_intake_checklist(
+    department_config: dict | None,
+    intake_responses: dict | None,
+    profile: UserProfile | None = None,
+) -> list[dict]:
+    """Return the intake checklist as structured data for the debug UI.
+
+    Uses department_config objectives when available, falls back to
+    legacy _INTAKE_FIELDS + profile.intake_fields_captured.
+    """
+    if department_config is not None:
+        return _get_intake_checklist_from_config(department_config, intake_responses)
+
+    # Fallback: legacy behavior
+    if profile is not None:
+        return _get_intake_checklist_legacy(profile)
+
+    return []
+
+
+def _get_intake_checklist_from_config(
+    department_config: dict,
+    intake_responses: dict | None,
+) -> list[dict]:
+    """Build checklist from department config objectives."""
+    responses = intake_responses or {}
+    objectives = department_config.get("objectives", [])
+    items = []
+    for obj in objectives:
+        obj_id = obj.get("id", "")
+        label = obj.get("label", "")
+        done = obj_id in responses
+        value_str = ""
+        if done:
+            value = responses[obj_id].get("value", "")
+            value_str = _truncate(str(value), 150)
+        items.append({
+            "field": obj_id,
+            "label": label,
+            "done": done,
+            "value": value_str,
+        })
+    return items
+
+
+def _get_intake_checklist_legacy(profile: UserProfile) -> list[dict]:
+    """Legacy checklist using _INTAKE_FIELDS and profile.intake_fields_captured."""
     captured = set(profile.intake_fields_captured) if profile.intake_fields_captured else set()
     items = []
     for field_name, label in _INTAKE_FIELDS:
         done = field_name in captured
         value = getattr(profile, field_name, None) if done else None
-        # Truncate long values for the tooltip
         value_str = ""
         if value:
             if isinstance(value, list):
@@ -116,10 +273,28 @@ def get_intake_checklist(profile: UserProfile) -> list[dict]:
     return items
 
 
+# ---------------------------------------------------------------------------
+# Legacy constants and helpers (kept as fallback)
+# ---------------------------------------------------------------------------
+
+# Required fields for intake completion, with human-readable labels
+_INTAKE_FIELDS = [
+    ("work_summary", "What they work on day-to-day"),
+    ("daily_tasks", "Their daily tasks and responsibilities"),
+    ("ai_tools_used", "AI tools they've tried"),
+    ("core_skills", "Their core skills"),
+    ("learning_goals", "What they want to learn"),
+    ("goals", "Goals for the 12 weeks"),
+]
+
+
 def _build_intake_checklist(profile: UserProfile) -> str:
     """Build a live checklist showing which intake fields are filled vs empty.
     Only counts fields that were captured during the intake conversation,
-    not fields pre-filled from the org chart."""
+    not fields pre-filled from the org chart.
+
+    Legacy fallback - used when no department_config is available.
+    """
     captured = set(profile.intake_fields_captured) if profile.intake_fields_captured else set()
     done = []
     remaining = []
@@ -141,24 +316,19 @@ def _build_intake_checklist(profile: UserProfile) -> str:
 
     if not remaining:
         lines.append("")
-        lines.append("**All fields captured! STOP asking questions.**")
-        lines.append("Call `search` for department resources, give 2-3 personalized suggestions,")
-        lines.append("then call `update_profile` with `intake_completed_at` and `onboarding_complete: true`.")
+        lines.append("**ALL FIELDS CAPTURED. THE INTAKE IS COMPLETE.**")
+        lines.append("DO NOT ask any more questions. DO NOT continue the conversation.")
+        lines.append("Give a brief, warm wrap-up acknowledging what you learned about them,")
+        lines.append("then give 2-3 personalized suggestions for their first AI Tuesday.")
+        lines.append("Format suggestions as bullet points so they're easy to scan.")
+        lines.append("End your message there. No follow-up questions.")
     elif len(remaining) <= 2:
         # Almost done - be very directive
         lines.append("")
         lines.append(f"**Almost done - only {len(remaining)} item(s) left:**")
         lines.extend(remaining)
         lines.append("")
-        # Check if the only remaining items are internal (agent can fill without asking)
-        internal_fields = {"ai_proficiency"}
-        only_internal = all(f in internal_fields for f in remaining_fields)
-        if only_internal:
-            lines.append("IMPORTANT: The remaining field(s) are INTERNAL assessments you fill yourself")
-            lines.append("based on what the user already told you. DO NOT ask more questions.")
-            lines.append("Score them now, call update_profile, then wrap up with suggestions.")
-        else:
-            lines.append("Ask about the remaining topic(s), then wrap up. Do not keep going after these.")
+        lines.append("Ask about the remaining topic(s), then wrap up. Do not keep going after these.")
     else:
         lines.append("**Still needed (steer the conversation toward these):**")
         lines.extend(remaining)

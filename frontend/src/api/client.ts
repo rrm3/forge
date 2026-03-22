@@ -1,4 +1,4 @@
-import type { Session, Message, UserProfile, JournalEntry, Idea } from './types';
+import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, Tip, TipComment } from './types';
 
 let getTokenFn: (() => Promise<string | null>) | null = null;
 let tokenGetterReady: (() => void) | null = null;
@@ -118,6 +118,82 @@ export async function listIdeas(params?: {
     )
   ).toString() : '';
   const res = await fetchWithAuth(`${API_BASE}/api/ideas${qs}`);
+  await checkResponse(res);
+  return res.json();
+}
+
+// Admin API
+
+export async function getAdminAccess(): Promise<{ is_admin: boolean; departments: string[] }> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/access`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function getDepartmentConfig(department: string): Promise<DepartmentConfig> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/departments/${encodeURIComponent(department)}`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function saveDepartmentConfig(department: string, config: DepartmentConfig): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/departments/${encodeURIComponent(department)}`, {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  });
+  await checkResponse(res);
+}
+
+export async function listAdminDepartments(): Promise<string[]> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/departments`);
+  await checkResponse(res);
+  return res.json();
+}
+
+// Tips API
+
+export async function listTips(params?: {
+  department?: string;
+  sort_by?: 'recent' | 'popular';
+  limit?: number;
+}): Promise<Tip[]> {
+  const query = new URLSearchParams();
+  if (params?.department) query.set('department', params.department);
+  if (params?.sort_by) query.set('sort_by', params.sort_by);
+  if (params?.limit) query.set('limit', params.limit.toString());
+  const qs = query.toString();
+  const res = await fetchWithAuth(`${API_BASE}/api/tips${qs ? '?' + qs : ''}`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function getTip(tipId: string): Promise<Tip> {
+  const res = await fetchWithAuth(`${API_BASE}/api/tips/${encodeURIComponent(tipId)}`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function voteTip(tipId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/tips/${encodeURIComponent(tipId)}/vote`, { method: 'POST' });
+  await checkResponse(res);
+}
+
+export async function unvoteTip(tipId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/tips/${encodeURIComponent(tipId)}/vote`, { method: 'DELETE' });
+  await checkResponse(res);
+}
+
+export async function listTipComments(tipId: string): Promise<TipComment[]> {
+  const res = await fetchWithAuth(`${API_BASE}/api/tips/${encodeURIComponent(tipId)}/comments`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function addTipComment(tipId: string, content: string): Promise<TipComment> {
+  const res = await fetchWithAuth(`${API_BASE}/api/tips/${encodeURIComponent(tipId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
   await checkResponse(res);
   return res.json();
 }

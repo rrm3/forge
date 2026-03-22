@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Square, Send } from 'lucide-react';
+import { Square, Send, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSession } from '../state/SessionContext';
+import { useAdminStore } from '../state/adminStore';
 import { MessageBubble, streamingMarkdownComponents } from './MessageBubble';
 import { VoiceButton } from './VoiceButton';
 
-export function ChatView() {
+const TOOL_ROLES = new Set(['tool_call', 'tool_result']);
+
+interface ChatViewProps {
+  onShowTips?: () => void;
+}
+
+export function ChatView({ onShowTips }: ChatViewProps) {
+  const adminMode = useAdminStore((s) => s.adminMode);
   const { state, sendChatMessage, cancelStreaming } = useSession();
   const { messages = [], isStreaming, streamingText, connectionStatus } = state;
 
@@ -122,7 +130,7 @@ export function ChatView() {
           </div>
         ) : (
           <div className="mx-auto max-w-3xl px-4 py-4 space-y-1">
-            {messages.map((msg, i) => (
+            {messages.filter((msg) => adminMode || !TOOL_ROLES.has(msg.role)).map((msg, i) => (
               <MessageBubble key={i} message={msg} />
             ))}
 
@@ -145,6 +153,35 @@ export function ChatView() {
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--color-text-placeholder)', animation: 'bounce 1.4s ease-in-out 0.4s infinite' }} />
                   </div>
                 </div>
+              </div>
+            )}
+
+            {state.tipPublished && !isStreaming && (
+              <div
+                className="my-4 mx-auto max-w-[95%] md:max-w-[85%] rounded-xl border p-5"
+                style={{ backgroundColor: 'var(--color-surface-white)', borderColor: 'var(--color-border)' }}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Check className="w-4 h-4" style={{ color: 'var(--color-success)' }} strokeWidth={1.5} />
+                  <span className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                    Tip Published!
+                  </span>
+                </div>
+                <p className="text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>
+                  {state.tipPublished.title}
+                </p>
+                <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
+                  Shared with {state.tipPublished.department}
+                </p>
+                {onShowTips && (
+                  <button
+                    onClick={onShowTips}
+                    className="text-sm font-medium"
+                    style={{ color: 'var(--color-primary)' }}
+                  >
+                    Browse Tips &rarr;
+                  </button>
+                )}
               </div>
             )}
 
@@ -173,7 +210,7 @@ export function ChatView() {
                 onKeyDown={handleKeyDown}
                 disabled={isStreaming}
                 placeholder="Type or tap mic to respond..."
-                className="w-full resize-none bg-transparent outline-none border-none text-base md:text-sm leading-6 p-1 pb-8 pr-14 overflow-y-auto"
+                className="w-full resize-none bg-transparent outline-none border-none text-base md:text-sm leading-6 p-1 pb-8 pr-24 overflow-y-auto"
                 style={{
                   color: 'var(--color-text-primary)',
                   minHeight: '40px',
@@ -186,45 +223,44 @@ export function ChatView() {
               />
 
               <div className={`absolute bottom-0 right-0 left-0 flex items-center pb-2 px-3 ${isVoiceRecording ? '' : 'justify-end'}`}>
-                {isVoiceRecording ? (
+                <div className={`flex items-center ${isVoiceRecording ? 'w-full' : 'gap-1.5'}`}>
                   <VoiceButton
                     onTranscribedText={handleTranscribedText}
                     onRecordingStateChange={setIsVoiceRecording}
                     textareaRef={textareaRef}
                   />
-                ) : isStreaming ? (
-                  <button
-                    onClick={cancelStreaming}
-                    className="flex items-center justify-center w-14 h-14 md:w-10 md:h-10 rounded-full text-white transition-colors duration-150"
-                    style={{ backgroundColor: 'var(--color-text-secondary)' }}
-                    title="Stop"
-                    aria-label="Stop generating"
-                  >
-                    <Square className="w-4 h-4" fill="currentColor" strokeWidth={0} />
-                  </button>
-                ) : (
-                  <VoiceButton
-                    onTranscribedText={handleTranscribedText}
-                    onRecordingStateChange={setIsVoiceRecording}
-                    textareaRef={textareaRef}
-                  />
-                )}
+                  {!isVoiceRecording && (
+                    isStreaming ? (
+                      <button
+                        onClick={cancelStreaming}
+                        className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150"
+                        style={{ backgroundColor: 'var(--color-text-primary)', color: '#FFFFFF' }}
+                        title="Stop"
+                        aria-label="Stop generating"
+                      >
+                        <Square className="w-4 h-4" fill="currentColor" strokeWidth={0} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleSend}
+                        disabled={!hasInput}
+                        className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150"
+                        style={{
+                          backgroundColor: hasInput ? 'var(--color-text-primary)' : 'transparent',
+                          color: hasInput ? '#FFFFFF' : 'var(--color-text-placeholder)',
+                          cursor: hasInput ? 'pointer' : 'default',
+                        }}
+                        title="Send (Enter)"
+                        aria-label="Send message"
+                      >
+                        <Send className="w-4 h-4" strokeWidth={1.5} />
+                      </button>
+                    )
+                  )}
+                </div>
               </div>
             </div>
           </div>
-
-          {/* Send button - outside the input */}
-          {hasInput && !isVoiceRecording && !isStreaming && (
-            <button
-              onClick={handleSend}
-              className="flex items-center justify-center w-10 h-10 rounded-full text-white transition-all duration-150 shrink-0 mb-1"
-              style={{ backgroundColor: 'var(--color-primary)' }}
-              title="Send (Enter)"
-              aria-label="Send message"
-            >
-              <Send className="w-4 h-4" strokeWidth={1.5} />
-            </button>
-          )}
         </div>
         <p className="text-xs text-center mt-1.5 pb-1 hidden md:block" style={{ color: 'var(--color-text-placeholder)' }}>
           {hintText}

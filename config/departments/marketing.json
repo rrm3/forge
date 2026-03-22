@@ -1,0 +1,47 @@
+{
+  "prompt": "",
+  "objectives": [
+    {
+      "id": "63c2d43b-0678-4ad5-9208-687658b4deab",
+      "label": "What they work on day-to-day",
+      "description": "Understand their actual daily work, not just their job title. Need 2-3 specific details about what they do.",
+      "extraction_key": "work_summary"
+    },
+    {
+      "id": "cc6e02c9-429e-46ff-bcba-b2a45b8909b8",
+      "label": "Their daily tasks and responsibilities",
+      "description": "Specific tasks they do regularly - meetings, reports, tools they use daily.",
+      "extraction_key": "daily_tasks"
+    },
+    {
+      "id": "84718b88-ac61-4498-aca1-d9fbe208975b",
+      "label": "AI tools they've tried",
+      "description": "Which AI tools they've personally used and for what. ChatGPT, Claude, Copilot, etc.",
+      "extraction_key": "ai_tools_used"
+    },
+    {
+      "id": "b6b2f4e8-f09d-4461-8a70-1e7af479083c",
+      "label": "Their core skills",
+      "description": "Skills they consider their strengths - technical, interpersonal, domain expertise.",
+      "extraction_key": "core_skills"
+    },
+    {
+      "id": "502c16aa-bf54-4555-afe1-4a73e54a44a8",
+      "label": "What they want to learn",
+      "description": "What they're curious about or want to get better at with AI.",
+      "extraction_key": "learning_goals"
+    },
+    {
+      "id": "1dd165b4-2c4f-4c12-b20c-520563e34fb6",
+      "label": "Goals for the 12 weeks",
+      "description": "What they want to achieve during the AI Tuesdays program.",
+      "extraction_key": "goals"
+    },
+    {
+      "id": "b6147be3-2c47-48ad-9aad-c74562584c2b",
+      "label": "Starting points for AI Tuesdays",
+      "description": "Identify 2-3 specific, actionable activities they could work on in their first AI Tuesday sessions, based on their role and goals.",
+      "extraction_key": "starting_points"
+    }
+  ]
+}

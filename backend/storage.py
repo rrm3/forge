@@ -175,3 +175,27 @@ async def load_memory(storage: StorageBackend, user_id: str) -> str | None:
 async def save_memory(storage: StorageBackend, user_id: str, content: str) -> None:
     key = _memory_key(user_id)
     await storage.write(key, content.encode(), content_type="text/markdown")
+
+
+# ---------------------------------------------------------------------------
+# Intake response helpers
+# ---------------------------------------------------------------------------
+
+def _intake_responses_key(user_id: str) -> str:
+    return f"profiles/{user_id}/intake-responses.json"
+
+
+async def load_intake_responses(storage: StorageBackend, user_id: str) -> dict:
+    """Load intake responses, or empty dict if none exist."""
+    key = _intake_responses_key(user_id)
+    data = await storage.read(key)
+    if data is None:
+        return {}
+    return json.loads(data.decode())
+
+
+async def save_intake_responses(storage: StorageBackend, user_id: str, responses: dict) -> None:
+    """Save intake responses."""
+    key = _intake_responses_key(user_id)
+    data = json.dumps(responses, default=str).encode()
+    await storage.write(key, data, content_type="application/json")

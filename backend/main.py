@@ -14,11 +14,16 @@ from backend.api.journal import router as journal_router
 from backend.api.journal import set_journal_deps
 from backend.api.ideas import router as ideas_router
 from backend.api.ideas import set_ideas_deps
+from backend.api.tips import router as tips_router
+from backend.api.tips import set_tips_deps
+from backend.api.admin import router as admin_router
+from backend.api.admin import set_admin_deps
 from backend.api.transcription import router as transcription_router
 from backend.api.websocket import router as ws_router
 from backend.api.websocket import set_ws_deps
 from backend.config import settings
 from backend.deps import build_repos, build_storage, build_tool_registry, build_orgchart
+from backend.repository.department_config import DepartmentConfigRepository
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +51,7 @@ async def lifespan(app: FastAPI):
         profiles_repo=repos["profiles"],
         journal_repo=repos["journal"],
         ideas_repo=repos["ideas"],
+        tips_repo=repos["tips"],
         storage=storage,
         tool_registry=tool_registry,
         orgchart=orgchart,
@@ -96,6 +102,7 @@ set_ws_deps(
     profiles_repo=repos["profiles"],
     journal_repo=repos["journal"],
     ideas_repo=repos["ideas"],
+    tips_repo=repos["tips"],
     storage=storage,
     tool_registry=tool_registry,
     orgchart=orgchart,
@@ -104,13 +111,17 @@ set_sessions_deps(repos["sessions"], storage)
 set_profile_deps(repos["profiles"], orgchart)
 set_journal_deps(repos["journal"])
 set_ideas_deps(repos["ideas"])
+set_tips_deps(repos["tips"])
+set_admin_deps(DepartmentConfigRepository(storage))
 
 # Include REST routers under /api prefix
 app.include_router(sessions_router, prefix="/api")
 app.include_router(profile_router, prefix="/api")
 app.include_router(journal_router, prefix="/api")
 app.include_router(ideas_router, prefix="/api")
+app.include_router(tips_router, prefix="/api")
 app.include_router(transcription_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
 
 # WebSocket endpoint (no /api prefix - at root /ws)
 app.include_router(ws_router)

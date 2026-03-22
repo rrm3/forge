@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Lightbulb, Compass, Star, Sunrise } from 'lucide-react';
+import { Lightbulb, Compass, Star, Sunrise, ExternalLink, Trophy } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
 import { useAuth } from '../auth/useAuth';
 import { getProfile } from '../api/client';
@@ -35,7 +35,11 @@ function getGreeting(profile: UserProfile | null, sessionCount: number): string 
   return name ? `Welcome, ${name}.` : 'Welcome to AI Tuesdays.';
 }
 
-export function HomeScreen() {
+interface HomeScreenProps {
+  onShowTips?: () => void;
+}
+
+export function HomeScreen({ onShowTips }: HomeScreenProps) {
   const { startTypedSession, state } = useSession();
   const { user } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -86,6 +90,40 @@ export function HomeScreen() {
             </span>
           </button>
         ))}
+
+        {/* Browse Tips & Tricks */}
+        {onShowTips && (
+          <button
+            onClick={onShowTips}
+            className="group flex items-center justify-center gap-2 px-5 py-4 rounded-xl border text-center transition-all duration-200 sm:col-span-2 hover:opacity-90"
+            style={{
+              backgroundColor: '#FFF7ED',
+              borderColor: '#FED7AA',
+              color: '#C2410C',
+            }}
+          >
+            <Trophy className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-sm font-medium">Browse Tips & Tricks</span>
+          </button>
+        )}
+
+        {/* Guru link - full width across both columns */}
+        <a
+          href="https://app.getguru.com/page/31fe984d-f863-4487-8080-849d9f3461ef"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group flex items-center justify-center gap-2 px-5 py-4 rounded-xl border text-center transition-all duration-200 sm:col-span-2 hover:opacity-90"
+          style={{
+            backgroundColor: '#F3F0FF',
+            borderColor: '#DDD6FE',
+            color: '#7C3AED',
+          }}
+        >
+          <span className="text-sm font-medium">
+            AI Tuesdays on Guru
+          </span>
+          <ExternalLink className="w-4 h-4" strokeWidth={1.5} />
+        </a>
       </div>
     </div>
   );

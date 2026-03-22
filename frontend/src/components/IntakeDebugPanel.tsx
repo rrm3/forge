@@ -5,13 +5,14 @@
  */
 
 import { useSession, type IntakeChecklistItem } from '../state/SessionContext';
+import { useAdminStore } from '../state/adminStore';
 
 export function IntakeDebugPanel() {
   const { state } = useSession();
   const { intakeChecklist } = state;
+  const adminMode = useAdminStore((s) => s.adminMode);
 
-  // Only show if debug flag is set
-  if (typeof localStorage === 'undefined' || localStorage.getItem('forge-debug') !== 'true') {
+  if (!adminMode) {
     return null;
   }
 
@@ -20,7 +21,7 @@ export function IntakeDebugPanel() {
       <div style={{
         position: 'fixed',
         top: 56,
-        right: 8,
+        left: 8,
         width: 260,
         padding: '12px 14px',
         backgroundColor: '#1A1F25',
@@ -46,7 +47,7 @@ export function IntakeDebugPanel() {
     <div style={{
       position: 'fixed',
       top: 56,
-      right: 8,
+      left: 8,
       width: 260,
       padding: '12px 14px',
       backgroundColor: '#1A1F25',

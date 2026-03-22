@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck } from 'lucide-react';
+import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, ChevronDown, ChevronRight, ClipboardCheck, Home } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
 import type { Session } from '../api/types';
 
@@ -61,9 +61,10 @@ interface SessionRowProps {
   onSelect: () => void;
   onDelete: () => void;
   onRename: (title: string) => void;
+  canDelete?: boolean;
 }
 
-function SessionRow({ session, isActive, onSelect, onDelete, onRename }: SessionRowProps) {
+function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete = true }: SessionRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(session.title || 'New Chat');
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -146,25 +147,27 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename }: Session
         )}
       </div>
 
-      <button
-        className={[
-          'shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity',
-          confirmDelete ? 'opacity-100 text-red-400' : '',
-        ].join(' ')}
-        style={{ color: confirmDelete ? undefined : 'var(--color-text-muted)' }}
-        onClick={handleDeleteClick}
-        title={confirmDelete ? 'Click again to confirm' : 'Delete'}
-      >
-        {confirmDelete ? (
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-          </svg>
-        ) : (
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        )}
-      </button>
+      {canDelete && (
+        <button
+          className={[
+            'shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity',
+            confirmDelete ? 'opacity-100 text-red-400' : '',
+          ].join(' ')}
+          style={{ color: confirmDelete ? undefined : 'var(--color-text-muted)' }}
+          onClick={handleDeleteClick}
+          title={confirmDelete ? 'Click again to confirm' : 'Delete'}
+        >
+          {confirmDelete ? (
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          )}
+        </button>
+      )}
     </div>
   );
 }
@@ -193,24 +196,40 @@ export function SessionList() {
     });
   }
 
-  function handleNew() {
-    deselectSession();
-  }
+  const isHome = !state.activeSessionId;
 
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--color-surface-white)' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 h-11 border-b" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="flex items-center px-4 h-11 border-b" style={{ borderColor: 'var(--color-border)' }}>
         <h1 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
           AI Tuesdays
         </h1>
+      </div>
+
+      {/* Home button */}
+      <div className="px-2 pt-2">
         <button
-          onClick={handleNew}
-          className="p-1.5 rounded-lg transition-colors"
-          style={{ color: 'var(--color-text-muted)' }}
-          title="New Chat"
+          onClick={() => deselectSession()}
+          className={[
+            'flex items-center gap-2 w-full pl-2 pr-2 rounded-lg transition-colors',
+            isHome
+              ? 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)]'
+              : 'hover:bg-[var(--color-surface-raised)]',
+          ].join(' ')}
+          style={{ height: '36px', minHeight: '36px' }}
         >
-          <Plus className="w-4 h-4" strokeWidth={2} />
+          <Home
+            className="flex-shrink-0 w-3.5 h-3.5"
+            strokeWidth={1.5}
+            style={{ color: isHome ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
+          />
+          <span
+            className="text-sm font-medium"
+            style={{ color: isHome ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
+          >
+            Home
+          </span>
         </button>
       </div>
 
@@ -275,6 +294,7 @@ export function SessionList() {
                         onSelect={() => selectSession(session.session_id)}
                         onDelete={() => removeSession(session.session_id)}
                         onRename={(title) => updateSessionTitle(session.session_id, title)}
+                        canDelete={session.type !== 'intake'}
                       />
                     ))}
                   </div>

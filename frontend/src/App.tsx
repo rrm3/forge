@@ -2,21 +2,27 @@ import { useEffect, useState } from 'react';
 import { useAuth } from './auth/useAuth';
 import { SessionProvider } from './state/SessionContext';
 import { useSession } from './state/SessionContext';
+import { useAdminStore } from './state/adminStore';
 import { AppShell } from './components/AppShell';
 import { SessionList } from './components/SessionList';
 import { ChatView } from './components/ChatView';
 import { HomeScreen } from './components/HomeScreen';
+import { TipsView } from './components/TipsView';
 import { IntakeView } from './components/IntakeView';
-import { UserMenu } from './components/UserMenu';
 import { TopBar } from './components/TopBar';
-import { getProfile } from './api/client';
+import { AdminPanel } from './components/AdminPanel';
+import { getProfile, getAdminAccess } from './api/client';
 import type { UserProfile } from './api/types';
 
 function AppContent() {
-  const { loadSessions, state } = useSession();
+  const { loadSessions, deselectSession, state } = useSession();
   const { user } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [showTips, setShowTips] = useState(false);
+  const setIsAdmin = useAdminStore((s) => s.setIsAdmin);
+  const isAdmin = useAdminStore((s) => s.isAdmin);
 
   useEffect(() => {
     loadSessions();
@@ -31,24 +37,26 @@ function AppContent() {
           setProfileLoaded(true);
         })
         .catch((err) => {
-          // If 401, the auth layer will handle redirect - don't show intake
           if (err?.message?.includes('401')) return;
-          // Other errors (e.g., profile doesn't exist yet) - proceed to intake
           setProfileLoaded(true);
         });
     }
   }, [user]);
 
-  // Re-check profile after streaming completes (catches intake completion)
+  // Clear tips view when a session becomes active
   useEffect(() => {
-    if (user && !state.isStreaming && profileLoaded && !profile?.intake_completed_at) {
-      getProfile()
-        .then((p) => setProfile(p))
+    if (state.activeSessionId) setShowTips(false);
+  }, [state.activeSessionId]);
+
+  // Check admin access on mount
+  useEffect(() => {
+    if (user) {
+      getAdminAccess()
+        .then(({ is_admin }) => setIsAdmin(is_admin))
         .catch(() => {});
     }
-  }, [user, state.isStreaming, profileLoaded, profile?.intake_completed_at]);
+  }, [user, setIsAdmin]);
 
-  // Wait for profile to load before deciding what to show
   if (!profileLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--color-surface)' }}>
@@ -57,29 +65,46 @@ function AppContent() {
     );
   }
 
-  // Check if intake is complete
   const intakeComplete = profile?.intake_completed_at != null;
 
-  // Show intake view if not complete
   if (!intakeComplete) {
-    return <IntakeView />;
+    return (
+      <IntakeView
+        onComplete={() => {
+          getProfile()
+            .then((p) => setProfile(p))
+            .catch(() => {});
+        }}
+      />
+    );
   }
 
-  // Normal app with sidebar
+  if (showAdmin && isAdmin) {
+    return (
+      <div className="flex flex-col h-screen">
+        <TopBar onAdminClick={() => setShowAdmin(false)} />
+        <AdminPanel onBack={() => setShowAdmin(false)} />
+      </div>
+    );
+  }
+
   const sidebar = (
     <div className="flex flex-col h-full">
       <div className="flex-1 min-h-0">
         <SessionList />
       </div>
-      <UserMenu />
     </div>
   );
 
-  const content = state.activeSessionId ? <ChatView /> : <HomeScreen />;
+  const content = state.activeSessionId
+    ? <ChatView onShowTips={() => { deselectSession(); setShowTips(true); }} />
+    : showTips
+      ? <TipsView onBack={() => setShowTips(false)} userDepartment={profile?.department} />
+      : <HomeScreen onShowTips={() => setShowTips(true)} />;
 
   return (
     <div className="flex flex-col h-screen">
-      <TopBar />
+      <TopBar onAdminClick={() => setShowAdmin(true)} />
       <div className="flex-1 min-h-0">
         <AppShell sidebar={sidebar} content={content} />
       </div>

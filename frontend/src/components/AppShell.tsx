@@ -10,7 +10,7 @@ export function AppShell({ sidebar, content }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--color-surface)' }}>
+    <div className="flex h-full overflow-hidden" style={{ backgroundColor: 'var(--color-surface)' }}>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div

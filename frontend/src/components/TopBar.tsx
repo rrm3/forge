@@ -6,10 +6,15 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { LogOut, BookOpen, UserRoundCog } from 'lucide-react';
+import { LogOut, BookOpen, UserRoundCog, Settings, Code } from 'lucide-react';
 import { useAuth } from '../auth/useAuth';
+import { useAdminStore } from '../state/adminStore';
 
 const isDevMode = window.location.hostname === 'localhost';
+
+interface TopBarProps {
+  onAdminClick?: () => void;
+}
 
 function getInitials(name: string): string {
   return name
@@ -19,24 +24,15 @@ function getInitials(name: string): string {
     .join('');
 }
 
-export function TopBar() {
+export function TopBar({ onAdminClick }: TopBarProps = {}) {
+  const { isAdmin, adminMode, toggleAdminMode } = useAdminStore();
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const [showMasqueradeInput, setShowMasqueradeInput] = useState(false);
   const [masqueradeEmail, setMasqueradeEmail] = useState('');
   const activeMasquerade = localStorage.getItem('forge-masquerade');
   const menuRef = useRef<HTMLDivElement>(null);
   const masqueradeInputRef = useRef<HTMLInputElement>(null);
-
-  // Show gradient only when page is scrolled
-  useEffect(() => {
-    function handleScroll() {
-      setScrolled(window.scrollY > 8);
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -53,7 +49,7 @@ export function TopBar() {
   const initials = getInitials(user.name || user.email);
 
   return (
-    <div className="sticky top-0 z-30 shrink-0">
+    <div className="z-30 shrink-0">
       <div
         className="flex items-center justify-between px-4"
         style={{
@@ -128,7 +124,48 @@ export function TopBar() {
               <BookOpen className="w-4 h-4" strokeWidth={1.5} />
               Show Intro
             </button>
-            {isDevMode && !showMasqueradeInput && (
+            {isAdmin && onAdminClick && (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  onAdminClick();
+                }}
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm transition-colors"
+                style={{ color: '#4A5568' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              >
+                <Settings className="w-4 h-4" strokeWidth={1.5} />
+                Manage Department
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  toggleAdminMode();
+                  setOpen(false);
+                }}
+                className="flex items-center justify-between w-full px-4 py-2.5 text-sm transition-colors"
+                style={{ color: '#4A5568' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              >
+                <span className="flex items-center gap-2.5">
+                  <Code className="w-4 h-4" strokeWidth={1.5} />
+                  Admin Mode
+                </span>
+                <span
+                  className="text-xs font-medium px-1.5 py-0.5 rounded"
+                  style={{
+                    backgroundColor: adminMode ? 'var(--color-primary-subtle)' : 'var(--color-surface-raised)',
+                    color: adminMode ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  }}
+                >
+                  {adminMode ? 'ON' : 'OFF'}
+                </span>
+              </button>
+            )}
+            {isAdmin && isDevMode && !showMasqueradeInput && (
               <button
                 onClick={() => {
                   setShowMasqueradeInput(true);
@@ -260,16 +297,6 @@ export function TopBar() {
         </div>
       )}
 
-      {/* Fade gradient below the bar - overlaps content, doesn't push it down */}
-      <div
-        className="pointer-events-none absolute left-0 right-0 transition-opacity duration-200"
-        style={{
-          top: 48 + (activeMasquerade ? 32 : 0) + (showMasqueradeInput ? 40 : 0),
-          height: 16,
-          background: 'linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(255,255,255,0))',
-          opacity: scrolled ? 1 : 0,
-        }}
-      />
     </div>
   );
 }

@@ -71,6 +71,10 @@ async def delete_session(session_id: str, user: AuthUser):
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    # Intake sessions ("Getting Started") cannot be deleted
+    if session.type == "intake":
+        raise HTTPException(status_code=403, detail="Intake session cannot be deleted")
+
     # Delete transcript from storage
     key = f"sessions/{user.user_id}/{session_id}.json"
     await _storage.delete(key)

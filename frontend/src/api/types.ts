@@ -44,11 +44,8 @@ export interface UserProfile {
   ai_tools_used: string[];
   ai_superpower: string;
   ai_proficiency: {
-    operational_fluency: number;
-    strategic_delegation: number;
-    discernment: number;
-    security_awareness: number;
-    automation_readiness: number;
+    level: number;
+    rationale: string;
   } | null;
   intake_summary: string;
   created_at: string;
@@ -72,5 +69,39 @@ export interface Idea {
   proposed_by_name: string;
   status: string;
   interested_users: string[];
+  created_at: string;
+}
+
+export interface DepartmentObjective {
+  id: string;
+  label: string;
+  description: string;
+  extraction_key: string;
+}
+
+export interface DepartmentConfig {
+  prompt: string;
+  objectives: DepartmentObjective[];
+}
+
+export interface Tip {
+  tip_id: string;
+  author_id: string;
+  author_name: string;
+  department: string;
+  title: string;
+  content: string;
+  tags: string[];
+  vote_count: number;
+  user_has_voted: boolean;
+  created_at: string;
+}
+
+export interface TipComment {
+  tip_id: string;
+  comment_id: string;
+  author_id: string;
+  author_name: string;
+  content: string;
   created_at: string;
 }

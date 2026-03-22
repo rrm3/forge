@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Square, Send, X } from 'lucide-react';
+import { Square, Send, X, ArrowRight, Lightbulb, Compass, Star, Sunrise } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSession } from '../state/SessionContext';
@@ -15,10 +15,16 @@ import { VoiceButton } from './VoiceButton';
 import { OnboardingCards } from './OnboardingCards';
 import { TopBar } from './TopBar';
 import { IntakeDebugPanel } from './IntakeDebugPanel';
+import { useAdminStore } from '../state/adminStore';
 
-export function IntakeView() {
-  const { state, sendChatMessage, startTypedSession, cancelStreaming } = useSession();
-  const { messages = [], isStreaming, streamingText, activeSessionId } = state;
+interface IntakeViewProps {
+  onComplete?: () => void;
+}
+
+export function IntakeView({ onComplete }: IntakeViewProps) {
+  const adminMode = useAdminStore((s) => s.adminMode);
+  const { state, sendChatMessage, startTypedSession, cancelStreaming, deselectSession, selectSession } = useSession();
+  const { messages = [], isStreaming, streamingText, activeSessionId, intakeComplete } = state;
 
   const [inputValue, setInputValue] = useState('');
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
@@ -56,13 +62,22 @@ export function IntakeView() {
     setCardsDismissed(true);
   }
 
-  // If cards are skipped (returning user), start the intake session immediately
+  // If cards are skipped (returning user with existing intake), select the existing session.
+  // Only create a new intake if there isn't one already.
   useEffect(() => {
     if (!showCards && !intakeStarted.current) {
       intakeStarted.current = true;
-      startTypedSession('intake');
+      if (hasIntakeSession) {
+        // Reuse existing intake session
+        const existing = state.sessions.find((s) => s.type === 'intake');
+        if (existing) {
+          selectSession(existing.session_id);
+        }
+      } else {
+        startTypedSession('intake');
+      }
     }
-  }, [showCards, startTypedSession]);
+  }, [showCards, startTypedSession, hasIntakeSession, state.sessions, selectSession]);
 
   function handleInputChange(v: string) {
     inputValueRef.current = v;
@@ -134,6 +149,11 @@ export function IntakeView() {
     capsHintDismissed.current = true;
   }
 
+  function handleContinue() {
+    deselectSession();
+    onComplete?.();
+  }
+
   const handleSend = useCallback(() => {
     const text = inputValueRef.current.trim();
     if (!text || isStreaming) return;
@@ -189,7 +209,7 @@ export function IntakeView() {
           {/* Scrollable messages area */}
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-2xl mx-auto px-4 py-4 space-y-1 min-h-full flex flex-col justify-end">
-              {messages.map((msg, i) => (
+              {messages.filter((msg) => adminMode || (msg.role !== 'tool_call' && msg.role !== 'tool_result')).map((msg, i) => (
                 <MessageBubble key={i} message={msg} />
               ))}
 
@@ -215,12 +235,64 @@ export function IntakeView() {
                 </div>
               )}
 
+              {/* Completion card */}
+              {intakeComplete && !isStreaming && (
+                <div
+                  className="my-4 mx-auto w-full rounded-xl border p-6"
+                  style={{
+                    backgroundColor: 'var(--color-surface-white)',
+                    borderColor: 'var(--color-border)',
+                  }}
+                >
+                  <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                    You're all set!
+                  </h3>
+
+                  <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
+                    Here are some of the resources available in this app:
+                  </p>
+
+                  <div className="space-y-2 mb-4">
+                    {[
+                      { Icon: Lightbulb, text: 'Share a tip or trick with your colleagues' },
+                      { Icon: Compass, text: 'Get help when you\'re stuck on something' },
+                      { Icon: Star, text: 'Brainstorm an AI opportunity for your work' },
+                      { Icon: Sunrise, text: 'Reflect on your day with a wrap-up' },
+                    ].map(({ Icon, text }) => (
+                      <div key={text} className="flex items-center gap-3">
+                        <Icon
+                          className="w-4 h-4 shrink-0"
+                          strokeWidth={1.5}
+                          style={{ color: 'var(--color-text-muted)' }}
+                        />
+                        <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                          {text}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <button
+                      onClick={handleContinue}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors"
+                      style={{ backgroundColor: 'var(--color-primary)' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-primary-hover)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-primary)')}
+                    >
+                      Let's get started
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div ref={bottomRef} />
             </div>
           </div>
 
-          {/* Input area - always at bottom */}
-          <div className="max-w-2xl mx-auto w-full px-4 pb-4">
+          {/* Input area - hidden after completion */}
+          {!intakeComplete && <div className="max-w-2xl mx-auto w-full px-4 pb-4">
             {/* CapsLock floating hint */}
             {showCapsHint && (
               <div className="flex justify-center mb-2">
@@ -248,82 +320,78 @@ export function IntakeView() {
               </div>
             )}
 
-            <div className="flex items-end gap-2">
-              {/* Input box with mic inside */}
-              <div
-                className="relative flex-1 rounded-xl border transition-all duration-200"
-                style={{
-                  backgroundColor: 'var(--color-surface-white)',
-                  borderColor: 'var(--color-border)',
-                }}
-              >
-                <div className="p-2">
-                  <textarea
-                    ref={textareaRef}
-                    rows={1}
-                    value={inputValue}
-                    onChange={(e) => handleInputChange(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    disabled={isStreaming}
-                    placeholder="Type or tap mic to respond..."
-                    className="w-full resize-none bg-transparent outline-none border-none text-base md:text-sm leading-6 p-1 pb-8 pr-14 overflow-y-auto"
-                    style={{
-                      color: 'var(--color-text-primary)',
-                      minHeight: '40px',
-                      maxHeight: '184px',
-                      caretColor: 'var(--color-text-primary)',
-                      opacity: isVoiceRecording ? 0 : 1,
-                      pointerEvents: isVoiceRecording ? 'none' : undefined,
-                    }}
-                    aria-label="Intake response"
-                  />
+            <div
+              className="relative rounded-xl border transition-all duration-200"
+              style={{
+                backgroundColor: 'var(--color-surface-white)',
+                borderColor: 'var(--color-border)',
+              }}
+            >
+              <div className="p-2">
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  value={inputValue}
+                  onChange={(e) => handleInputChange(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={isStreaming}
+                  placeholder="Type or tap mic to respond..."
+                  className="w-full resize-none bg-transparent outline-none border-none text-base md:text-sm leading-6 p-1 pb-8 pr-24 overflow-y-auto"
+                  style={{
+                    color: 'var(--color-text-primary)',
+                    minHeight: '40px',
+                    maxHeight: '184px',
+                    caretColor: 'var(--color-text-primary)',
+                    opacity: isVoiceRecording ? 0 : 1,
+                    pointerEvents: isVoiceRecording ? 'none' : undefined,
+                  }}
+                  aria-label="Intake response"
+                />
 
-                  {/* Mic / recording / stop - inside the input */}
-                  <div className={`absolute bottom-0 right-0 left-0 flex items-center pb-2 px-3 ${isVoiceRecording ? '' : 'justify-end'}`}>
-                    {isVoiceRecording ? (
-                      <VoiceButton
-                        onTranscribedText={handleTranscribedText}
-                        onRecordingStateChange={setIsVoiceRecording}
-                        textareaRef={textareaRef}
-                      />
-                    ) : isStreaming ? (
-                      <button
-                        onClick={cancelStreaming}
-                        className="flex items-center justify-center w-14 h-14 md:w-10 md:h-10 rounded-full text-white transition-colors duration-150"
-                        style={{ backgroundColor: 'var(--color-text-secondary)' }}
-                        title="Stop"
-                        aria-label="Stop generating"
-                      >
-                        <Square className="w-4 h-4" fill="currentColor" strokeWidth={0} />
-                      </button>
-                    ) : (
-                      <VoiceButton
-                        onTranscribedText={handleTranscribedText}
-                        onRecordingStateChange={setIsVoiceRecording}
-                        textareaRef={textareaRef}
-                      />
+                {/* Bottom buttons: voice (full-width when recording) + send/stop */}
+                <div className={`absolute bottom-0 right-0 left-0 flex items-center pb-2 px-3 ${isVoiceRecording ? '' : 'justify-end'}`}>
+                  <div className={`flex items-center ${isVoiceRecording ? 'w-full' : 'gap-1.5'}`}>
+                    <VoiceButton
+                      onTranscribedText={handleTranscribedText}
+                      onRecordingStateChange={setIsVoiceRecording}
+                      textareaRef={textareaRef}
+                    />
+                    {!isVoiceRecording && (
+                      isStreaming ? (
+                        <button
+                          onClick={cancelStreaming}
+                          className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150"
+                          style={{ backgroundColor: 'var(--color-text-primary)', color: '#FFFFFF' }}
+                          title="Stop"
+                          aria-label="Stop generating"
+                        >
+                          <Square className="w-4 h-4" fill="currentColor" strokeWidth={0} />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleSend}
+                          disabled={!hasInput}
+                          className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150"
+                          style={{
+                            backgroundColor: hasInput ? 'var(--color-text-primary)' : 'transparent',
+                            color: hasInput ? '#FFFFFF' : 'var(--color-text-placeholder)',
+                            cursor: hasInput ? 'pointer' : 'default',
+                          }}
+                          title="Send (Enter)"
+                          aria-label="Send message"
+                        >
+                          <Send className="w-4 h-4" strokeWidth={1.5} />
+                        </button>
+                      )
                     )}
                   </div>
                 </div>
               </div>
-
-              {/* Send button - outside the input, to the right */}
-              {hasInput && !isVoiceRecording && !isStreaming && (
-                <button
-                  onClick={handleSend}
-                  className="flex items-center justify-center w-10 h-10 rounded-full text-white transition-all duration-150 shrink-0 mb-1"
-                  style={{ backgroundColor: 'var(--color-primary)' }}
-                  title="Send (Enter)"
-                  aria-label="Send message"
-                >
-                  <Send className="w-4 h-4" strokeWidth={1.5} />
-                </button>
-              )}
             </div>
             <p className="text-xs text-center mt-1.5" style={{ color: 'var(--color-text-placeholder)' }}>
               {hintText}
             </p>
-          </div>
+          </div>}
         </div>
       )}
     </div>

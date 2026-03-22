@@ -23,6 +23,7 @@ class AgentDeps:
     profiles_repo: Any = None
     journal_repo: Any = None
     ideas_repo: Any = None
+    tips_repo: Any = None
     storage: Any = None
     tool_registry: Any = None
     orgchart: Any = None
@@ -35,17 +36,20 @@ def build_repos() -> dict:
         from backend.repository.journal import MemoryJournalRepository
         from backend.repository.profiles import MemoryProfileRepository
         from backend.repository.sessions import MemorySessionRepository
+        from backend.repository.tips import MemoryTipRepository
         return {
             "sessions": MemorySessionRepository(),
             "profiles": MemoryProfileRepository(),
             "journal": MemoryJournalRepository(),
             "ideas": MemoryIdeaRepository(),
+            "tips": MemoryTipRepository(),
         }
 
     from backend.repository.ideas import DynamoDBIdeaRepository
     from backend.repository.journal import DynamoDBJournalRepository
     from backend.repository.profiles import DynamoDBProfileRepository
     from backend.repository.sessions import DynamoDBSessionRepository
+    from backend.repository.tips import DynamoDBTipRepository
 
     prefix = settings.dynamodb_table_prefix
     region = settings.aws_region
@@ -54,6 +58,7 @@ def build_repos() -> dict:
         "profiles": DynamoDBProfileRepository(f"{prefix}-profiles", region),
         "journal": DynamoDBJournalRepository(f"{prefix}-journal", region),
         "ideas": DynamoDBIdeaRepository(f"{prefix}-ideas", region),
+        "tips": DynamoDBTipRepository(f"{prefix}-tips", f"{prefix}-tip-votes", f"{prefix}-tip-comments", region),
     }
 
 
@@ -90,6 +95,7 @@ def build_tool_registry():
     from backend.tools.profile import register_profile_tools
     from backend.tools.registry import ToolRegistry
     from backend.tools.search import register_search_tools
+    from backend.tools.tips import register_tips_tools
 
     registry = ToolRegistry()
     register_search_tools(registry)
@@ -97,6 +103,7 @@ def build_tool_registry():
     register_journal_tools(registry)
     register_profile_tools(registry)
     register_analyze_tools(registry)
+    register_tips_tools(registry)
     return registry
 
 
@@ -107,6 +114,7 @@ def build_agent_deps(repos: dict, storage, tool_registry, orgchart=None) -> Agen
         profiles_repo=repos["profiles"],
         journal_repo=repos["journal"],
         ideas_repo=repos["ideas"],
+        tips_repo=repos.get("tips"),
         storage=storage,
         tool_registry=tool_registry,
         orgchart=orgchart,

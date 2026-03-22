@@ -85,6 +85,33 @@ class Idea(BaseModel):
     created_at: datetime = Field(default_factory=_now)
 
 
+class Tip(BaseModel):
+    tip_id: str
+    author_id: str
+    author_name: str = ""
+    department: str = ""
+    title: str = ""
+    content: str
+    tags: list[str] = Field(default_factory=list)
+    vote_count: int = 0
+    created_at: datetime = Field(default_factory=_now)
+
+
+class TipVote(BaseModel):
+    tip_id: str
+    user_id: str
+    created_at: datetime = Field(default_factory=_now)
+
+
+class TipComment(BaseModel):
+    tip_id: str
+    comment_id: str
+    author_id: str
+    author_name: str = ""
+    content: str
+    created_at: datetime = Field(default_factory=_now)
+
+
 class TokenUsage(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0

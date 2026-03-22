@@ -37,13 +37,14 @@ _session_locks: dict[str, asyncio.Lock] = {}
 _cancel_events: dict[str, asyncio.Event] = {}
 
 
-def set_ws_deps(sessions_repo, profiles_repo, journal_repo, ideas_repo, storage, tool_registry, orgchart=None):
+def set_ws_deps(sessions_repo, profiles_repo, journal_repo, ideas_repo, storage, tool_registry, orgchart=None, tips_repo=None):
     global _deps
     _deps = AgentDeps(
         sessions_repo=sessions_repo,
         profiles_repo=profiles_repo,
         journal_repo=journal_repo,
         ideas_repo=ideas_repo,
+        tips_repo=tips_repo,
         storage=storage,
         tool_registry=tool_registry,
         orgchart=orgchart,
@@ -139,7 +140,8 @@ async def _heartbeat_loop(ws: WebSocket):
 async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: dict):
     session_type = msg.get("type", "chat")
     session_id = str(uuid.uuid4())
-    session = Session(session_id=session_id, user_id=user.user_id, title="", type=session_type)
+    title = "Getting Started" if session_type == "intake" else ""
+    session = Session(session_id=session_id, user_id=user.user_id, title=title, type=session_type)
     await _deps.sessions_repo.create(session)
 
     await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})

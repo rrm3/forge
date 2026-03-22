@@ -262,7 +262,8 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
     mode = msg.get("mode", "text")
 
     session_id = str(uuid.uuid4())
-    session = Session(session_id=session_id, user_id=user_data["user_id"], title="", type=session_type)
+    title = "Getting Started" if session_type == "intake" else ""
+    session = Session(session_id=session_id, user_id=user_data["user_id"], title=title, type=session_type)
     await _deps.sessions_repo.create(session)
 
     sender = ApiGatewayManagementSender(connection_id, settings.websocket_api_endpoint, settings.aws_region)

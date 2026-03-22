@@ -28,7 +28,8 @@ from backend.config import settings
 from backend.deps import AgentDeps
 from backend.llm import call_llm
 from backend.models import Message
-from backend.storage import load_memory, load_transcript, save_transcript
+from backend.repository.department_config import DepartmentConfigRepository
+from backend.storage import load_intake_responses, load_memory, load_transcript, save_intake_responses, save_transcript
 from backend.tools.registry import ToolContext
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,16 @@ async def run_agent_session(
 
     memory = await load_memory(deps.storage, user_id)
 
+    # Load department config and intake responses for intake sessions
+    department_config = None
+    intake_responses = {}
+    if session_type == "intake" and profile and profile.department:
+        dept_config_repo = DepartmentConfigRepository(deps.storage)
+        department_config = await dept_config_repo.get_department_config(
+            profile.department.lower().replace(" ", "-")
+        )
+        intake_responses = await load_intake_responses(deps.storage, user_id)
+
     # Load session-type prompt
     skill_instructions = None
     if session_type and session_type != "chat":
@@ -100,6 +111,8 @@ async def run_agent_session(
         memory=memory,
         skill_instructions=skill_instructions,
         session_type=session_type,
+        department_config=department_config,
+        intake_responses=intake_responses,
     )
 
     # Build tool context
@@ -111,32 +124,55 @@ async def run_agent_session(
             "profiles": deps.profiles_repo,
             "journal": deps.journal_repo,
             "ideas": deps.ideas_repo,
+            "tips": deps.tips_repo,
         },
         storage=deps.storage,
         config=settings,
     )
 
-    # For intake: run shadow extraction on the user's message BEFORE the agent responds.
-    # This updates profile fields so the system prompt checklist is current.
-    # Skip on the first turn (no user message yet - just the AI greeting).
-    user_message_count = sum(1 for m in transcript if m.role == "user")
-    if session_type == "intake" and user_message.strip() and user_message_count > 0:
+    # For intake: evaluate objectives from the user's message BEFORE the agent responds.
+    # This updates intake responses so the system prompt checklist is current.
+    # Skip the silent start turn (session auto-created with no user message).
+    if session_type == "intake" and user_message.strip() and department_config:
+        try:
+            from backend.agent.extraction import evaluate_objectives
+
+            extraction_messages = _transcript_to_llm_messages(transcript)
+            extraction_messages.append({"role": "user", "content": user_message.strip()})
+
+            objectives = department_config.get("objectives", [])
+            newly_completed = await evaluate_objectives(extraction_messages, objectives, intake_responses)
+
+            if newly_completed:
+                intake_responses.update(newly_completed)
+                await save_intake_responses(deps.storage, user_id, intake_responses)
+                # Rebuild system prompt with updated progress
+                system_prompt = build_system_prompt(
+                    profile=profile,
+                    memory=memory,
+                    skill_instructions=skill_instructions,
+                    session_type=session_type,
+                    department_config=department_config,
+                    intake_responses=intake_responses,
+                )
+                logger.info("Objective evaluation completed %d objectives for user=%s", len(newly_completed), user_id)
+        except Exception:
+            logger.warning("Objective evaluation failed, continuing without it", exc_info=True)
+    elif session_type == "intake" and user_message.strip() and not department_config:
+        # Legacy fallback: field-based extraction when no department config
         try:
             from backend.agent.extraction import extract_profile_data
 
-            # Build messages including the new user message for extraction
             extraction_messages = _transcript_to_llm_messages(transcript)
             extraction_messages.append({"role": "user", "content": user_message.strip()})
 
             extracted = await extract_profile_data(extraction_messages, profile)
             if extracted:
-                # Track which fields were captured during intake
                 existing_captured = list(profile.intake_fields_captured) if profile.intake_fields_captured else []
                 new_captured = list(set(existing_captured) | set(extracted.keys()))
                 extracted["intake_fields_captured"] = new_captured
 
                 await deps.profiles_repo.update(user_id, extracted)
-                # Re-read profile and rebuild system prompt with updated checklist
                 profile = await deps.profiles_repo.get(user_id) or profile
                 system_prompt = build_system_prompt(
                     profile=profile,
@@ -238,13 +274,11 @@ async def run_agent_session(
                 if session_type == "intake":
                     try:
                         from backend.agent.context import get_intake_checklist
-                        fresh_profile = await deps.profiles_repo.get(user_id)
-                        if fresh_profile:
-                            await sender.send({
-                                "type": "intake_progress",
-                                "session_id": session_id,
-                                "checklist": get_intake_checklist(fresh_profile),
-                            })
+                        await sender.send({
+                            "type": "intake_progress",
+                            "session_id": session_id,
+                            "checklist": get_intake_checklist(department_config, intake_responses, profile),
+                        })
                     except Exception:
                         pass
 
@@ -291,12 +325,16 @@ async def run_agent_session(
         session.updated_at = datetime.now(UTC)
         await deps.sessions_repo.update(session)
 
+    # Detect published tips and notify frontend
+    if session_type == "tip":
+        await _check_tip_published(transcript, sender, session_id)
+
     # Intake state machine: check required fields and mark complete when done
     if session_type == "intake":
-        await _check_intake_completion(deps, user_id, transcript)
+        await _check_intake_completion(deps, user_id, transcript, sender, session_id, department_config, intake_responses)
 
-    # Generate title for new sessions
-    if is_new_session and assistant_text:
+    # Generate title for new sessions (skip intake - it's always "Getting Started")
+    if is_new_session and assistant_text and session_type != "intake":
         try:
             title = await _generate_title(user_message or "New conversation", assistant_text)
             if session:
@@ -337,43 +375,110 @@ def _transcript_to_llm_messages(transcript: list[Message]) -> list[dict]:
     return messages
 
 
-# Intake completion: the conversation has covered enough ground when the user
-# has had a substantive exchange (5+ user messages). The structured data
-# extraction can happen in real-time via update_profile calls or as a
-# post-processing batch job over the transcript later.
-_INTAKE_MIN_USER_MESSAGES = 5
 
 
-async def _check_intake_completion(deps: AgentDeps, user_id: str, transcript: list[Message]):
-    """Mark intake complete once the user has had enough conversation.
+async def _extract_suggestions(transcript: list[Message]) -> list[str]:
+    """Extract structured suggestions from the intake conversation using Haiku."""
+    from backend.agent.extraction import extract_suggestions
+    llm_messages = _transcript_to_llm_messages(transcript)
+    return await extract_suggestions(llm_messages)
 
-    The intake is a coverage exercise - did we talk about their work, AI
-    experience, and goals? We measure this by user message count as a proxy
-    for conversational depth. 5 user messages means they've engaged across
-    multiple topics.
 
-    Structured data capture (profile fields) is a bonus - the transcript
-    itself is the primary artifact, and we can extract structured data
-    from it later if needed.
+async def _check_intake_completion(
+    deps: AgentDeps,
+    user_id: str,
+    transcript: list[Message],
+    sender: MessageSender | None = None,
+    session_id: str | None = None,
+    department_config: dict | None = None,
+    intake_responses: dict | None = None,
+):
+    """Mark intake complete when all required objectives/fields have been captured.
+
+    When department_config is available, completion is based on objective coverage.
+    Falls back to legacy field-based checking when no department config exists.
     """
     try:
         profile = await deps.profiles_repo.get(user_id)
-        if not profile or profile.intake_completed_at:
+        if not profile:
             return
 
-        user_messages = sum(1 for m in transcript if m.role == "user")
+        # Already completed in a previous turn - just notify the frontend
+        if profile.intake_completed_at:
+            if sender and session_id:
+                suggestions = await _extract_suggestions(transcript)
+                await sender.send({
+                    "type": "intake_complete",
+                    "session_id": session_id,
+                    "suggestions": suggestions,
+                })
+            return
 
-        if user_messages >= _INTAKE_MIN_USER_MESSAGES:
+        # Check if all objectives are completed
+        if department_config:
+            objectives = department_config.get("objectives", [])
+            objective_ids = {obj["id"] for obj in objectives}
+            completed_ids = set(intake_responses.keys()) if intake_responses else set()
+            all_complete = objective_ids.issubset(completed_ids)
+        else:
+            # Legacy fallback
+            from backend.agent.context import _INTAKE_FIELDS
+            required_fields = {field for field, _ in _INTAKE_FIELDS}
+            captured = set(profile.intake_fields_captured) if profile.intake_fields_captured else set()
+            all_complete = required_fields.issubset(captured)
+
+        if all_complete:
             await deps.profiles_repo.update(user_id, {
                 "intake_completed_at": datetime.now(UTC).isoformat(),
                 "onboarding_complete": True,
             })
-            logger.info(
-                "Intake complete: user=%s user_messages=%d",
-                user_id, user_messages,
-            )
+            if department_config:
+                logger.info("Intake complete: user=%s objectives_completed=%s", user_id, completed_ids)
+            else:
+                logger.info("Intake complete: user=%s fields_captured=%s", user_id, captured)
+
+            # Score AI proficiency from the full transcript
+            try:
+                from backend.agent.extraction import score_ai_proficiency
+                llm_messages = _transcript_to_llm_messages(transcript)
+                proficiency = await score_ai_proficiency(llm_messages)
+                if proficiency:
+                    await deps.profiles_repo.update(user_id, {
+                        "ai_proficiency": proficiency,
+                    })
+                    logger.info("AI proficiency scored: user=%s level=%d", user_id, proficiency["level"])
+            except Exception:
+                logger.warning("AI proficiency scoring failed, continuing", exc_info=True)
+
+            # Notify the frontend so it can show the completion card
+            if sender and session_id:
+                suggestions = await _extract_suggestions(transcript)
+                await sender.send({
+                    "type": "intake_complete",
+                    "session_id": session_id,
+                    "suggestions": suggestions,
+                })
     except Exception:
         logger.warning("Failed to check intake completion", exc_info=True)
+
+
+async def _check_tip_published(transcript: list[Message], sender: MessageSender, session_id: str):
+    """Check if publish_tip was called in this turn and notify frontend."""
+    try:
+        for msg in reversed(transcript):
+            if msg.role == "tool_call" and msg.tool_name == "publish_tip":
+                args = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+                await sender.send({
+                    "type": "tip_published",
+                    "session_id": session_id,
+                    "title": args.get("title", ""),
+                    "content": args.get("content", ""),
+                    "tags": args.get("tags", []),
+                    "department": args.get("department", "Everyone"),
+                })
+                return
+    except Exception:
+        logger.warning("Failed to check tip published", exc_info=True)
 
 
 async def _generate_title(user_msg: str, assistant_msg: str) -> str:
