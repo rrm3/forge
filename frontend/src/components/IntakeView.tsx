@@ -20,9 +20,10 @@ import { useAdminStore } from '../state/adminStore';
 
 interface IntakeViewProps {
   onComplete?: () => void;
+  profile?: import('../api/types').UserProfile | null;
 }
 
-export function IntakeView({ onComplete }: IntakeViewProps) {
+export function IntakeView({ onComplete, profile }: IntakeViewProps) {
   const navigate = useNavigate();
   const adminMode = useAdminStore((s) => s.adminMode);
   const { state, sendChatMessage, startTypedSession, cancelStreaming, deselectSession, selectSession } = useSession();
@@ -30,19 +31,16 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
 
   const [inputValue, setInputValue] = useState('');
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  // Show cards for first-time users (no existing intake session when component mounts).
-  // Snapshot on first sessions load so pre-loading a session during cards doesn't hide them.
+  // Show cards unless the user has already been through them and started chatting.
+  // An intake session with message_count > 0 means the user is past the cards.
+  // A session with 0 messages was just pre-loaded during cards - show cards again.
   const sessionsLoaded = state.sessionsLoaded;
-  const hasIntakeSessionOnMount = useRef<boolean | null>(null);
-  if (sessionsLoaded && hasIntakeSessionOnMount.current === null) {
-    hasIntakeSessionOnMount.current = state.sessions.some((s) => s.type === 'intake');
-  }
-  const hasIntakeSession = state.sessions.some((s) => s.type === 'intake');
+  const intakeSessionHasMessages = state.sessions.some(
+    (s) => s.type === 'intake' && (s.message_count ?? 0) > 0
+  );
   const [cardsDismissed, setCardsDismissed] = useState(false);
 
-  // Cards stay visible until the user clicks through all 4.
-  // Pre-loaded session creation and AI messages must NOT dismiss them.
-  const showCards = !cardsDismissed && hasIntakeSessionOnMount.current === false;
+  const showCards = !cardsDismissed && !intakeSessionHasMessages;
   const [showCapsHint, setShowCapsHint] = useState(false);
   const capsHintDismissed = useRef(false);
   const inputValueRef = useRef(inputValue);
@@ -64,31 +62,21 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
     setCardsDismissed(true);
   }
 
-  // If cards are skipped (returning user with existing intake), select the existing session.
-  // Only create a new intake if there isn't one already.
-  const needsNudge = useRef(false);
+  // If cards are skipped (returning user with existing intake that has messages),
+  // select the existing session to resume the conversation.
   useEffect(() => {
     if (!showCards && !intakeStarted.current) {
       intakeStarted.current = true;
-      if (hasIntakeSession) {
+      if (intakeSessionHasMessages) {
         const existing = state.sessions.find((s) => s.type === 'intake');
         if (existing) {
-          needsNudge.current = true;
           selectSession(existing.session_id);
         }
       } else {
-        startTypedSession('intake');
+        // No messages yet - cards will show, session pre-loads on card 1
       }
     }
-  }, [showCards, startTypedSession, hasIntakeSession, state.sessions, selectSession]);
-
-  // After selecting an existing intake session, if transcript is empty, nudge the AI
-  useEffect(() => {
-    if (needsNudge.current && activeSessionId && !isStreaming && messages.length === 0) {
-      needsNudge.current = false;
-      sendChatMessage('');
-    }
-  }, [activeSessionId, isStreaming, messages.length, sendChatMessage]);
+  }, [showCards, intakeSessionHasMessages, state.sessions, selectSession]);
 
   function handleInputChange(v: string) {
     inputValueRef.current = v;
@@ -193,7 +181,7 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
   if (!sessionsLoaded) {
     return (
       <div className="h-screen flex flex-col" style={{ backgroundColor: 'var(--color-surface)' }}>
-        <TopBar />
+        <TopBar profile={profile} />
       </div>
     );
   }
@@ -203,7 +191,7 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
       className="h-screen flex flex-col"
       style={{ backgroundColor: 'var(--color-surface)' }}
     >
-      <TopBar />
+      <TopBar profile={profile} />
       <IntakeDebugPanel />
 
       {showCards ? (
@@ -318,7 +306,7 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
                     <rect x="6" y="10.5" width="4" height="1.5" rx="0.5" fill="#159AC9" opacity="0.7" />
                   </svg>
                   <span style={{ color: '#159AC9', fontSize: 12, fontWeight: 500 }}>
-                    Press CapsLock to record
+                    Press CapsLock to speak your reply
                   </span>
                   <button
                     onClick={dismissCapsHint}
