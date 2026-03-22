@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     llm_model: str = "bedrock/us.anthropic.claude-opus-4-6-v1"
     bedrock_access_key_id: str = ""
     bedrock_secret_access_key: str = ""
+    bedrock_role_arn: str = ""  # cross-account role for Bedrock (preferred over static keys)
 
     # Gemini (speech-to-text transcription)
     gemini_api_key: str = ""
