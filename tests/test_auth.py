@@ -45,7 +45,7 @@ class TestAuthErrors:
         request = _make_request()
         with patch("backend.auth.settings") as mock_settings:
             mock_settings.dev_mode = False
-            mock_settings.oidc_provider_url = "https://id-staging.digital-science.us"
+            mock_settings.oidc_provider_url = "https://id.digitalscience.ai"
             mock_settings.oidc_client_id = "testclient"
             with patch("backend.auth._get_jwks_client") as mock_jwks:
                 mock_client = MagicMock()
@@ -64,7 +64,7 @@ class TestAuthErrors:
         request = _make_request()
         with patch("backend.auth.settings") as mock_settings:
             mock_settings.dev_mode = False
-            mock_settings.oidc_provider_url = "https://id-staging.digital-science.us"
+            mock_settings.oidc_provider_url = "https://id.digitalscience.ai"
             mock_settings.oidc_client_id = "testclient"
             with patch("backend.auth._get_jwks_client") as mock_jwks:
                 import jwt as pyjwt
@@ -176,7 +176,7 @@ class TestVerifyOidcToken:
             patch("backend.auth.jwt.decode", return_value=mock_payload),
             patch("backend.auth.settings") as mock_settings,
         ):
-            mock_settings.oidc_provider_url = "https://id-staging.digital-science.us"
+            mock_settings.oidc_provider_url = "https://id.digitalscience.ai"
             mock_settings.oidc_client_id = "client123"
 
             user = _verify_oidc_token("fake.jwt.token")
@@ -201,7 +201,7 @@ class TestVerifyOidcToken:
             patch("backend.auth.jwt.decode", return_value=mock_payload),
             patch("backend.auth.settings") as mock_settings,
         ):
-            mock_settings.oidc_provider_url = "https://id-staging.digital-science.us"
+            mock_settings.oidc_provider_url = "https://id.digitalscience.ai"
             mock_settings.oidc_client_id = "client123"
 
             user = _verify_oidc_token("fake.jwt.token")

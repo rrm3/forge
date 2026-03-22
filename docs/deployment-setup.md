@@ -91,7 +91,7 @@ gh secret set FRONTEND_BUCKET --body "forge-production-frontend"
 gh secret set CLOUDFRONT_DISTRIBUTION_ID --body "<from CDK output>"
 
 # OIDC (Digital Science ID)
-gh secret set OIDC_PROVIDER_URL --body "https://id.digital-science.us"
+gh secret set OIDC_PROVIDER_URL --body "https://id.digitalscience.ai"
 gh secret set OIDC_CLIENT_ID --body "<from ds-identity client registration>"
 ```
 

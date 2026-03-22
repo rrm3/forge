@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { Search, X, ChevronUp, ChevronDown, Check, Clock, Shield } from 'lucide-react';
-import { listAdminUsers, getAdminUserIntake, setUserRole, setUserAdmin } from '../api/client';
+import { listAdminUsers, getAdminUserIntake, setUserRole, setUserAdmin, deleteAdminUser } from '../api/client';
 import { UserAvatar } from './UserAvatar';
 import type { AdminUserSummary, AdminUserIntake } from '../api/types';
 
@@ -111,6 +111,16 @@ export function AdminUsers() {
       );
     } catch (err) {
       console.error('Failed to update admin status:', err);
+    }
+  }
+
+  async function handleDeleteUser(userId: string) {
+    try {
+      await deleteAdminUser(userId);
+      setUsers((prev) => prev.filter((u) => u.user_id !== userId));
+      setSelectedUserId(null);
+    } catch (err) {
+      console.error('Failed to delete user:', err);
     }
   }
 
@@ -497,6 +507,7 @@ export function AdminUsers() {
               onClose={() => setSelectedUserId(null)}
               onToggleRole={handleToggleRole}
               onToggleAdmin={handleToggleAdmin}
+              onDelete={handleDeleteUser}
             />
           </div>
         </>
@@ -513,6 +524,7 @@ function DetailPanel({
   onClose,
   onToggleRole,
   onToggleAdmin,
+  onDelete,
 }: {
   userId: string;
   user: AdminUserSummary | null;
@@ -521,7 +533,9 @@ function DetailPanel({
   onClose: () => void;
   onToggleRole: (userId: string, isDeptAdmin: boolean) => void;
   onToggleAdmin: (userId: string, isAdmin: boolean) => void;
+  onDelete: (userId: string) => void;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   if (loading || !intake) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -758,6 +772,63 @@ function DetailPanel({
             <span style={{ fontSize: 13 }}>{p.email}</span>
           </div>
         </div>
+      </Section>
+
+      {/* Delete user */}
+      <Section title="Danger Zone">
+        {!confirmDelete ? (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="w-full rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors"
+            style={{
+              borderColor: '#FCA5A5',
+              color: '#DC2626',
+              backgroundColor: 'transparent',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+          >
+            Delete user and all data
+          </button>
+        ) : (
+          <div
+            className="rounded-lg border p-3"
+            style={{ borderColor: '#FCA5A5', backgroundColor: '#FEF2F2' }}
+          >
+            <p className="text-sm mb-3" style={{ color: '#DC2626' }}>
+              This will permanently delete {p.name || p.email}'s profile, sessions, and intake data.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onDelete(userId)}
+                className="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#B91C1C'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#DC2626'; }}
+              >
+                Confirm delete
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors"
+                style={{
+                  borderColor: 'var(--color-border)',
+                  color: 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = ''; }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </Section>
     </div>
   );

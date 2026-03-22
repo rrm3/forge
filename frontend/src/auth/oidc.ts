@@ -1,5 +1,5 @@
 // OIDC configuration for Digital Science ID
-const OIDC_PROVIDER_URL = import.meta.env.VITE_OIDC_PROVIDER_URL || 'https://id-staging.digital-science.us';
+const OIDC_PROVIDER_URL = import.meta.env.VITE_OIDC_PROVIDER_URL || 'https://id.digitalscience.ai';
 const OIDC_CLIENT_ID = import.meta.env.VITE_OIDC_CLIENT_ID || '';
 const OIDC_REDIRECT_URI = import.meta.env.VITE_OIDC_REDIRECT_URI || `${window.location.origin}/callback`;
 

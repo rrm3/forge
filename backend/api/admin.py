@@ -229,6 +229,54 @@ async def set_user_admin(user_id: str, body: dict, user: AuthUser):
     return {"status": "updated", "is_admin": is_admin}
 
 
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: str, user: AuthUser):
+    """Delete a user and all their data. Full admin only.
+
+    Removes: profile, sessions + transcripts, intake responses.
+    Cannot delete yourself.
+    """
+    await _require_admin(user.email)
+
+    profile = await _profiles_repo.get(user_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if profile.email.lower() == user.email.lower():
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+
+    # Remove admin access if they had it
+    admin_access = await _dept_config_repo.get_admin_access()
+    if profile.email in admin_access:
+        del admin_access[profile.email]
+        await _dept_config_repo.save_admin_access(admin_access)
+
+    # Delete sessions and their transcripts
+    if _sessions_repo:
+        sessions = await _sessions_repo.list(user_id)
+        for s in sessions:
+            if _storage:
+                key = f"sessions/{user_id}/{s.session_id}.json"
+                try:
+                    await _storage.delete(key)
+                except Exception:
+                    logger.warning("Failed to delete transcript %s", key)
+            await _sessions_repo.delete(user_id, s.session_id)
+
+    # Delete intake responses
+    if _storage:
+        try:
+            await _storage.delete(f"profiles/{user_id}/intake-responses.json")
+        except Exception:
+            logger.warning("Failed to delete intake responses for %s", user_id)
+
+    # Delete profile last
+    await _profiles_repo.delete(user_id)
+
+    logger.info("Admin %s deleted user %s (%s)", user.email, user_id, profile.email)
+    return {"status": "deleted", "user_id": user_id}
+
+
 @router.get("/users/{user_id}/intake")
 async def get_user_intake(user_id: str, user: AuthUser):
     """Get a user's full profile and intake responses. Admin only."""

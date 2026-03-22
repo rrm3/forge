@@ -179,6 +179,13 @@ export async function setUserAdmin(userId: string, isAdmin: boolean): Promise<vo
   await checkResponse(res);
 }
 
+export async function deleteAdminUser(userId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  });
+  await checkResponse(res);
+}
+
 export async function getAdminUserIntake(userId: string): Promise<AdminUserIntake> {
   const res = await fetchWithAuth(`${API_BASE}/api/admin/users/${encodeURIComponent(userId)}/intake`);
   await checkResponse(res);
