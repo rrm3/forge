@@ -2,28 +2,46 @@ import { useEffect, useState, useRef } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './auth/useAuth';
 
-/** Loading spinner that uses inline styles to avoid browser deprioritization during cold starts. */
+/** Loading spinner styled to match DS Identity's auth loading screen. */
 function LoadingScreen() {
   return (
     <div style={{
       minHeight: '100vh',
       display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
       justifyContent: 'center',
-      gap: 12,
-      backgroundColor: 'var(--color-surface)',
+      alignItems: 'flex-start',
+      padding: '80px 20px 20px',
+      background: [
+        'radial-gradient(circle at 85% 10%, rgba(235, 211, 244, 0.5), transparent 30%)',
+        'radial-gradient(circle at 90% 15%, rgba(212, 240, 255, 0.5), transparent 30%)',
+        'radial-gradient(circle at 10% 60%, rgba(212, 240, 255, 0.5), transparent 30%)',
+        'radial-gradient(circle at 20% 80%, rgba(231, 244, 217, 0.5), transparent 30%)',
+        'radial-gradient(circle at 90% 90%, rgba(212, 240, 255, 0.5), transparent 30%)',
+        '#f8f9fb',
+      ].join(', '),
+      backgroundRepeat: 'no-repeat',
+      backgroundAttachment: 'fixed',
     }}>
       <style>{`@keyframes forge-spin { to { transform: rotate(360deg) } }`}</style>
       <div style={{
-        width: 24,
-        height: 24,
-        border: '2px solid var(--color-primary)',
-        borderTopColor: 'transparent',
-        borderRadius: '50%',
-        animation: 'forge-spin 0.8s linear infinite',
-      }} />
-      <p style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>Loading...</p>
+        width: '100%',
+        maxWidth: 476,
+        background: '#fff',
+        borderRadius: 16,
+        boxShadow: '0px 4px 6px -4px rgba(0, 0, 0, 0.1), 0px 1px 29px -3px rgba(0, 0, 0, 0.16)',
+        display: 'flex',
+        justifyContent: 'center',
+        padding: '52px 52px',
+      }}>
+        <div style={{
+          width: 32,
+          height: 32,
+          border: '3px solid #e5e7eb',
+          borderTopColor: '#1a68e8',
+          borderRadius: '50%',
+          animation: 'forge-spin 0.6s linear infinite',
+        }} />
+      </div>
     </div>
   );
 }
