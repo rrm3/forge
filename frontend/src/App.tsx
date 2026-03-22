@@ -13,6 +13,7 @@ import { IntakeView } from './components/IntakeView';
 import { TopBar } from './components/TopBar';
 import { AdminPanel } from './components/AdminPanel';
 import { getProfile, getAdminAccess, listUserIdeas } from './api/client';
+import { useProfileCache } from './state/profileCache';
 import type { UserProfile } from './api/types';
 
 function AppContent() {
@@ -38,6 +39,15 @@ function AppContent() {
         .then((p) => {
           setProfile(p);
           setProfileLoaded(true);
+          // Seed the profile cache so ProfileChip doesn't re-fetch for the current user
+          useProfileCache.getState().set(p.user_id, {
+            user_id: p.user_id,
+            name: p.name,
+            title: p.title,
+            department: p.department,
+            avatar_url: p.avatar_url,
+            team: p.team,
+          });
         })
         .catch((err) => {
           if (err?.message?.includes('401')) return;
@@ -95,7 +105,7 @@ function AppContent() {
   if (showAdmin && isAdmin) {
     return (
       <div className="flex flex-col h-screen">
-        <TopBar onAdminClick={() => setShowAdmin(false)} />
+        <TopBar onAdminClick={() => setShowAdmin(false)} profile={profile} />
         <AdminPanel onBack={() => setShowAdmin(false)} />
       </div>
     );
@@ -130,7 +140,7 @@ function AppContent() {
 
   return (
     <div className="flex flex-col h-screen">
-      <TopBar onAdminClick={() => setShowAdmin(true)} />
+      <TopBar onAdminClick={() => setShowAdmin(true)} profile={profile} />
       <div className="flex-1 min-h-0">
         <AppShell sidebar={sidebar} content={content} />
       </div>

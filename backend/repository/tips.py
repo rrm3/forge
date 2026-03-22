@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from functools import partial
@@ -13,6 +14,8 @@ import boto3
 from botocore.exceptions import ClientError
 
 from backend.models import Tip, TipComment
+
+logger = logging.getLogger(__name__)
 
 
 class TipRepository(ABC):
@@ -31,6 +34,16 @@ class TipRepository(ABC):
     @abstractmethod
     async def create(self, tip: Tip) -> None:
         """Create a new tip."""
+        pass
+
+    @abstractmethod
+    async def update(self, tip_id: str, fields: dict) -> Tip | None:
+        """Update tip fields. Returns updated tip, or None if not found."""
+        pass
+
+    @abstractmethod
+    async def delete(self, tip_id: str) -> None:
+        """Delete a tip and its votes/comments."""
         pass
 
     @abstractmethod
@@ -69,10 +82,9 @@ class DynamoDBTipRepository(TipRepository):
         self.comments_table = self.dynamodb.Table(comments_table_name)
 
     def _serialize_tip(self, tip: Tip) -> dict:
-        return {
+        d = {
             "tip_id": tip.tip_id,
             "author_id": tip.author_id,
-            "author_name": tip.author_name,
             "department": tip.department,
             "title": tip.title,
             "content": tip.content,
@@ -80,15 +92,18 @@ class DynamoDBTipRepository(TipRepository):
             "vote_count": tip.vote_count,
             "created_at": tip.created_at.isoformat(),
         }
+        if tip.summary:
+            d["summary"] = tip.summary
+        return d
 
     def _deserialize_tip(self, item: dict) -> Tip:
         return Tip(
             tip_id=item["tip_id"],
             author_id=item["author_id"],
-            author_name=item.get("author_name", ""),
             department=item.get("department", ""),
             title=item.get("title", ""),
             content=item["content"],
+            summary=item.get("summary", ""),
             tags=list(item.get("tags", [])),
             vote_count=int(item.get("vote_count", 0)),
             created_at=datetime.fromisoformat(item["created_at"]),
@@ -99,7 +114,6 @@ class DynamoDBTipRepository(TipRepository):
             "tip_id": comment.tip_id,
             "comment_id": comment.comment_id,
             "author_id": comment.author_id,
-            "author_name": comment.author_name,
             "content": comment.content,
             "created_at": comment.created_at.isoformat(),
         }
@@ -109,7 +123,6 @@ class DynamoDBTipRepository(TipRepository):
             tip_id=item["tip_id"],
             comment_id=item["comment_id"],
             author_id=item["author_id"],
-            author_name=item.get("author_name", ""),
             content=item["content"],
             created_at=datetime.fromisoformat(item["created_at"]),
         )
@@ -129,10 +142,12 @@ class DynamoDBTipRepository(TipRepository):
             )
             tips = [self._deserialize_tip(item) for item in response.get("Items", [])]
         except ClientError:
+            logger.error("Failed to scan tips table", exc_info=True)
             return []
 
         if department:
-            tips = [t for t in tips if t.department.lower() == department.lower()]
+            dept_lower = department.lower()
+            tips = [t for t in tips if t.department.lower() == dept_lower or t.department.lower() in ("everyone", "all", "")]
 
         if sort_by == "popular":
             tips.sort(key=lambda t: t.vote_count, reverse=True)
@@ -158,6 +173,49 @@ class DynamoDBTipRepository(TipRepository):
         await loop.run_in_executor(
             None,
             partial(self.tips_table.put_item, Item=self._serialize_tip(tip)),
+        )
+
+    async def update(self, tip_id: str, fields: dict) -> Tip | None:
+        allowed = {"title", "content", "tags", "department", "summary"}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return await self.get(tip_id)
+
+        expr_parts = []
+        attr_names = {}
+        attr_values = {}
+        for i, (key, val) in enumerate(updates.items()):
+            placeholder = f":v{i}"
+            name_placeholder = f"#k{i}"
+            expr_parts.append(f"{name_placeholder} = {placeholder}")
+            attr_names[name_placeholder] = key
+            attr_values[placeholder] = val
+        update_expr = "SET " + ", ".join(expr_parts)
+
+        loop = asyncio.get_event_loop()
+        try:
+            response = await loop.run_in_executor(
+                None,
+                partial(
+                    self.tips_table.update_item,
+                    Key={"tip_id": tip_id},
+                    UpdateExpression=update_expr,
+                    ExpressionAttributeNames=attr_names,
+                    ExpressionAttributeValues=attr_values,
+                    ReturnValues="ALL_NEW",
+                ),
+            )
+            item = response.get("Attributes")
+            return self._deserialize_tip(item) if item else None
+        except ClientError:
+            logger.error("Failed to update tip %s", tip_id, exc_info=True)
+            return None
+
+    async def delete(self, tip_id: str) -> None:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            partial(self.tips_table.delete_item, Key={"tip_id": tip_id}),
         )
 
     async def upvote(self, tip_id: str, user_id: str) -> bool:
@@ -313,7 +371,8 @@ class MemoryTipRepository(TipRepository):
     async def list(self, department: str | None = None, sort_by: str = "recent", limit: int = 50) -> list[Tip]:
         tips = list(self._tips.values())
         if department:
-            tips = [t for t in tips if t.department.lower() == department.lower()]
+            dept_lower = department.lower()
+            tips = [t for t in tips if t.department.lower() == dept_lower or t.department.lower() in ("everyone", "all", "")]
         if sort_by == "popular":
             tips.sort(key=lambda t: t.vote_count, reverse=True)
         else:
@@ -325,6 +384,23 @@ class MemoryTipRepository(TipRepository):
 
     async def create(self, tip: Tip) -> None:
         self._tips[tip.tip_id] = tip
+        self._save()
+
+    async def update(self, tip_id: str, fields: dict) -> Tip | None:
+        tip = self._tips.get(tip_id)
+        if tip is None:
+            return None
+        allowed = {"title", "content", "tags", "department", "summary"}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if updates:
+            self._tips[tip_id] = tip.model_copy(update=updates)
+            self._save()
+        return self._tips[tip_id]
+
+    async def delete(self, tip_id: str) -> None:
+        self._tips.pop(tip_id, None)
+        self._votes = {(tid, uid) for tid, uid in self._votes if tid != tip_id}
+        self._comments.pop(tip_id, None)
         self._save()
 
     async def upvote(self, tip_id: str, user_id: str) -> bool:

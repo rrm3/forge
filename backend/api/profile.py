@@ -28,6 +28,15 @@ async def _get_or_create_profile(user: AuthUser) -> UserProfile:
     """Get profile, auto-creating from OIDC claims + org chart on first access."""
     profile = await _profiles_repo.get(user.user_id)
     if profile is not None:
+        # Sync org chart fields on every access so changes (photo, title, etc.) stay current
+        if _orgchart and user.email:
+            try:
+                enrichment = enrich_profile_kwargs(_orgchart, user.email)
+                if enrichment:
+                    await _profiles_repo.update(user.user_id, enrichment)
+                    profile = await _profiles_repo.get(user.user_id) or profile
+            except Exception:
+                logger.warning("Org chart sync failed for %s", user.email, exc_info=True)
         return profile
 
     logger.info("Creating profile for new user %s (%s)", user.user_id, user.email)
@@ -51,6 +60,19 @@ async def get_profile(user: AuthUser):
     """Get the current user's profile, creating it on first access."""
     profile = await _get_or_create_profile(user)
     return profile.model_dump(mode="json")
+
+
+PUBLIC_FIELDS = {"user_id", "name", "title", "department", "avatar_url", "team"}
+
+
+@router.get("/{user_id}")
+async def get_public_profile(user_id: str, _user: AuthUser):
+    """Get another user's public profile fields. Requires authentication."""
+    profile = await _profiles_repo.get(user_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    data = profile.model_dump(mode="json")
+    return {k: v for k, v in data.items() if k in PUBLIC_FIELDS}
 
 
 @router.put("")

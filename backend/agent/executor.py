@@ -473,13 +473,17 @@ async def _check_tip_prepared(transcript: list[Message], sender: MessageSender, 
         for msg in reversed(transcript):
             if msg.role == "tool_call" and msg.tool_name == "prepare_tip":
                 args = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+                # Normalize department: "all" -> "Everyone"
+                dept = args.get("department", "Everyone")
+                if dept.lower() in ("all", ""):
+                    dept = "Everyone"
                 await sender.send({
                     "type": "tip_ready",
                     "session_id": session_id,
                     "title": args.get("title", ""),
                     "content": args.get("content", ""),
                     "tags": args.get("tags", []),
-                    "department": args.get("department", "Everyone"),
+                    "department": dept,
                 })
                 return
     except Exception:

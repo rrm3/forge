@@ -32,6 +32,7 @@ export interface UserProfile {
   interests: string[];
   tools_used: string[];
   goals: string[];
+  avatar_url: string;
   location: string;
   start_date: string;
   work_summary: string;
@@ -87,10 +88,10 @@ export interface DepartmentConfig {
 export interface Tip {
   tip_id: string;
   author_id: string;
-  author_name: string;
   department: string;
   title: string;
   content: string;
+  summary: string;
   tags: string[];
   vote_count: number;
   user_has_voted: boolean;
@@ -101,7 +102,6 @@ export interface TipComment {
   tip_id: string;
   comment_id: string;
   author_id: string;
-  author_name: string;
   content: string;
   created_at: string;
 }

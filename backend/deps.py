@@ -87,7 +87,11 @@ def build_orgchart():
     if settings.dev_mode:
         if settings.orgchart_local_path:
             return load_orgchart_local(settings.orgchart_local_path)
-        logger.info("No org chart configured for dev mode (set ORGCHART_LOCAL_PATH)")
+        # Fall back to standard local storage path
+        default_path = Path("/tmp/forge-storage/orgchart/org-chart.db")
+        if default_path.exists():
+            return load_orgchart_local(str(default_path))
+        logger.info("No org chart found for dev mode (set ORGCHART_LOCAL_PATH or place at %s)", default_path)
         return None
 
     return load_orgchart_from_s3(settings.s3_bucket, settings.orgchart_s3_key)

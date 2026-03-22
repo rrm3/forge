@@ -156,6 +156,8 @@ def enrich_profile_kwargs(orgchart: OrgChart, email: str) -> dict:
         result["location"] = entry["location"]
     if "start_date" in keys and entry["start_date"]:
         result["start_date"] = entry["start_date"]
+    if "avatar_url" in keys and entry["avatar_url"]:
+        result["avatar_url"] = entry["avatar_url"]
     # work_summary intentionally NOT pre-filled from org chart.
     # It should come from the user's own description during intake.
 

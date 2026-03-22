@@ -77,6 +77,12 @@ export async function getProfile(): Promise<UserProfile> {
   return res.json();
 }
 
+export async function getPublicProfile(userId: string): Promise<{ user_id: string; name: string; title: string; department: string; avatar_url: string; team: string }> {
+  const res = await fetchWithAuth(`${API_BASE}/api/profile/${encodeURIComponent(userId)}`);
+  await checkResponse(res);
+  return res.json();
+}
+
 export async function updateProfile(fields: Partial<UserProfile>): Promise<void> {
   const res = await fetchWithAuth(`${API_BASE}/api/profile`, {
     method: 'PATCH',
@@ -180,6 +186,20 @@ export async function getTip(tipId: string): Promise<Tip> {
   const res = await fetchWithAuth(`${API_BASE}/api/tips/${encodeURIComponent(tipId)}`);
   await checkResponse(res);
   return res.json();
+}
+
+export async function updateTip(tipId: string, fields: { title?: string; content?: string; tags?: string[]; department?: string }): Promise<Tip> {
+  const res = await fetchWithAuth(`${API_BASE}/api/tips/${encodeURIComponent(tipId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(fields),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function deleteTip(tipId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/tips/${encodeURIComponent(tipId)}`, { method: 'DELETE' });
+  await checkResponse(res);
 }
 
 export async function voteTip(tipId: string): Promise<void> {

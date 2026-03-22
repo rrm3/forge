@@ -46,6 +46,7 @@ class UserProfile(BaseModel):
     interests: list[str] = Field(default_factory=list)
     tools_used: list[str] = Field(default_factory=list)
     goals: list[str] = Field(default_factory=list)
+    avatar_url: str = ""
     location: str = ""
     start_date: str = ""
     work_summary: str = ""
@@ -88,10 +89,10 @@ class Idea(BaseModel):
 class Tip(BaseModel):
     tip_id: str
     author_id: str
-    author_name: str = ""
     department: str = ""
     title: str = ""
     content: str
+    summary: str = ""
     tags: list[str] = Field(default_factory=list)
     vote_count: int = 0
     created_at: datetime = Field(default_factory=_now)
@@ -107,7 +108,6 @@ class TipComment(BaseModel):
     tip_id: str
     comment_id: str
     author_id: str
-    author_name: str = ""
     content: str
     created_at: datetime = Field(default_factory=_now)
 

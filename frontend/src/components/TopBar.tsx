@@ -9,22 +9,17 @@ import { useState, useRef, useEffect } from 'react';
 import { LogOut, BookOpen, UserRoundCog, Settings, Code } from 'lucide-react';
 import { useAuth } from '../auth/useAuth';
 import { useAdminStore } from '../state/adminStore';
+import { UserAvatar } from './UserAvatar';
+import type { UserProfile } from '../api/types';
 
 const isDevMode = window.location.hostname === 'localhost';
 
 interface TopBarProps {
   onAdminClick?: () => void;
+  profile?: UserProfile | null;
 }
 
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? '')
-    .join('');
-}
-
-export function TopBar({ onAdminClick }: TopBarProps = {}) {
+export function TopBar({ onAdminClick, profile }: TopBarProps = {}) {
   const { isAdmin, adminMode, toggleAdminMode } = useAdminStore();
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
@@ -45,8 +40,6 @@ export function TopBar({ onAdminClick }: TopBarProps = {}) {
   }, [open]);
 
   if (!user) return null;
-
-  const initials = getInitials(user.name || user.email);
 
   return (
     <div className="z-30 shrink-0">
@@ -76,26 +69,13 @@ export function TopBar({ onAdminClick }: TopBarProps = {}) {
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
-          <div
-            className="flex items-center justify-center rounded-full shrink-0"
-            style={{
-              width: 28,
-              height: 28,
-              backgroundColor: '#159AC9',
-            }}
-          >
-            <span
-              style={{
-                color: '#FFFFFF',
-                fontSize: 11,
-                fontWeight: 600,
-                fontFamily: "'Satoshi', system-ui, sans-serif",
-                lineHeight: 1,
-              }}
-            >
-              {initials}
-            </span>
-          </div>
+          <UserAvatar
+            name={user.name || user.email}
+            avatarUrl={profile?.avatar_url}
+            title={profile?.title}
+            department={profile?.department}
+            size={28}
+          />
           <span
             style={{
               color: '#4A5568',

@@ -3,6 +3,7 @@ import { ArrowLeft, ThumbsUp } from 'lucide-react';
 import { listTips, voteTip, unvoteTip } from '../api/client';
 import type { Tip } from '../api/types';
 import { TipDetail } from './TipDetail';
+import { ProfileChip } from './ProfileChip';
 
 interface TipsViewProps {
   onBack: () => void;
@@ -31,6 +32,21 @@ function formatDepartmentName(slug: string): string {
     .join(' ');
 }
 
+/** Strip markdown syntax for plain-text card previews. */
+function stripMarkdown(md: string): string {
+  return md
+    .replace(/^#{1,6}\s+/gm, '')        // headings
+    .replace(/\*\*(.+?)\*\*/g, '$1')    // bold
+    .replace(/\*(.+?)\*/g, '$1')        // italic
+    .replace(/`(.+?)`/g, '$1')          // inline code
+    .replace(/^\s*[-*+]\s+/gm, '')      // list bullets
+    .replace(/^\s*\d+\.\s+/gm, '')      // numbered lists
+    .replace(/\[(.+?)\]\(.+?\)/g, '$1') // links
+    .replace(/\n{2,}/g, ' ')            // collapse double newlines
+    .replace(/\n/g, ' ')                // remaining newlines
+    .trim();
+}
+
 function relativeTime(dateStr: string): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();
@@ -52,12 +68,14 @@ function relativeTime(dateStr: string): string {
 export function TipsView({ onBack, userDepartment }: TipsViewProps) {
   const [tips, setTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);
-  const [department, setDepartment] = useState<string>(userDepartment || 'all');
+  const [error, setError] = useState<string | null>(null);
+  const [department, setDepartment] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'popular'>('recent');
   const [selectedTip, setSelectedTip] = useState<Tip | null>(null);
 
   const fetchTips = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const result = await listTips({
         department: department === 'all' ? undefined : department,
@@ -66,6 +84,7 @@ export function TipsView({ onBack, userDepartment }: TipsViewProps) {
       setTips(result);
     } catch (err) {
       console.error('Failed to fetch tips:', err);
+      setError('Failed to load tips. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -117,12 +136,24 @@ export function TipsView({ onBack, userDepartment }: TipsViewProps) {
     );
   }, []);
 
+  const handleTipUpdated = useCallback((updated: Tip) => {
+    setTips((prev) => prev.map((t) => t.tip_id === updated.tip_id ? updated : t));
+    setSelectedTip(updated);
+  }, []);
+
+  const handleTipDeleted = useCallback((tipId: string) => {
+    setTips((prev) => prev.filter((t) => t.tip_id !== tipId));
+    setSelectedTip(null);
+  }, []);
+
   if (selectedTip) {
     return (
       <TipDetail
         tip={selectedTip}
-        onBack={() => setSelectedTip(null)}
+        onBack={() => { setSelectedTip(null); fetchTips(); }}
         onVoteChange={handleVoteChange}
+        onTipUpdated={handleTipUpdated}
+        onTipDeleted={handleTipDeleted}
       />
     );
   }
@@ -201,6 +232,17 @@ export function TipsView({ onBack, userDepartment }: TipsViewProps) {
               style={{ borderColor: 'var(--color-primary)' }}
             />
           </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{error}</p>
+            <button
+              onClick={fetchTips}
+              className="text-sm font-medium px-3 py-1.5 rounded-lg"
+              style={{ color: 'var(--color-primary)', backgroundColor: 'var(--color-primary-subtle)' }}
+            >
+              Retry
+            </button>
+          </div>
         ) : tips.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
@@ -221,9 +263,7 @@ export function TipsView({ onBack, userDepartment }: TipsViewProps) {
               >
                 {/* Author + department */}
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-                    {tip.author_name}
-                  </span>
+                  <ProfileChip userId={tip.author_id} avatarSize={20} />
                   <span
                     className="text-xs px-2 py-0.5 rounded-full"
                     style={{
@@ -240,18 +280,18 @@ export function TipsView({ onBack, userDepartment }: TipsViewProps) {
                   {tip.title}
                 </p>
 
-                {/* Content (truncated) */}
+                {/* Content summary */}
                 <p
                   className="text-sm mb-2"
                   style={{
                     color: 'var(--color-text-secondary)',
                     display: '-webkit-box',
-                    WebkitLineClamp: 3,
+                    WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical',
                     overflow: 'hidden',
                   }}
                 >
-                  {tip.content}
+                  {tip.summary || stripMarkdown(tip.content)}
                 </p>
 
                 {/* Tags */}

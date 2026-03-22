@@ -83,6 +83,7 @@ async def call_llm(
     tools: list[dict] | None = None,
     model: str | None = None,
     stream: bool = False,
+    max_tokens: int | None = None,
 ) -> LLMResponse:
     """Call LLM via LiteLLM and return a parsed response.
 
@@ -114,6 +115,8 @@ async def call_llm(
         kwargs["aws_secret_access_key"] = settings.bedrock_secret_access_key
     if tools:
         kwargs["tools"] = tools
+    if max_tokens:
+        kwargs["max_tokens"] = max_tokens
 
     last_exc: Exception | None = None
     for attempt in range(_MAX_RETRIES):
