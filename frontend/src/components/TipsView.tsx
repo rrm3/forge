@@ -7,7 +7,6 @@ import { TipDetail } from './TipDetail';
 import { ProfileChip } from './ProfileChip';
 
 interface TipsViewProps {
-  userDepartment?: string;
   initialTipId?: string;
 }
 
@@ -66,7 +65,7 @@ function relativeTime(dateStr: string): string {
   return `${diffMonth}mo ago`;
 }
 
-export function TipsView({ userDepartment, initialTipId }: TipsViewProps) {
+export function TipsView({ initialTipId }: TipsViewProps) {
   const navigate = useNavigate();
   const [tips, setTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);

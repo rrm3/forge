@@ -4,7 +4,7 @@
  * Toggle in browser console: localStorage.setItem('forge-debug', 'true')
  */
 
-import { useSession, type IntakeChecklistItem } from '../state/SessionContext';
+import { useSession } from '../state/SessionContext';
 import { useAdminStore } from '../state/adminStore';
 
 export function IntakeDebugPanel() {

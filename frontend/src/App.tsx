@@ -36,10 +36,10 @@ function ChatRoute() {
 }
 
 /** Wraps TipsView and passes the optional tipId from the URL path. */
-function TipsRoute({ userDepartment }: { userDepartment?: string }) {
+function TipsRoute() {
   const { '*': splat } = useParams();
   const tipId = splat || undefined;
-  return <TipsView userDepartment={userDepartment} initialTipId={tipId} />;
+  return <TipsView initialTipId={tipId} />;
 }
 
 /** Main layout with sidebar, used for all post-intake routes. */
@@ -194,7 +194,7 @@ function AppContent() {
       >
         <Route index element={<HomeScreen />} />
         <Route path="chat/:sessionId" element={<ChatRoute />} />
-        <Route path="tips/*" element={<TipsRoute userDepartment={profile?.department} />} />
+        <Route path="tips/*" element={<TipsRoute />} />
         <Route path="ideas" element={<IdeasView />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

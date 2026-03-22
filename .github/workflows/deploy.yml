@@ -74,6 +74,7 @@ jobs:
             --function-name "${FUNCTION_NAME}"
 
       - name: Update WebSocket Lambda function
+        if: ${{ secrets.WS_LAMBDA_FUNCTION_NAME != '' }}
         env:
           WS_FUNCTION_NAME: ${{ secrets.WS_LAMBDA_FUNCTION_NAME }}
         run: |
