@@ -143,6 +143,10 @@ async def list_users(user: AuthUser):
 
     user_ids = [p.user_id for p in profiles]
 
+    # Load admin access map to flag full admins in the response
+    admin_access = await _dept_config_repo.get_admin_access()
+    admin_emails = {e.lower() for e in admin_access}
+
     # Compute tip counts in one scan
     tip_counts = await _tips_repo.count_by_authors(user_ids) if _tips_repo else {}
 
@@ -176,6 +180,7 @@ async def list_users(user: AuthUser):
             "intake_completed_at": p.intake_completed_at.isoformat() if p.intake_completed_at else None,
             "ai_proficiency": p.ai_proficiency.model_dump() if p.ai_proficiency else None,
             "is_department_admin": p.is_department_admin,
+            "is_admin": p.email.lower() in admin_emails,
             "session_count": session_counts.get(p.user_id, 0),
             "tip_count": tip_counts.get(p.user_id, 0),
             "last_active": last_actives.get(p.user_id),
@@ -194,6 +199,34 @@ async def set_user_role(user_id: str, body: dict, user: AuthUser):
     is_dept_admin = bool(body.get("is_department_admin", False))
     await _profiles_repo.update(user_id, {"is_department_admin": is_dept_admin})
     return {"status": "updated", "is_department_admin": is_dept_admin}
+
+
+@router.put("/users/{user_id}/admin")
+async def set_user_admin(user_id: str, body: dict, user: AuthUser):
+    """Grant or revoke full admin access for a user. Full admin only."""
+    await _require_admin(user.email)
+
+    is_admin = bool(body.get("is_admin", False))
+
+    # Look up the target user's email from their profile
+    profile = await _profiles_repo.get(user_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    target_email = profile.email
+    admin_access = await _dept_config_repo.get_admin_access()
+
+    if is_admin:
+        # Grant full admin with wildcard access
+        admin_access[target_email] = ["*"]
+    else:
+        # Prevent removing yourself as admin
+        if target_email.lower() == user.email.lower():
+            raise HTTPException(status_code=400, detail="Cannot remove your own admin access")
+        admin_access.pop(target_email, None)
+
+    await _dept_config_repo.save_admin_access(admin_access)
+    return {"status": "updated", "is_admin": is_admin}
 
 
 @router.get("/users/{user_id}/intake")

@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { Search, X, ChevronUp, ChevronDown, Check, Clock, Shield } from 'lucide-react';
-import { listAdminUsers, getAdminUserIntake, setUserRole } from '../api/client';
+import { listAdminUsers, getAdminUserIntake, setUserRole, setUserAdmin } from '../api/client';
 import { UserAvatar } from './UserAvatar';
 import type { AdminUserSummary, AdminUserIntake } from '../api/types';
 
@@ -103,6 +103,17 @@ export function AdminUsers() {
     }
   }
 
+  async function handleToggleAdmin(userId: string, isAdmin: boolean) {
+    try {
+      await setUserAdmin(userId, isAdmin);
+      setUsers((prev) =>
+        prev.map((u) => u.user_id === userId ? { ...u, is_admin: isAdmin } : u)
+      );
+    } catch (err) {
+      console.error('Failed to update admin status:', err);
+    }
+  }
+
   useEffect(() => {
     listAdminUsers()
       .then((u) => { setUsers(u); setLoading(false); })
@@ -148,9 +159,11 @@ export function AdminUsers() {
         case 'department':
           cmp = a.department.localeCompare(b.department);
           break;
-        case 'role':
-          cmp = (a.is_department_admin ? 1 : 0) - (b.is_department_admin ? 1 : 0);
+        case 'role': {
+          const roleWeight = (u: AdminUserSummary) => (u.is_admin ? 2 : 0) + (u.is_department_admin ? 1 : 0);
+          cmp = roleWeight(a) - roleWeight(b);
           break;
+        }
         case 'ai_proficiency':
           cmp = (a.ai_proficiency?.level ?? 0) - (b.ai_proficiency?.level ?? 0);
           break;
@@ -389,21 +402,38 @@ export function AdminUsers() {
                     {u.department || '-'}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    {u.is_department_admin && (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5"
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 600,
-                          fontFamily: "'Satoshi', system-ui, sans-serif",
-                          backgroundColor: '#EFF6FF',
-                          color: '#2563EB',
-                        }}
-                      >
-                        <Shield className="w-3 h-3" strokeWidth={2} />
-                        Dept Admin
-                      </span>
-                    )}
+                    <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                      {u.is_admin && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5"
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            fontFamily: "'Satoshi', system-ui, sans-serif",
+                            backgroundColor: '#FEF3C7',
+                            color: '#B45309',
+                          }}
+                        >
+                          <Shield className="w-3 h-3" strokeWidth={2} />
+                          Admin
+                        </span>
+                      )}
+                      {u.is_department_admin && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5"
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            fontFamily: "'Satoshi', system-ui, sans-serif",
+                            backgroundColor: '#EFF6FF',
+                            color: '#2563EB',
+                          }}
+                        >
+                          <Shield className="w-3 h-3" strokeWidth={2} />
+                          Dept Admin
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
                     {u.ai_proficiency && u.ai_proficiency.level > 0
@@ -466,6 +496,7 @@ export function AdminUsers() {
               loading={detailLoading}
               onClose={() => setSelectedUserId(null)}
               onToggleRole={handleToggleRole}
+              onToggleAdmin={handleToggleAdmin}
             />
           </div>
         </>
@@ -481,6 +512,7 @@ function DetailPanel({
   loading,
   onClose,
   onToggleRole,
+  onToggleAdmin,
 }: {
   userId: string;
   user: AdminUserSummary | null;
@@ -488,6 +520,7 @@ function DetailPanel({
   loading: boolean;
   onClose: () => void;
   onToggleRole: (userId: string, isDeptAdmin: boolean) => void;
+  onToggleAdmin: (userId: string, isAdmin: boolean) => void;
 }) {
   if (loading || !intake) {
     return (
@@ -536,9 +569,60 @@ function DetailPanel({
         </button>
       </div>
 
-      {/* Department Admin toggle */}
+      {/* Role toggles */}
       {user && (
         <Section title="Role">
+          {/* Admin toggle */}
+          <button
+            onClick={() => onToggleAdmin(userId, !user.is_admin)}
+            className="flex items-center justify-between w-full rounded-lg border px-3 py-2.5 transition-colors"
+            style={{
+              borderColor: user.is_admin ? '#FDE68A' : 'var(--color-border)',
+              backgroundColor: user.is_admin ? '#FFFBEB' : 'transparent',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => { if (!user.is_admin) e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)'; }}
+            onMouseLeave={(e) => { if (!user.is_admin) e.currentTarget.style.backgroundColor = user.is_admin ? '#FFFBEB' : 'transparent'; }}
+          >
+            <span className="flex items-center gap-2">
+              <Shield
+                className="w-4 h-4"
+                strokeWidth={1.5}
+                style={{ color: user.is_admin ? '#B45309' : 'var(--color-text-muted)' }}
+              />
+              <span
+                className="text-sm font-medium"
+                style={{ color: user.is_admin ? '#B45309' : 'var(--color-text-primary)' }}
+              >
+                Admin
+              </span>
+            </span>
+            <span
+              className="relative inline-block rounded-full transition-colors"
+              style={{
+                width: 32,
+                height: 18,
+                backgroundColor: user.is_admin ? '#D97706' : '#CBD5E1',
+              }}
+            >
+              <span
+                className="absolute top-0.5 rounded-full bg-white transition-all shadow-sm"
+                style={{
+                  width: 14,
+                  height: 14,
+                  left: user.is_admin ? 16 : 2,
+                }}
+              />
+            </span>
+          </button>
+          {user.is_admin && (
+            <p className="text-xs mt-1.5 mb-3" style={{ color: 'var(--color-text-muted)' }}>
+              Full admin access: can manage all departments and users
+            </p>
+          )}
+          {!user.is_admin && <div className="mb-3" />}
+
+          {/* Department Admin toggle */}
           <button
             onClick={() => onToggleRole(userId, !user.is_department_admin)}
             className="flex items-center justify-between w-full rounded-lg border px-3 py-2.5 transition-colors"
@@ -548,7 +632,7 @@ function DetailPanel({
               cursor: 'pointer',
             }}
             onMouseEnter={(e) => { if (!user.is_department_admin) e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)'; }}
-            onMouseLeave={(e) => { if (!user.is_department_admin) e.currentTarget.style.backgroundColor = 'transparent'; }}
+            onMouseLeave={(e) => { if (!user.is_department_admin) e.currentTarget.style.backgroundColor = user.is_department_admin ? '#EFF6FF' : 'transparent'; }}
           >
             <span className="flex items-center gap-2">
               <Shield

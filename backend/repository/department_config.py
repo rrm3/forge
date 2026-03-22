@@ -48,6 +48,11 @@ class DepartmentConfigRepository:
             return {}
         return json.loads(data.decode())
 
+    async def save_admin_access(self, access: dict) -> None:
+        """Write the admin access mapping."""
+        data = json.dumps(access, indent=2).encode()
+        await self.storage.write(ADMIN_ACCESS_KEY, data, content_type="application/json")
+
     async def list_departments(self) -> list[str]:
         """List all departments that have config files.
 

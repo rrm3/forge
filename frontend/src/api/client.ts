@@ -171,6 +171,14 @@ export async function setUserRole(userId: string, isDepartmentAdmin: boolean): P
   await checkResponse(res);
 }
 
+export async function setUserAdmin(userId: string, isAdmin: boolean): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/users/${encodeURIComponent(userId)}/admin`, {
+    method: 'PUT',
+    body: JSON.stringify({ is_admin: isAdmin }),
+  });
+  await checkResponse(res);
+}
+
 export async function getAdminUserIntake(userId: string): Promise<AdminUserIntake> {
   const res = await fetchWithAuth(`${API_BASE}/api/admin/users/${encodeURIComponent(userId)}/intake`);
   await checkResponse(res);

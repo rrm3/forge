@@ -117,6 +117,7 @@ export interface AdminUserSummary {
   intake_completed_at: string | null;
   ai_proficiency: { level: number; rationale: string } | null;
   is_department_admin: boolean;
+  is_admin: boolean;
   session_count: number;
   tip_count: number;
   last_active: string | null;
