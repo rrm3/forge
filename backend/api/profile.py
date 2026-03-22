@@ -28,13 +28,16 @@ async def _get_or_create_profile(user: AuthUser) -> UserProfile:
     """Get profile, auto-creating from OIDC claims + org chart on first access."""
     profile = await _profiles_repo.get(user.user_id)
     if profile is not None:
-        # Sync org chart fields on every access so changes (photo, title, etc.) stay current
+        # Sync org chart fields on access, but only write if something actually changed
         if _orgchart and user.email:
             try:
                 enrichment = enrich_profile_kwargs(_orgchart, user.email)
                 if enrichment:
-                    await _profiles_repo.update(user.user_id, enrichment)
-                    profile = await _profiles_repo.get(user.user_id) or profile
+                    current = profile.model_dump()
+                    changed = {k: v for k, v in enrichment.items() if current.get(k) != v}
+                    if changed:
+                        await _profiles_repo.update(user.user_id, changed)
+                        profile = await _profiles_repo.get(user.user_id) or profile
             except Exception:
                 logger.warning("Org chart sync failed for %s", user.email, exc_info=True)
         return profile

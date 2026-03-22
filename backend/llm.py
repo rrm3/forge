@@ -115,7 +115,7 @@ async def call_llm(
         kwargs["aws_secret_access_key"] = settings.bedrock_secret_access_key
     if tools:
         kwargs["tools"] = tools
-    if max_tokens:
+    if max_tokens is not None:
         kwargs["max_tokens"] = max_tokens
 
     last_exc: Exception | None = None

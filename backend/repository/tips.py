@@ -200,6 +200,7 @@ class DynamoDBTipRepository(TipRepository):
                     self.tips_table.update_item,
                     Key={"tip_id": tip_id},
                     UpdateExpression=update_expr,
+                    ConditionExpression="attribute_exists(tip_id)",
                     ExpressionAttributeNames=attr_names,
                     ExpressionAttributeValues=attr_values,
                     ReturnValues="ALL_NEW",
@@ -213,10 +214,41 @@ class DynamoDBTipRepository(TipRepository):
 
     async def delete(self, tip_id: str) -> None:
         loop = asyncio.get_event_loop()
+        # Delete the tip itself
         await loop.run_in_executor(
             None,
             partial(self.tips_table.delete_item, Key={"tip_id": tip_id}),
         )
+        # Clean up votes for this tip
+        try:
+            response = await loop.run_in_executor(
+                None,
+                partial(self.votes_table.query, KeyConditionExpression="tip_id = :tid",
+                        ExpressionAttributeValues={":tid": tip_id}),
+            )
+            for item in response.get("Items", []):
+                await loop.run_in_executor(
+                    None,
+                    partial(self.votes_table.delete_item,
+                            Key={"tip_id": tip_id, "user_id": item["user_id"]}),
+                )
+        except ClientError:
+            logger.warning("Failed to clean up votes for tip %s", tip_id, exc_info=True)
+        # Clean up comments for this tip
+        try:
+            response = await loop.run_in_executor(
+                None,
+                partial(self.comments_table.query, KeyConditionExpression="tip_id = :tid",
+                        ExpressionAttributeValues={":tid": tip_id}),
+            )
+            for item in response.get("Items", []):
+                await loop.run_in_executor(
+                    None,
+                    partial(self.comments_table.delete_item,
+                            Key={"tip_id": tip_id, "comment_id": item["comment_id"]}),
+                )
+        except ClientError:
+            logger.warning("Failed to clean up comments for tip %s", tip_id, exc_info=True)
 
     async def upvote(self, tip_id: str, user_id: str) -> bool:
         """Put vote with condition to prevent duplicates, then atomic increment."""

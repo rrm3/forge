@@ -15,12 +15,14 @@ export function ProfileChip({ userId, showName = true, avatarSize = 24 }: Profil
   const { set, markLoading } = useProfileCache();
 
   useEffect(() => {
-    if (profile || isLoading) return;
+    // Use getState() to avoid race where multiple chips for the same user
+    // all see isLoading=false in the same render tick
+    const state = useProfileCache.getState();
+    if (state.profiles[userId] || state.loading.has(userId)) return;
     markLoading(userId);
     getPublicProfile(userId)
       .then((p) => set(userId, p))
       .catch(() => {
-        // Store a minimal fallback so we don't retry endlessly
         set(userId, { user_id: userId, name: 'Unknown', title: '', department: '', avatar_url: '', team: '' });
       });
   }, [userId, profile, isLoading, set, markLoading]);

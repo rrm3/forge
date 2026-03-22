@@ -14,7 +14,6 @@ interface ProfileCacheState {
   loading: Set<string>;
   set: (userId: string, profile: PublicProfile) => void;
   markLoading: (userId: string) => void;
-  clearLoading: (userId: string) => void;
 }
 
 export const useProfileCache = create<ProfileCacheState>((set) => ({
@@ -27,10 +26,4 @@ export const useProfileCache = create<ProfileCacheState>((set) => ({
     })),
   markLoading: (userId) =>
     set((s) => ({ loading: new Set(s.loading).add(userId) })),
-  clearLoading: (userId) =>
-    set((s) => {
-      const next = new Set(s.loading);
-      next.delete(userId);
-      return { loading: next };
-    }),
 }));

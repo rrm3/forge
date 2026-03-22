@@ -20,7 +20,7 @@ _tips_repo = None
 HAIKU_MODEL = "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
 
 
-def set_tips_deps(tips_repo, profiles_repo=None):
+def set_tips_deps(tips_repo):
     global _tips_repo
     _tips_repo = tips_repo
 
