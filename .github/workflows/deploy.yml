@@ -76,11 +76,15 @@ jobs:
 
           echo "Published version: ${VERSION}"
 
-          # Keep 10 warm instances to avoid cold start delays
-          aws lambda put-provisioned-concurrency-config \
+          # Point 'live' alias to new version (provisioned concurrency follows the alias)
+          aws lambda update-alias \
             --function-name "${FUNCTION_NAME}" \
-            --qualifier "${VERSION}" \
-            --provisioned-concurrent-executions 10 || true
+            --name live \
+            --function-version "${VERSION}" || \
+          aws lambda create-alias \
+            --function-name "${FUNCTION_NAME}" \
+            --name live \
+            --function-version "${VERSION}"
 
       - name: Update WebSocket Lambda function
         env:
@@ -101,11 +105,15 @@ jobs:
 
           echo "Published version: ${VERSION}"
 
-          # Keep 20 warm instances for WebSocket connections
-          aws lambda put-provisioned-concurrency-config \
+          # Point 'live' alias to new version (provisioned concurrency follows the alias)
+          aws lambda update-alias \
             --function-name "${WS_FUNCTION_NAME}" \
-            --qualifier "${VERSION}" \
-            --provisioned-concurrent-executions 20 || true
+            --name live \
+            --function-version "${VERSION}" || \
+          aws lambda create-alias \
+            --function-name "${WS_FUNCTION_NAME}" \
+            --name live \
+            --function-version "${VERSION}"
 
   deploy-frontend:
     name: Deploy Frontend
@@ -140,9 +148,13 @@ jobs:
           aws s3 sync frontend/dist/ "s3://${{ secrets.FRONTEND_BUCKET }}/" \
             --delete \
             --cache-control "public, max-age=31536000, immutable" \
-            --exclude "index.html"
+            --exclude "index.html" \
+            --exclude "silent-callback.html"
 
           aws s3 cp frontend/dist/index.html "s3://${{ secrets.FRONTEND_BUCKET }}/index.html" \
+            --cache-control "no-cache"
+
+          aws s3 cp frontend/dist/silent-callback.html "s3://${{ secrets.FRONTEND_BUCKET }}/silent-callback.html" \
             --cache-control "no-cache"
 
       - name: Invalidate CloudFront
