@@ -92,6 +92,41 @@ export class ForgeStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
+    // Tips tables
+    const tipsTable = new dynamodb.Table(this, 'TipsTable', {
+      tableName: `${prefix}-tips`,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: 'tip_id', type: dynamodb.AttributeType.STRING },
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    const tipVotesTable = new dynamodb.Table(this, 'TipVotesTable', {
+      tableName: `${prefix}-tip-votes`,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: 'tip_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'user_id', type: dynamodb.AttributeType.STRING },
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    const tipCommentsTable = new dynamodb.Table(this, 'TipCommentsTable', {
+      tableName: `${prefix}-tip-comments`,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: 'tip_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'comment_id', type: dynamodb.AttributeType.STRING },
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    // User ideas table
+    const userIdeasTable = new dynamodb.Table(this, 'UserIdeasTable', {
+      tableName: `${prefix}-user-ideas`,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: 'user_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'idea_id', type: dynamodb.AttributeType.STRING },
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     // WebSocket connections table
     const connectionsTable = new dynamodb.Table(this, 'ConnectionsTable', {
       tableName: `${prefix}-connections`,

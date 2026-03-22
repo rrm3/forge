@@ -61,7 +61,7 @@ jobs:
           docker push "${IMAGE_URI}"
           echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
 
-      - name: Update Lambda function
+      - name: Update REST Lambda function
         env:
           FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME }}
         run: |
@@ -72,6 +72,18 @@ jobs:
 
           aws lambda wait function-updated \
             --function-name "${FUNCTION_NAME}"
+
+      - name: Update WebSocket Lambda function
+        env:
+          WS_FUNCTION_NAME: ${{ secrets.WS_LAMBDA_FUNCTION_NAME }}
+        run: |
+          aws lambda update-function-code \
+            --function-name "${WS_FUNCTION_NAME}" \
+            --image-uri "${{ steps.build.outputs.image_uri }}" \
+            --publish
+
+          aws lambda wait function-updated \
+            --function-name "${WS_FUNCTION_NAME}"
 
   deploy-frontend:
     name: Deploy Frontend
