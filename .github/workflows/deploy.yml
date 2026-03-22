@@ -76,11 +76,11 @@ jobs:
 
           echo "Published version: ${VERSION}"
 
-          # Keep 2 warm instances to avoid cold start delays
+          # Keep 10 warm instances to avoid cold start delays
           aws lambda put-provisioned-concurrency-config \
             --function-name "${FUNCTION_NAME}" \
             --qualifier "${VERSION}" \
-            --provisioned-concurrent-executions 2 || true
+            --provisioned-concurrent-executions 10 || true
 
       - name: Update WebSocket Lambda function
         env:
@@ -101,11 +101,11 @@ jobs:
 
           echo "Published version: ${VERSION}"
 
-          # Keep 2 warm instances for WebSocket connections
+          # Keep 20 warm instances for WebSocket connections
           aws lambda put-provisioned-concurrency-config \
             --function-name "${WS_FUNCTION_NAME}" \
             --qualifier "${VERSION}" \
-            --provisioned-concurrent-executions 2 || true
+            --provisioned-concurrent-executions 20 || true
 
   deploy-frontend:
     name: Deploy Frontend
