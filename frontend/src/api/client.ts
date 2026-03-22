@@ -1,4 +1,4 @@
-import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, Tip, TipComment, UserIdea } from './types';
+import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, Tip, TipComment, UserIdea, AdminUserSummary, AdminUserIntake } from './types';
 
 let getTokenFn: (() => Promise<string | null>) | null = null;
 let tokenGetterReady: (() => void) | null = null;
@@ -137,7 +137,7 @@ export async function listIdeas(params?: {
 
 // Admin API
 
-export async function getAdminAccess(): Promise<{ is_admin: boolean; departments: string[] }> {
+export async function getAdminAccess(): Promise<{ is_admin: boolean; is_department_admin: boolean; departments: string[] }> {
   const res = await fetchWithAuth(`${API_BASE}/api/admin/access`);
   await checkResponse(res);
   return res.json();
@@ -155,6 +155,26 @@ export async function saveDepartmentConfig(department: string, config: Departmen
     body: JSON.stringify(config),
   });
   await checkResponse(res);
+}
+
+export async function listAdminUsers(): Promise<AdminUserSummary[]> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/users`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function setUserRole(userId: string, isDepartmentAdmin: boolean): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/users/${encodeURIComponent(userId)}/role`, {
+    method: 'PUT',
+    body: JSON.stringify({ is_department_admin: isDepartmentAdmin }),
+  });
+  await checkResponse(res);
+}
+
+export async function getAdminUserIntake(userId: string): Promise<AdminUserIntake> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/users/${encodeURIComponent(userId)}/intake`);
+  await checkResponse(res);
+  return res.json();
 }
 
 export async function listAdminDepartments(): Promise<string[]> {

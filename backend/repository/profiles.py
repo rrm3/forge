@@ -36,6 +36,11 @@ class ProfileRepository(ABC):
         """Delete a profile."""
         pass
 
+    @abstractmethod
+    async def list_all(self) -> list[UserProfile]:
+        """List all profiles (admin use only)."""
+        pass
+
 
 class DynamoDBProfileRepository(ProfileRepository):
     """DynamoDB profile storage. One item per user (PK=user_id)."""
@@ -74,6 +79,7 @@ class DynamoDBProfileRepository(ProfileRepository):
             "intake_summary": profile.intake_summary,
             "intake_fields_captured": profile.intake_fields_captured,
             "intake_completed_at": profile.intake_completed_at.isoformat() if profile.intake_completed_at else None,
+            "is_department_admin": profile.is_department_admin,
             "created_at": profile.created_at.isoformat(),
             "updated_at": profile.updated_at.isoformat(),
         }
@@ -120,6 +126,7 @@ class DynamoDBProfileRepository(ProfileRepository):
             intake_summary=item.get("intake_summary", ""),
             intake_fields_captured=list(item.get("intake_fields_captured", [])),
             intake_completed_at=intake_completed,
+            is_department_admin=bool(item.get("is_department_admin", False)),
             created_at=datetime.fromisoformat(item["created_at"]),
             updated_at=datetime.fromisoformat(item["updated_at"]),
         )
@@ -188,6 +195,24 @@ class DynamoDBProfileRepository(ProfileRepository):
             partial(self.table.delete_item, Key={"user_id": user_id}),
         )
 
+    async def list_all(self) -> list[UserProfile]:
+        loop = asyncio.get_event_loop()
+        profiles = []
+        last_key = None
+        while True:
+            kwargs: dict = {}
+            if last_key:
+                kwargs["ExclusiveStartKey"] = last_key
+            response = await loop.run_in_executor(
+                None, partial(self.table.scan, **kwargs)
+            )
+            for item in response.get("Items", []):
+                profiles.append(self._deserialize(item))
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+        return profiles
+
 
 class MemoryProfileRepository(ProfileRepository):
     """In-memory profile storage for local dev and tests."""
@@ -239,3 +264,6 @@ class MemoryProfileRepository(ProfileRepository):
     async def delete(self, user_id: str) -> None:
         self._profiles.pop(user_id, None)
         self._save()
+
+    async def list_all(self) -> list[UserProfile]:
+        return list(self._profiles.values())

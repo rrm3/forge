@@ -62,6 +62,7 @@ class UserProfile(BaseModel):
     intake_summary: str = ""
     intake_fields_captured: list[str] = Field(default_factory=list)  # fields set during intake conversation
     intake_completed_at: datetime | None = None
+    is_department_admin: bool = False
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 

@@ -57,6 +57,8 @@ import { IdeasView } from './components/IdeasView';
 import { IntakeView } from './components/IntakeView';
 import { TopBar } from './components/TopBar';
 import { AdminPanel } from './components/AdminPanel';
+import { AdminLayout } from './components/AdminLayout';
+import { AdminUsers } from './components/AdminUsers';
 import { getProfile, getAdminAccess, listUserIdeas } from './api/client';
 import { useProfileCache } from './state/profileCache';
 import type { UserProfile } from './api/types';
@@ -141,8 +143,10 @@ function AppContent() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [ideaCount, setIdeaCount] = useState(0);
-  const setIsAdmin = useAdminStore((s) => s.setIsAdmin);
+  const setAdminAccess = useAdminStore((s) => s.setAdminAccess);
   const isAdmin = useAdminStore((s) => s.isAdmin);
+  const isDepartmentAdmin = useAdminStore((s) => s.isDepartmentAdmin);
+  const [adminChecked, setAdminChecked] = useState(false);
 
   useEffect(() => {
     loadSessions();
@@ -183,10 +187,10 @@ function AppContent() {
   useEffect(() => {
     if (user) {
       getAdminAccess()
-        .then(({ is_admin }) => setIsAdmin(is_admin))
-        .catch(() => {});
+        .then(({ is_admin, is_department_admin }) => { setAdminAccess(is_admin, is_department_admin); setAdminChecked(true); })
+        .catch(() => setAdminChecked(true));
     }
-  }, [user, setIsAdmin]);
+  }, [user, setAdminAccess]);
 
   if (!profileLoaded) {
     return <LoadingScreen />;
@@ -196,32 +200,37 @@ function AppContent() {
 
   return (
     <Routes>
-      {/* Intake / Day 1 - redirects home if already completed */}
+      {/* Intake / Day 1 - always renders IntakeView (it handles its own completion card) */}
       <Route
         path="/day1"
         element={
-          intakeComplete
-            ? <Navigate to="/" replace />
-            : <IntakeView onComplete={() => {
-                getProfile().then((p) => setProfile(p)).catch(() => {});
-              }} />
+          <IntakeView onComplete={() => {
+            getProfile().then((p) => setProfile(p)).catch(() => {});
+          }} />
         }
       />
 
-      {/* Admin */}
+      {/* Admin - accessible by full admins and department admins */}
       <Route
-        path="/admin"
+        path="/admin/*"
         element={
-          isAdmin ? (
+          !adminChecked ? (
+            <LoadingScreen />
+          ) : (isAdmin || isDepartmentAdmin) ? (
             <div className="flex flex-col h-screen">
               <TopBar profile={profile} />
-              <AdminPanel />
+              <AdminLayout />
             </div>
           ) : (
             <Navigate to="/" replace />
           )
         }
-      />
+      >
+        <Route index element={<Navigate to="settings" replace />} />
+        <Route path="settings" element={<AdminPanel />} />
+        {/* Users tab only for full admins */}
+        <Route path="users" element={isAdmin ? <AdminUsers /> : <Navigate to="/admin/settings" replace />} />
+      </Route>
 
       {/* Main layout (all post-intake routes) */}
       <Route

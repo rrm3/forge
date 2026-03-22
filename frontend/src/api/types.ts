@@ -106,6 +106,29 @@ export interface TipComment {
   created_at: string;
 }
 
+export interface AdminUserSummary {
+  user_id: string;
+  email: string;
+  name: string;
+  title: string;
+  department: string;
+  team: string;
+  avatar_url: string;
+  intake_completed_at: string | null;
+  ai_proficiency: { level: number; rationale: string } | null;
+  is_department_admin: boolean;
+  session_count: number;
+  tip_count: number;
+  last_active: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminUserIntake {
+  profile: UserProfile;
+  intake_responses: Record<string, unknown>;
+}
+
 export interface UserIdea {
   user_id: string;
   idea_id: string;

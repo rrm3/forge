@@ -2,15 +2,17 @@ import { create } from 'zustand';
 
 interface AdminState {
   isAdmin: boolean;
+  isDepartmentAdmin: boolean;
   adminMode: boolean;
-  setIsAdmin: (v: boolean) => void;
+  setAdminAccess: (isAdmin: boolean, isDepartmentAdmin: boolean) => void;
   toggleAdminMode: () => void;
 }
 
 export const useAdminStore = create<AdminState>((set) => ({
   isAdmin: false,
+  isDepartmentAdmin: false,
   adminMode: localStorage.getItem('forge-admin-mode') === 'true',
-  setIsAdmin: (v) => set({ isAdmin: v }),
+  setAdminAccess: (isAdmin, isDepartmentAdmin) => set({ isAdmin, isDepartmentAdmin }),
   toggleAdminMode: () =>
     set((s) => {
       const next = !s.adminMode;

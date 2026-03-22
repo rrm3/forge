@@ -22,7 +22,8 @@ interface TopBarProps {
 
 export function TopBar({ profile }: TopBarProps = {}) {
   const navigate = useNavigate();
-  const { isAdmin, adminMode, toggleAdminMode } = useAdminStore();
+  const { isAdmin, isDepartmentAdmin, adminMode, toggleAdminMode } = useAdminStore();
+  const hasAdminAccess = isAdmin || isDepartmentAdmin;
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [showMasqueradeInput, setShowMasqueradeInput] = useState(false);
@@ -122,7 +123,7 @@ export function TopBar({ profile }: TopBarProps = {}) {
                 Reset Day One
               </button>
             )}
-            {isAdmin && (
+            {hasAdminAccess && (
               <button
                 onClick={() => {
                   setOpen(false);
@@ -134,7 +135,7 @@ export function TopBar({ profile }: TopBarProps = {}) {
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 <Settings className="w-4 h-4" strokeWidth={1.5} />
-                Manage Department
+                Admin
               </button>
             )}
             {isAdmin && (
