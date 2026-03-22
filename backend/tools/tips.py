@@ -1,16 +1,14 @@
-"""Tips & Tricks tools: publish tips to share with colleagues."""
+"""Tips & Tricks tools: prepare tips for user review before publishing."""
 
 import logging
-import uuid
 
-from backend.models import Tip
 from backend.tools.registry import ToolContext
 
 logger = logging.getLogger(__name__)
 
-PUBLISH_TIP_SCHEMA = {
-    "name": "publish_tip",
-    "description": "Publish a tip or trick to share with colleagues across Digital Science",
+PREPARE_TIP_SCHEMA = {
+    "name": "prepare_tip",
+    "description": "Prepare a tip for the user to review and edit before publishing. The user will see an editable preview card and can modify the content before sharing.",
     "input_schema": {
         "type": "object",
         "properties": {
@@ -20,7 +18,7 @@ PUBLISH_TIP_SCHEMA = {
             },
             "content": {
                 "type": "string",
-                "description": "The full tip content - what was learned, how to do it, why it matters",
+                "description": "The full tip content in markdown - what was learned, how to do it, why it matters. Keep it concise and actionable.",
             },
             "tags": {
                 "type": "array",
@@ -37,42 +35,30 @@ PUBLISH_TIP_SCHEMA = {
 }
 
 
-async def publish_tip(
+async def prepare_tip(
     title: str,
     content: str,
     context: ToolContext,
     tags: list[str] | None = None,
     department: str | None = None,
 ) -> str:
-    repo = context.repos.get("tips")
-    if repo is None:
-        return "Tips repository not available."
-
-    # Get author name and department from profile
-    author_name = ""
+    # Get default department from profile if not specified
     author_department = department or "Everyone"
     profile_repo = context.repos.get("profiles")
-    if profile_repo is not None:
+    if profile_repo is not None and not department:
         profile = await profile_repo.get(context.user_id)
-        if profile is not None:
-            author_name = profile.name
-            if not department:
-                author_department = profile.department or "Everyone"
+        if profile is not None and profile.department:
+            author_department = profile.department
 
-    tip_id = str(uuid.uuid4())
-    tip = Tip(
-        tip_id=tip_id,
-        author_id=context.user_id,
-        author_name=author_name,
-        department=author_department,
-        title=title,
-        content=content,
-        tags=tags or [],
+    # Don't save - just return the data for the user to review
+    return (
+        f"Tip prepared for review. The user will see an editable preview card with:\n"
+        f"Title: {title}\n"
+        f"Department: {author_department}\n"
+        f"Tags: {', '.join(tags or [])}\n"
+        f"They can edit it before publishing."
     )
-    await repo.create(tip)
-
-    return f"Tip '{title}' published to {author_department} (ID: {tip_id})."
 
 
 def register_tips_tools(registry) -> None:
-    registry.register(PUBLISH_TIP_SCHEMA, publish_tip)
+    registry.register(PREPARE_TIP_SCHEMA, prepare_tip)

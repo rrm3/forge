@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from functools import partial
+from pathlib import Path
 
 import boto3
 from botocore.exceptions import ClientError
@@ -262,10 +264,46 @@ class DynamoDBTipRepository(TipRepository):
 class MemoryTipRepository(TipRepository):
     """In-memory tip storage for local dev and tests."""
 
-    def __init__(self) -> None:
+    def __init__(self, persist_path: str | None = None) -> None:
         self._tips: dict[str, Tip] = {}
         self._votes: set[tuple[str, str]] = set()
         self._comments: dict[str, list[TipComment]] = {}
+        self._persist_path = persist_path
+        self._load()
+
+    def _load(self) -> None:
+        if not self._persist_path:
+            return
+        try:
+            path = Path(self._persist_path)
+            if path.exists():
+                data = json.loads(path.read_text())
+                for item in data.get("tips", []):
+                    t = Tip.model_validate(item)
+                    self._tips[t.tip_id] = t
+                for pair in data.get("votes", []):
+                    self._votes.add((pair[0], pair[1]))
+                for tip_id, comment_list in data.get("comments", {}).items():
+                    self._comments[tip_id] = [
+                        TipComment.model_validate(c) for c in comment_list
+                    ]
+        except Exception:
+            pass
+
+    def _save(self) -> None:
+        if not self._persist_path:
+            return
+        path = Path(self._persist_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "tips": [t.model_dump(mode="json") for t in self._tips.values()],
+            "votes": [[tid, uid] for tid, uid in self._votes],
+            "comments": {
+                tip_id: [c.model_dump(mode="json") for c in comments]
+                for tip_id, comments in self._comments.items()
+            },
+        }
+        path.write_text(json.dumps(data, default=str))
 
     async def list(self, department: str | None = None, sort_by: str = "recent", limit: int = 50) -> list[Tip]:
         tips = list(self._tips.values())
@@ -282,6 +320,7 @@ class MemoryTipRepository(TipRepository):
 
     async def create(self, tip: Tip) -> None:
         self._tips[tip.tip_id] = tip
+        self._save()
 
     async def upvote(self, tip_id: str, user_id: str) -> bool:
         key = (tip_id, user_id)
@@ -291,6 +330,7 @@ class MemoryTipRepository(TipRepository):
         tip = self._tips.get(tip_id)
         if tip:
             self._tips[tip_id] = tip.model_copy(update={"vote_count": tip.vote_count + 1})
+        self._save()
         return True
 
     async def remove_vote(self, tip_id: str, user_id: str) -> bool:
@@ -301,6 +341,7 @@ class MemoryTipRepository(TipRepository):
         tip = self._tips.get(tip_id)
         if tip:
             self._tips[tip_id] = tip.model_copy(update={"vote_count": max(0, tip.vote_count - 1)})
+        self._save()
         return True
 
     async def get_user_votes(self, user_id: str, tip_ids: list[str]) -> set[str]:
@@ -313,3 +354,4 @@ class MemoryTipRepository(TipRepository):
         if comment.tip_id not in self._comments:
             self._comments[comment.tip_id] = []
         self._comments[comment.tip_id].append(comment)
+        self._save()

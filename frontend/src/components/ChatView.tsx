@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Square, Send, Check } from 'lucide-react';
+import { Square, Send, Check, Bold, Italic, List, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSession } from '../state/SessionContext';
 import { useAdminStore } from '../state/adminStore';
 import { MessageBubble, streamingMarkdownComponents } from './MessageBubble';
 import { VoiceButton } from './VoiceButton';
+import { TipPreviewCard } from './TipPreviewCard';
 
 const TOOL_ROLES = new Set(['tool_call', 'tool_result']);
 
@@ -15,7 +16,7 @@ interface ChatViewProps {
 
 export function ChatView({ onShowTips }: ChatViewProps) {
   const adminMode = useAdminStore((s) => s.adminMode);
-  const { state, sendChatMessage, cancelStreaming } = useSession();
+  const { state, dispatch, sendChatMessage, cancelStreaming } = useSession();
   const { messages = [], isStreaming, streamingText, connectionStatus } = state;
 
   const [inputValue, setInputValue] = useState('');
@@ -156,23 +157,28 @@ export function ChatView({ onShowTips }: ChatViewProps) {
               </div>
             )}
 
-            {state.tipPublished && !isStreaming && (
+            {/* Tip preview card (editable) or published confirmation */}
+            {state.tipReady && !isStreaming && !state.tipPublished && (
+              <TipPreviewCard
+                initial={state.tipReady}
+                onPublished={() => {
+                  dispatch({ type: 'SET_TIP_PUBLISHED' });
+                }}
+                onShowTips={onShowTips}
+              />
+            )}
+
+            {state.tipPublished && (
               <div
                 className="my-4 mx-auto max-w-[95%] md:max-w-[85%] rounded-xl border p-5"
                 style={{ backgroundColor: 'var(--color-surface-white)', borderColor: 'var(--color-border)' }}
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <Check className="w-4 h-4" style={{ color: 'var(--color-success)' }} strokeWidth={1.5} />
-                  <span className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                    Tip Published!
+                  <Check className="w-4 h-4" style={{ color: '#059669' }} strokeWidth={2} />
+                  <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                    Tip published!
                   </span>
                 </div>
-                <p className="text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>
-                  {state.tipPublished.title}
-                </p>
-                <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
-                  Shared with {state.tipPublished.department}
-                </p>
                 {onShowTips && (
                   <button
                     onClick={onShowTips}

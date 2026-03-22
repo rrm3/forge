@@ -35,7 +35,8 @@ interface SessionState {
   intakeChecklist: IntakeChecklistItem[];
   intakeComplete: boolean;
   intakeSuggestions: string[];
-  tipPublished: { title: string; content: string; tags: string[]; department: string } | null;
+  tipReady: { title: string; content: string; tags: string[]; department: string } | null;
+  tipPublished: boolean;
 }
 
 type SessionAction =
@@ -52,7 +53,8 @@ type SessionAction =
   | { type: 'SET_CONNECTION_STATUS'; status: ConnectionStatus }
   | { type: 'SET_INTAKE_CHECKLIST'; checklist: IntakeChecklistItem[] }
   | { type: 'SET_INTAKE_COMPLETE'; suggestions: string[] }
-  | { type: 'SET_TIP_PUBLISHED'; tip: { title: string; content: string; tags: string[]; department: string } }
+  | { type: 'SET_TIP_READY'; tip: { title: string; content: string; tags: string[]; department: string } }
+  | { type: 'SET_TIP_PUBLISHED' }
   | { type: 'DESELECT_SESSION' };
 
 const initialState: SessionState = {
@@ -66,7 +68,8 @@ const initialState: SessionState = {
   intakeChecklist: [],
   intakeComplete: false,
   intakeSuggestions: [],
-  tipPublished: null,
+  tipReady: null,
+  tipPublished: false,
 };
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
@@ -133,11 +136,14 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
     case 'SET_INTAKE_COMPLETE':
       return { ...state, intakeComplete: true, intakeSuggestions: action.suggestions };
 
+    case 'SET_TIP_READY':
+      return { ...state, tipReady: action.tip, tipPublished: false };
+
     case 'SET_TIP_PUBLISHED':
-      return { ...state, tipPublished: action.tip };
+      return { ...state, tipPublished: true };
 
     case 'DESELECT_SESSION':
-      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false, tipPublished: null };
+      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false, tipReady: null, tipPublished: false };
 
     default:
       return state;
@@ -282,9 +288,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           });
           break;
 
-        case 'tip_published':
+        case 'tip_ready':
           dispatch({
-            type: 'SET_TIP_PUBLISHED',
+            type: 'SET_TIP_READY',
             tip: {
               title: (msg as any).title || '',
               content: (msg as any).content || '',

@@ -20,7 +20,7 @@ export type ServerMessage =
   | { type: 'error'; session_id?: string; message: string }
   | { type: 'intake_progress'; session_id: string; checklist: Array<{ field: string; label: string; done: boolean; value?: string }> }
   | { type: 'intake_complete'; session_id: string; suggestions: string[] }
-  | { type: 'tip_published'; session_id: string; title: string; content: string; tags: string[]; department: string }
+  | { type: 'tip_ready'; session_id: string; title: string; content: string; tags: string[]; department: string }
   | { type: 'pong' }
   | { type: 'ping' }
   | { type: 'chunk'; chunk_id: string; seq: number; total: number; data: string };

@@ -1,9 +1,11 @@
 """Session repositories - abstract base, DynamoDB, and in-memory implementations."""
 
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from functools import partial
+from pathlib import Path
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -135,8 +137,31 @@ class DynamoDBSessionRepository(SessionRepository):
 class MemorySessionRepository(SessionRepository):
     """In-memory session storage for local dev and tests."""
 
-    def __init__(self) -> None:
+    def __init__(self, persist_path: str | None = None) -> None:
         self._sessions: dict[tuple[str, str], Session] = {}
+        self._persist_path = persist_path
+        self._load()
+
+    def _load(self) -> None:
+        if not self._persist_path:
+            return
+        try:
+            path = Path(self._persist_path)
+            if path.exists():
+                data = json.loads(path.read_text())
+                for item in data:
+                    s = Session.model_validate(item)
+                    self._sessions[(s.user_id, s.session_id)] = s
+        except Exception:
+            pass
+
+    def _save(self) -> None:
+        if not self._persist_path:
+            return
+        path = Path(self._persist_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = [s.model_dump(mode="json") for s in self._sessions.values()]
+        path.write_text(json.dumps(data, default=str))
 
     async def list(self, user_id: str) -> list[Session]:
         return [s for (uid, _), s in self._sessions.items() if uid == user_id]
@@ -146,10 +171,13 @@ class MemorySessionRepository(SessionRepository):
 
     async def create(self, session: Session) -> None:
         self._sessions[(session.user_id, session.session_id)] = session
+        self._save()
 
     async def update(self, session: Session) -> None:
         session.updated_at = datetime.now(UTC)
         self._sessions[(session.user_id, session.session_id)] = session
+        self._save()
 
     async def delete(self, user_id: str, session_id: str) -> None:
         self._sessions.pop((user_id, session_id), None)
+        self._save()

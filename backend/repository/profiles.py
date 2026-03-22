@@ -1,9 +1,11 @@
 """Profile repositories - abstract base, DynamoDB, and in-memory implementations."""
 
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from functools import partial
+from pathlib import Path
 
 import boto3
 from botocore.exceptions import ClientError
@@ -168,23 +170,50 @@ class DynamoDBProfileRepository(ProfileRepository):
 class MemoryProfileRepository(ProfileRepository):
     """In-memory profile storage for local dev and tests."""
 
-    def __init__(self) -> None:
+    def __init__(self, persist_path: str | None = None) -> None:
         self._profiles: dict[str, UserProfile] = {}
+        self._persist_path = persist_path
+        self._load()
+
+    def _load(self) -> None:
+        if not self._persist_path:
+            return
+        try:
+            path = Path(self._persist_path)
+            if path.exists():
+                data = json.loads(path.read_text())
+                for item in data:
+                    p = UserProfile.model_validate(item)
+                    self._profiles[p.user_id] = p
+        except Exception:
+            pass
+
+    def _save(self) -> None:
+        if not self._persist_path:
+            return
+        path = Path(self._persist_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = [p.model_dump(mode="json") for p in self._profiles.values()]
+        path.write_text(json.dumps(data, default=str))
 
     async def get(self, user_id: str) -> UserProfile | None:
         return self._profiles.get(user_id)
 
     async def create(self, profile: UserProfile) -> None:
         self._profiles[profile.user_id] = profile
+        self._save()
 
     async def update(self, user_id: str, fields: dict) -> None:
         profile = self._profiles.get(user_id)
         if profile is None:
             return
-        updated = profile.model_copy(
-            update={**fields, "updated_at": datetime.now(UTC)}
-        )
+        # Use model_validate on the merged dict to ensure type coercion
+        # (e.g., string datetimes get parsed, dicts become nested models)
+        merged = {**profile.model_dump(), **fields, "updated_at": datetime.now(UTC).isoformat()}
+        updated = UserProfile.model_validate(merged)
         self._profiles[user_id] = updated
+        self._save()
 
     async def delete(self, user_id: str) -> None:
         self._profiles.pop(user_id, None)
+        self._save()

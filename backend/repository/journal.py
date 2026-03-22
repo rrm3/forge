@@ -1,9 +1,11 @@
 """Journal repositories - abstract base, DynamoDB, and in-memory implementations."""
 
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from datetime import datetime
 from functools import partial
+from pathlib import Path
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -117,8 +119,31 @@ class DynamoDBJournalRepository(JournalRepository):
 class MemoryJournalRepository(JournalRepository):
     """In-memory journal storage for local dev and tests."""
 
-    def __init__(self) -> None:
+    def __init__(self, persist_path: str | None = None) -> None:
         self._entries: dict[tuple[str, str], JournalEntry] = {}
+        self._persist_path = persist_path
+        self._load()
+
+    def _load(self) -> None:
+        if not self._persist_path:
+            return
+        try:
+            path = Path(self._persist_path)
+            if path.exists():
+                data = json.loads(path.read_text())
+                for item in data:
+                    e = JournalEntry.model_validate(item)
+                    self._entries[(e.user_id, e.entry_id)] = e
+        except Exception:
+            pass
+
+    def _save(self) -> None:
+        if not self._persist_path:
+            return
+        path = Path(self._persist_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = [e.model_dump(mode="json") for e in self._entries.values()]
+        path.write_text(json.dumps(data, default=str))
 
     async def list(
         self,
@@ -139,6 +164,8 @@ class MemoryJournalRepository(JournalRepository):
 
     async def create(self, entry: JournalEntry) -> None:
         self._entries[(entry.user_id, entry.entry_id)] = entry
+        self._save()
 
     async def delete(self, user_id: str, entry_id: str) -> None:
         self._entries.pop((user_id, entry_id), None)
+        self._save()

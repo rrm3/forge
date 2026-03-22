@@ -23,6 +23,33 @@ def set_tips_deps(tips_repo):
     _tips_repo = tips_repo
 
 
+class CreateTipRequest(BaseModel):
+    title: str
+    content: str
+    tags: list[str] = []
+    department: str = "Everyone"
+
+
+@router.post("")
+async def create_tip(body: CreateTipRequest, user: AuthUser):
+    """Create and publish a tip from the frontend preview card."""
+    from backend.models import Tip
+
+    tip = Tip(
+        tip_id=str(uuid.uuid4()),
+        author_id=user.user_id,
+        author_name=user.name,
+        department=body.department,
+        title=body.title,
+        content=body.content,
+        tags=body.tags,
+    )
+    await _tips_repo.create(tip)
+    d = tip.model_dump(mode="json")
+    d["user_has_voted"] = False
+    return d
+
+
 @router.get("")
 async def list_tips(
     user: AuthUser,

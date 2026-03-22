@@ -64,8 +64,8 @@ export function TipsView({ onBack, userDepartment }: TipsViewProps) {
         sort_by: sortBy,
       });
       setTips(result);
-    } catch {
-      // silently fail, keep existing tips
+    } catch (err) {
+      console.error('Failed to fetch tips:', err);
     } finally {
       setLoading(false);
     }

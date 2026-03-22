@@ -37,12 +37,13 @@ def build_repos() -> dict:
         from backend.repository.profiles import MemoryProfileRepository
         from backend.repository.sessions import MemorySessionRepository
         from backend.repository.tips import MemoryTipRepository
+        persist_dir = "/tmp/forge-storage/repos"
         return {
-            "sessions": MemorySessionRepository(),
-            "profiles": MemoryProfileRepository(),
-            "journal": MemoryJournalRepository(),
-            "ideas": MemoryIdeaRepository(),
-            "tips": MemoryTipRepository(),
+            "sessions": MemorySessionRepository(persist_path=f"{persist_dir}/sessions.json"),
+            "profiles": MemoryProfileRepository(persist_path=f"{persist_dir}/profiles.json"),
+            "journal": MemoryJournalRepository(persist_path=f"{persist_dir}/journal.json"),
+            "ideas": MemoryIdeaRepository(persist_path=f"{persist_dir}/ideas.json"),
+            "tips": MemoryTipRepository(persist_path=f"{persist_dir}/tips.json"),
         }
 
     from backend.repository.ideas import DynamoDBIdeaRepository

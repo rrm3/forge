@@ -167,6 +167,15 @@ export async function listTips(params?: {
   return res.json();
 }
 
+export async function createTip(tip: { title: string; content: string; tags: string[]; department: string }): Promise<Tip> {
+  const res = await fetchWithAuth(`${API_BASE}/api/tips`, {
+    method: 'POST',
+    body: JSON.stringify(tip),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
 export async function getTip(tipId: string): Promise<Tip> {
   const res = await fetchWithAuth(`${API_BASE}/api/tips/${encodeURIComponent(tipId)}`);
   await checkResponse(res);

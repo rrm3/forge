@@ -325,9 +325,9 @@ async def run_agent_session(
         session.updated_at = datetime.now(UTC)
         await deps.sessions_repo.update(session)
 
-    # Detect published tips and notify frontend
+    # Detect prepared tips and send preview data to frontend
     if session_type == "tip":
-        await _check_tip_published(transcript, sender, session_id)
+        await _check_tip_prepared(transcript, sender, session_id)
 
     # Intake state machine: check required fields and mark complete when done
     if session_type == "intake":
@@ -462,14 +462,14 @@ async def _check_intake_completion(
         logger.warning("Failed to check intake completion", exc_info=True)
 
 
-async def _check_tip_published(transcript: list[Message], sender: MessageSender, session_id: str):
-    """Check if publish_tip was called in this turn and notify frontend."""
+async def _check_tip_prepared(transcript: list[Message], sender: MessageSender, session_id: str):
+    """Check if prepare_tip was called in this turn and send preview data to frontend."""
     try:
         for msg in reversed(transcript):
-            if msg.role == "tool_call" and msg.tool_name == "publish_tip":
+            if msg.role == "tool_call" and msg.tool_name == "prepare_tip":
                 args = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
                 await sender.send({
-                    "type": "tip_published",
+                    "type": "tip_ready",
                     "session_id": session_id,
                     "title": args.get("title", ""),
                     "content": args.get("content", ""),
@@ -478,7 +478,7 @@ async def _check_tip_published(transcript: list[Message], sender: MessageSender,
                 })
                 return
     except Exception:
-        logger.warning("Failed to check tip published", exc_info=True)
+        logger.warning("Failed to check tip prepared", exc_info=True)
 
 
 async def _generate_title(user_msg: str, assistant_msg: str) -> str:
