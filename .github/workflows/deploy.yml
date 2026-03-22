@@ -86,6 +86,29 @@ jobs:
             --name live \
             --function-version "${VERSION}"
 
+          # Wait for provisioned concurrency to initialize on the new version
+          PROV_CHECK=$(aws lambda get-provisioned-concurrency-config \
+            --function-name "${FUNCTION_NAME}" --qualifier live \
+            --query 'Status' --output text 2>/dev/null || echo "NONE")
+          if [ "$PROV_CHECK" != "NONE" ]; then
+            echo "Waiting for provisioned concurrency on ${FUNCTION_NAME}..."
+            for i in $(seq 1 60); do
+              STATUS=$(aws lambda get-provisioned-concurrency-config \
+                --function-name "${FUNCTION_NAME}" --qualifier live \
+                --query 'Status' --output text 2>/dev/null)
+              if [ "$STATUS" = "READY" ]; then
+                ALLOC=$(aws lambda get-provisioned-concurrency-config \
+                  --function-name "${FUNCTION_NAME}" --qualifier live \
+                  --query 'AllocatedProvisionedConcurrentExecutions' --output text)
+                echo "Provisioned concurrency ready (${ALLOC} warm instances)"
+                break
+              fi
+              [ "$STATUS" = "FAILED" ] && echo "WARNING: Provisioned concurrency failed" && break
+              echo "  Status: ${STATUS} (${i}/60)"
+              sleep 5
+            done
+          fi
+
       - name: Update WebSocket Lambda function
         env:
           WS_FUNCTION_NAME: ${{ secrets.WS_LAMBDA_FUNCTION_NAME }}
@@ -114,6 +137,29 @@ jobs:
             --function-name "${WS_FUNCTION_NAME}" \
             --name live \
             --function-version "${VERSION}"
+
+          # Wait for provisioned concurrency to initialize on the new version
+          PROV_CHECK=$(aws lambda get-provisioned-concurrency-config \
+            --function-name "${WS_FUNCTION_NAME}" --qualifier live \
+            --query 'Status' --output text 2>/dev/null || echo "NONE")
+          if [ "$PROV_CHECK" != "NONE" ]; then
+            echo "Waiting for provisioned concurrency on ${WS_FUNCTION_NAME}..."
+            for i in $(seq 1 60); do
+              STATUS=$(aws lambda get-provisioned-concurrency-config \
+                --function-name "${WS_FUNCTION_NAME}" --qualifier live \
+                --query 'Status' --output text 2>/dev/null)
+              if [ "$STATUS" = "READY" ]; then
+                ALLOC=$(aws lambda get-provisioned-concurrency-config \
+                  --function-name "${WS_FUNCTION_NAME}" --qualifier live \
+                  --query 'AllocatedProvisionedConcurrentExecutions' --output text)
+                echo "Provisioned concurrency ready (${ALLOC} warm instances)"
+                break
+              fi
+              [ "$STATUS" = "FAILED" ] && echo "WARNING: Provisioned concurrency failed" && break
+              echo "  Status: ${STATUS} (${i}/60)"
+              sleep 5
+            done
+          fi
 
   deploy-frontend:
     name: Deploy Frontend

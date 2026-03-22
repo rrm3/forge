@@ -286,8 +286,17 @@ export class ForgeStack extends cdk.Stack {
       logGroup,
     });
 
-    // Lambda Function URL with streaming (kept for REST API endpoints)
-    const functionUrl = backendFunction.addFunctionUrl({
+    // Publish version and create 'live' alias with provisioned concurrency.
+    // The deploy workflow updates this alias to new versions on each code deploy.
+    // Provisioned concurrency keeps instances pre-initialized to eliminate cold starts.
+    const backendAlias = new lambda.Alias(this, 'BackendLiveAlias', {
+      aliasName: 'live',
+      version: backendFunction.currentVersion,
+      provisionedConcurrentExecutions: 10,
+    });
+
+    // Function URL on 'live' alias (not $LATEST) so requests hit warm instances
+    const functionUrl = backendAlias.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
       invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
     });
@@ -366,16 +375,26 @@ export class ForgeStack extends cdk.Stack {
         LLM_MODEL: 'bedrock/us.anthropic.claude-opus-4-6-v1',
         ORGCHART_S3_KEY: 'orgchart/org-chart.db',
         CONNECTIONS_TABLE: connectionsTable.tableName,
-        LAMBDA_FUNCTION_NAME: `${prefix}-ws`, // self-invoke for Dispatcher-Worker
+        LAMBDA_FUNCTION_NAME: `${prefix}-ws:live`, // self-invoke targets alias for warm instances
       },
       logGroup: wsLogGroup,
+    });
+
+    // Publish version and create 'live' alias with provisioned concurrency
+    const wsAlias = new lambda.Alias(this, 'WsLiveAlias', {
+      aliasName: 'live',
+      version: wsFunction.currentVersion,
+      provisionedConcurrentExecutions: 20,
     });
 
     // Grant WS Lambda permission to invoke itself (Dispatcher -> Worker)
     wsLambdaRole.addToPolicy(new iam.PolicyStatement({
       sid: 'SelfInvoke',
       actions: ['lambda:InvokeFunction'],
-      resources: [`arn:aws:lambda:${this.region}:${this.account}:function:${prefix}-ws`],
+      resources: [
+        `arn:aws:lambda:${this.region}:${this.account}:function:${prefix}-ws`,
+        `arn:aws:lambda:${this.region}:${this.account}:function:${prefix}-ws:*`,
+      ],
     }));
 
     // ---------------------------------------------------------------
@@ -391,7 +410,7 @@ export class ForgeStack extends cdk.Stack {
     const wsIntegration = new apigatewayv2.CfnIntegration(this, 'WsIntegration', {
       apiId: wsApi.ref,
       integrationType: 'AWS_PROXY',
-      integrationUri: `arn:aws:apigateway:${this.region}:lambda:path/2015-03-31/functions/${wsFunction.functionArn}/invocations`,
+      integrationUri: `arn:aws:apigateway:${this.region}:lambda:path/2015-03-31/functions/${wsAlias.functionArn}/invocations`,
     });
 
     // $connect route
@@ -430,7 +449,7 @@ export class ForgeStack extends cdk.Stack {
     });
 
     // Grant API Gateway permission to invoke WS Lambda
-    wsFunction.addPermission('WsApiGatewayInvoke', {
+    wsAlias.addPermission('WsApiGatewayInvoke', {
       principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${wsApi.ref}/*`,
     });
@@ -608,6 +627,13 @@ export class ForgeStack extends cdk.Stack {
         'lambda:ListVersionsByFunction',
         'lambda:TagResource',
         'lambda:ListTagsForResource',
+        'lambda:CreateAlias',
+        'lambda:UpdateAlias',
+        'lambda:GetAlias',
+        'lambda:DeleteAlias',
+        'lambda:PutProvisionedConcurrencyConfig',
+        'lambda:GetProvisionedConcurrencyConfig',
+        'lambda:DeleteProvisionedConcurrencyConfig',
         // ECR
         'ecr:CreateRepository',
         'ecr:DescribeRepositories',
@@ -705,6 +731,10 @@ export class ForgeStack extends cdk.Stack {
         'lambda:GetFunction',
         'lambda:GetFunctionConfiguration',
         'lambda:PublishVersion',
+        'lambda:CreateAlias',
+        'lambda:UpdateAlias',
+        'lambda:GetAlias',
+        'lambda:GetProvisionedConcurrencyConfig',
       ],
       resources: [
         `arn:aws:lambda:${this.region}:${this.account}:function:forge-*`,
