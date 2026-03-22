@@ -220,7 +220,6 @@ export function ChatView() {
                 value={inputValue}
                 onChange={(e) => handleInputChange(e.target.value)}
                 onKeyDown={handleKeyDown}
-                disabled={isStreaming}
                 placeholder="Type or tap mic to respond..."
                 className="w-full resize-none bg-transparent outline-none border-none text-base md:text-sm leading-6 p-1 pb-8 pr-24 overflow-y-auto"
                 style={{
