@@ -4,6 +4,12 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Load env files (.env = config, .env.local = secrets)
+set -a
+[ -f "$REPO_ROOT/.env" ] && source "$REPO_ROOT/.env"
+[ -f "$REPO_ROOT/.env.local" ] && source "$REPO_ROOT/.env.local"
+set +a
 PIDFILE_BACKEND="/tmp/forge-backend.pid"
 PIDFILE_FRONTEND="/tmp/forge-frontend.pid"
 

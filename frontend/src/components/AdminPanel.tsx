@@ -1,13 +1,10 @@
 /**
- * AdminPanel - Full-page admin panel for managing department objectives and context.
- *
- * Desktop-only. Full-page takeover (no sidebar). TopBar still shows at top via App.tsx.
- * Two tabs: Objectives and Context.
+ * AdminPanel - Department objectives and context management.
+ * Rendered as a child of AdminLayout (no back link, heading, or mobile gate needed).
  */
 
 import { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Save, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Save, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { getAdminAccess, getDepartmentConfig, saveDepartmentConfig } from '../api/client';
 import type { DepartmentConfig, DepartmentObjective } from '../api/types';
 
@@ -18,8 +15,6 @@ function generateId(): string {
 }
 
 export function AdminPanel() {
-  const navigate = useNavigate();
-  const onBack = () => navigate('/');
   const [departments, setDepartments] = useState<string[]>([]);
   const [selectedDept, setSelectedDept] = useState<string>('');
   const [config, setConfig] = useState<DepartmentConfig | null>(null);
@@ -174,46 +169,9 @@ export function AdminPanel() {
     setTimeout(() => setSaveMessage(''), 2500);
   }
 
-  // Mobile gate
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  useEffect(() => {
-    function handleResize() {
-      setIsMobile(window.innerWidth < 768);
-    }
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  if (isMobile) {
-    return (
-      <div
-        className="flex flex-col items-center justify-center h-full px-6 text-center"
-        style={{ backgroundColor: 'var(--color-surface)' }}
-      >
-        <p
-          className="text-sm mb-4"
-          style={{ color: 'var(--color-text-secondary)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
-        >
-          Please use a desktop browser to manage department settings.
-        </p>
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-sm font-medium"
-          style={{ color: 'var(--color-text-muted)', cursor: 'pointer' }}
-        >
-          <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
-          Back to AI Tuesdays
-        </button>
-      </div>
-    );
-  }
-
   if (loading) {
     return (
-      <div
-        className="flex items-center justify-center h-full"
-        style={{ backgroundColor: 'var(--color-surface)' }}
-      >
+      <div className="flex items-center justify-center py-20">
         <div
           className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
           style={{ borderColor: 'var(--color-primary)' }}
@@ -233,355 +191,327 @@ export function AdminPanel() {
   });
 
   return (
-    <div
-      className="flex-1 overflow-y-auto"
-      style={{ backgroundColor: 'var(--color-surface)' }}
-    >
-      <div className="max-w-2xl mx-auto px-6 py-8">
-        {/* Back link */}
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-sm font-medium mb-6 transition-colors"
-          style={{ color: 'var(--color-text-muted)', cursor: 'pointer' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-primary)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-muted)'; }}
-        >
-          <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
-          Back to AI Tuesdays
-        </button>
-
-        {/* Page heading */}
-        <h1
-          className="text-2xl font-semibold mb-1"
+    <div className="max-w-2xl">
+      {/* Department picker */}
+      {departments.length > 1 ? (
+        <div className="relative inline-block mb-6">
+          <select
+            value={selectedDept}
+            onChange={(e) => setSelectedDept(e.target.value)}
+            className="appearance-none rounded-md border pl-3 pr-8 py-2 text-sm"
+            style={{
+              borderColor: 'var(--color-border)',
+              backgroundColor: '#FFFFFF',
+              color: 'var(--color-text-primary)',
+              fontFamily: "'Satoshi', system-ui, sans-serif",
+              cursor: 'pointer',
+            }}
+          >
+            {departments.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+          <ChevronDown
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ width: 14, height: 14, color: 'var(--color-text-muted)' }}
+            strokeWidth={1.5}
+          />
+        </div>
+      ) : (
+        <p
+          className="text-sm mb-6"
           style={{
-            color: 'var(--color-text-primary)',
+            color: 'var(--color-text-muted)',
             fontFamily: "'Satoshi', system-ui, sans-serif",
           }}
         >
-          Department Settings
-        </h1>
+          {selectedDept}
+        </p>
+      )}
 
-        {/* Department picker */}
-        {departments.length > 1 ? (
-          <div className="relative inline-block mb-6 mt-3">
-            <select
-              value={selectedDept}
-              onChange={(e) => setSelectedDept(e.target.value)}
-              className="appearance-none rounded-md border pl-3 pr-8 py-2 text-sm"
-              style={{
-                borderColor: 'var(--color-border)',
-                backgroundColor: '#FFFFFF',
-                color: 'var(--color-text-primary)',
-                fontFamily: "'Satoshi', system-ui, sans-serif",
-                cursor: 'pointer',
-              }}
-            >
-              {departments.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-            <ChevronDown
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-              style={{ width: 14, height: 14, color: 'var(--color-text-muted)' }}
-              strokeWidth={1.5}
-            />
-          </div>
-        ) : (
-          <p
-            className="text-sm mb-6 mt-1"
-            style={{
-              color: 'var(--color-text-muted)',
-              fontFamily: "'Satoshi', system-ui, sans-serif",
-            }}
-          >
-            {selectedDept}
-          </p>
-        )}
+      {/* Tabs */}
+      <div className="flex gap-6 mb-6" style={{ borderBottom: '1px solid var(--color-border)' }}>
+        <button onClick={() => setActiveTab('objectives')} style={tabStyle('objectives')}>
+          Objectives
+        </button>
+        <button onClick={() => setActiveTab('context')} style={tabStyle('context')}>
+          Context
+        </button>
+      </div>
 
-        {/* Tabs */}
-        <div className="flex gap-6 mb-6" style={{ borderBottom: '1px solid var(--color-border)' }}>
-          <button onClick={() => setActiveTab('objectives')} style={tabStyle('objectives')}>
-            Objectives
-          </button>
-          <button onClick={() => setActiveTab('context')} style={tabStyle('context')}>
-            Context
-          </button>
+      {/* Save feedback */}
+      {saveMessage && (
+        <div
+          className="mb-4 px-3 py-2 rounded-md text-sm font-medium"
+          style={{
+            backgroundColor: saveMessage.includes('Failed') ? '#FEF2F2' : '#F0FDF4',
+            color: saveMessage.includes('Failed') ? 'var(--color-error)' : 'var(--color-success)',
+            fontFamily: "'Satoshi', system-ui, sans-serif",
+          }}
+        >
+          {saveMessage}
         </div>
+      )}
 
-        {/* Save feedback */}
-        {saveMessage && (
-          <div
-            className="mb-4 px-3 py-2 rounded-md text-sm font-medium"
-            style={{
-              backgroundColor: saveMessage.includes('Failed') ? '#FEF2F2' : '#F0FDF4',
-              color: saveMessage.includes('Failed') ? 'var(--color-error)' : 'var(--color-success)',
-              fontFamily: "'Inter', system-ui, sans-serif",
-            }}
-          >
-            {saveMessage}
-          </div>
-        )}
-
-        {/* Objectives tab */}
-        {activeTab === 'objectives' && config && (
-          <div className="flex flex-col gap-3">
-            {config.objectives.map((obj) => {
-              const isExpanded = expandedCard === obj.id;
-              return (
-                <div
-                  key={obj.id}
-                  className="rounded-lg border overflow-hidden"
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    borderColor: isExpanded ? 'var(--color-primary)' : 'var(--color-border)',
+      {/* Objectives tab */}
+      {activeTab === 'objectives' && config && (
+        <div className="flex flex-col gap-3">
+          {config.objectives.map((obj) => {
+            const isExpanded = expandedCard === obj.id;
+            return (
+              <div
+                key={obj.id}
+                className="rounded-lg border overflow-hidden"
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderColor: isExpanded ? 'var(--color-primary)' : 'var(--color-border)',
+                }}
+              >
+                {/* Collapsed header */}
+                <button
+                  onClick={() => isExpanded ? collapseCard() : expandObjective(obj)}
+                  className="flex items-center justify-between w-full px-4 py-3 text-left transition-colors"
+                  style={{ cursor: 'pointer' }}
+                  onMouseEnter={(e) => {
+                    if (!isExpanded) e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  {/* Collapsed header */}
-                  <button
-                    onClick={() => isExpanded ? collapseCard() : expandObjective(obj)}
-                    className="flex items-center justify-between w-full px-4 py-3 text-left transition-colors"
-                    style={{ cursor: 'pointer' }}
-                    onMouseEnter={(e) => {
-                      if (!isExpanded) e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
+                  <span
+                    className="text-sm"
+                    style={{
+                      color: 'var(--color-text-primary)',
+                      fontFamily: "'Satoshi', system-ui, sans-serif",
+                      fontWeight: 450,
                     }}
                   >
-                    <span
-                      className="text-sm"
-                      style={{
-                        color: 'var(--color-text-primary)',
-                        fontFamily: "'Inter', system-ui, sans-serif",
-                        fontWeight: 450,
-                      }}
-                    >
-                      {obj.label}
-                    </span>
-                    {isExpanded ? (
-                      <ChevronUp className="w-4 h-4 shrink-0 ml-3" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 shrink-0 ml-3" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
-                    )}
-                  </button>
+                    {obj.label}
+                  </span>
+                  {isExpanded ? (
+                    <ChevronUp className="w-4 h-4 shrink-0 ml-3" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 shrink-0 ml-3" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
+                  )}
+                </button>
 
-                  {/* Expanded edit form */}
-                  {isExpanded && (
-                    <div className="px-4 pb-4 flex flex-col gap-3" style={{ borderTop: '1px solid var(--color-border)' }}>
-                      <div className="pt-3">
-                        <label
-                          className="block text-xs font-medium mb-1"
-                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Inter', system-ui, sans-serif" }}
-                        >
-                          Label
-                        </label>
-                        <input
-                          ref={labelInputRef}
-                          type="text"
-                          value={editLabel}
-                          onChange={(e) => setEditLabel(e.target.value)}
-                          className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors"
-                          style={{
-                            borderColor: 'var(--color-border)',
-                            color: 'var(--color-text-primary)',
-                            fontFamily: "'Inter', system-ui, sans-serif",
-                          }}
-                          onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-                          onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
-                        />
-                      </div>
+                {/* Expanded edit form */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 flex flex-col gap-3" style={{ borderTop: '1px solid var(--color-border)' }}>
+                    <div className="pt-3">
+                      <label
+                        className="block text-xs font-medium mb-1"
+                        style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                      >
+                        Label
+                      </label>
+                      <input
+                        ref={labelInputRef}
+                        type="text"
+                        value={editLabel}
+                        onChange={(e) => setEditLabel(e.target.value)}
+                        className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors"
+                        style={{
+                          borderColor: 'var(--color-border)',
+                          color: 'var(--color-text-primary)',
+                          fontFamily: "'Satoshi', system-ui, sans-serif",
+                        }}
+                        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                        onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+                      />
+                    </div>
 
-                      <div>
-                        <label
-                          className="block text-xs font-medium mb-1"
-                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Inter', system-ui, sans-serif" }}
-                        >
-                          Description
-                        </label>
-                        <textarea
-                          value={editDescription}
-                          onChange={(e) => setEditDescription(e.target.value)}
-                          rows={3}
-                          className="w-full rounded-md border px-3 py-2 text-sm outline-none resize-y transition-colors"
-                          style={{
-                            borderColor: 'var(--color-border)',
-                            color: 'var(--color-text-primary)',
-                            fontFamily: "'Inter', system-ui, sans-serif",
-                          }}
-                          onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-                          onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
-                        />
-                      </div>
+                    <div>
+                      <label
+                        className="block text-xs font-medium mb-1"
+                        style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                      >
+                        Description
+                      </label>
+                      <textarea
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        rows={3}
+                        className="w-full rounded-md border px-3 py-2 text-sm outline-none resize-y transition-colors"
+                        style={{
+                          borderColor: 'var(--color-border)',
+                          color: 'var(--color-text-primary)',
+                          fontFamily: "'Satoshi', system-ui, sans-serif",
+                        }}
+                        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                        onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+                      />
+                    </div>
 
-                      <div>
-                        <label
-                          className="block text-xs font-medium mb-1"
-                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Inter', system-ui, sans-serif" }}
-                        >
-                          Extraction key
-                        </label>
-                        <input
-                          type="text"
-                          value={editExtractionKey}
-                          onChange={(e) => setEditExtractionKey(e.target.value)}
-                          disabled={extractionKeyLocked}
-                          placeholder="e.g. ai_tools_used"
-                          className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors"
-                          style={{
-                            borderColor: 'var(--color-border)',
-                            color: extractionKeyLocked ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
-                            backgroundColor: extractionKeyLocked ? 'var(--color-surface-raised)' : undefined,
-                            fontFamily: "'Inter', system-ui, sans-serif",
-                            cursor: extractionKeyLocked ? 'not-allowed' : undefined,
-                          }}
-                          onFocus={(e) => { if (!extractionKeyLocked) e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-                          onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
-                        />
-                        <p
-                          className="text-xs mt-1"
-                          style={{ color: 'var(--color-text-placeholder)', fontFamily: "'Inter', system-ui, sans-serif" }}
-                        >
-                          {extractionKeyLocked
-                            ? 'This key is locked. Changing it would orphan existing profile data in DynamoDB.'
-                            : 'DynamoDB profile field where extracted data is stored (e.g. work_summary, ai_tools_used). This cannot be changed after saving.'}
-                        </p>
-                      </div>
+                    <div>
+                      <label
+                        className="block text-xs font-medium mb-1"
+                        style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                      >
+                        Extraction key
+                      </label>
+                      <input
+                        type="text"
+                        value={editExtractionKey}
+                        onChange={(e) => setEditExtractionKey(e.target.value)}
+                        disabled={extractionKeyLocked}
+                        placeholder="e.g. ai_tools_used"
+                        className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors"
+                        style={{
+                          borderColor: 'var(--color-border)',
+                          color: extractionKeyLocked ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+                          backgroundColor: extractionKeyLocked ? 'var(--color-surface-raised)' : undefined,
+                          fontFamily: "'Satoshi', system-ui, sans-serif",
+                          cursor: extractionKeyLocked ? 'not-allowed' : undefined,
+                        }}
+                        onFocus={(e) => { if (!extractionKeyLocked) e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                        onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+                      />
+                      <p
+                        className="text-xs mt-1"
+                        style={{ color: 'var(--color-text-placeholder)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                      >
+                        {extractionKeyLocked
+                          ? 'This key is locked. Changing it would orphan existing profile data in DynamoDB.'
+                          : 'DynamoDB profile field where extracted data is stored (e.g. work_summary, ai_tools_used). This cannot be changed after saving.'}
+                      </p>
+                    </div>
 
-                      {/* Actions */}
-                      <div className="flex items-center gap-2 pt-1">
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={() => saveObjective(obj.id)}
+                        disabled={saving || !editLabel.trim()}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                        style={{
+                          backgroundColor: saving || !editLabel.trim() ? 'var(--color-border)' : 'var(--color-primary)',
+                          color: '#FFFFFF',
+                          cursor: saving || !editLabel.trim() ? 'not-allowed' : 'pointer',
+                          fontFamily: "'Satoshi', system-ui, sans-serif",
+                        }}
+                      >
+                        <Save className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        Save
+                      </button>
+                      <button
+                        onClick={collapseCard}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                        style={{
+                          color: 'var(--color-text-muted)',
+                          cursor: 'pointer',
+                          fontFamily: "'Satoshi', system-ui, sans-serif",
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                      >
+                        <X className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        Cancel
+                      </button>
+                      {config.objectives.length > 1 && (
                         <button
-                          onClick={() => saveObjective(obj.id)}
-                          disabled={saving || !editLabel.trim()}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                          onClick={() => deleteObjective(obj.id)}
+                          disabled={saving}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium ml-auto transition-colors"
                           style={{
-                            backgroundColor: saving || !editLabel.trim() ? 'var(--color-border)' : 'var(--color-primary)',
-                            color: '#FFFFFF',
-                            cursor: saving || !editLabel.trim() ? 'not-allowed' : 'pointer',
-                            fontFamily: "'Inter', system-ui, sans-serif",
+                            color: 'var(--color-error)',
+                            cursor: saving ? 'not-allowed' : 'pointer',
+                            fontFamily: "'Satoshi', system-ui, sans-serif",
                           }}
-                        >
-                          <Save className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          Save
-                        </button>
-                        <button
-                          onClick={collapseCard}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                          style={{
-                            color: 'var(--color-text-muted)',
-                            cursor: 'pointer',
-                            fontFamily: "'Inter', system-ui, sans-serif",
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)'; }}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                         >
-                          <X className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          Cancel
+                          <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+                          Delete
                         </button>
-                        {config.objectives.length > 1 && (
-                          <button
-                            onClick={() => deleteObjective(obj.id)}
-                            disabled={saving}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium ml-auto transition-colors"
-                            style={{
-                              color: 'var(--color-error)',
-                              cursor: saving ? 'not-allowed' : 'pointer',
-                              fontFamily: "'Inter', system-ui, sans-serif",
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-                            Delete
-                          </button>
-                        )}
-                      </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
-            {/* Add objective card */}
-            <button
-              onClick={addObjective}
-              disabled={saving}
-              className="flex items-center justify-center gap-2 w-full rounded-lg border-2 border-dashed px-4 py-3 text-sm font-medium transition-colors"
+          {/* Add objective card */}
+          <button
+            onClick={addObjective}
+            disabled={saving}
+            className="flex items-center justify-center gap-2 w-full rounded-lg border-2 border-dashed px-4 py-3 text-sm font-medium transition-colors"
+            style={{
+              borderColor: 'var(--color-border)',
+              color: 'var(--color-text-muted)',
+              cursor: saving ? 'not-allowed' : 'pointer',
+              fontFamily: "'Satoshi', system-ui, sans-serif",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-primary)';
+              e.currentTarget.style.color = 'var(--color-primary)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-border)';
+              e.currentTarget.style.color = 'var(--color-text-muted)';
+            }}
+          >
+            <Plus className="w-4 h-4" strokeWidth={1.5} />
+            Add objective
+          </button>
+        </div>
+      )}
+
+      {/* Context tab */}
+      {activeTab === 'context' && config && (
+        <div className="flex flex-col gap-4">
+          <div>
+            <label
+              className="block text-xs font-medium mb-2"
+              style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+            >
+              Department context prompt
+            </label>
+            <textarea
+              value={contextPrompt}
+              onChange={(e) => {
+                setContextPrompt(e.target.value);
+                setContextDirty(true);
+              }}
+              rows={12}
+              placeholder="Provide context about this department that the AI coach should know. Markdown supported."
+              className="w-full rounded-md border px-4 py-3 text-sm outline-none resize-y transition-colors"
               style={{
                 borderColor: 'var(--color-border)',
-                color: 'var(--color-text-muted)',
-                cursor: saving ? 'not-allowed' : 'pointer',
-                fontFamily: "'Inter', system-ui, sans-serif",
+                color: 'var(--color-text-primary)',
+                fontFamily: "'Satoshi', system-ui, sans-serif",
+                lineHeight: 1.6,
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--color-primary)';
-                e.currentTarget.style.color = 'var(--color-primary)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--color-border)';
-                e.currentTarget.style.color = 'var(--color-text-muted)';
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+            />
+            <p
+              className="text-xs mt-1"
+              style={{ color: 'var(--color-text-placeholder)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+            >
+              This text is included in the AI system prompt for all users in this department.
+            </p>
+          </div>
+
+          <div>
+            <button
+              onClick={saveContext}
+              disabled={saving || !contextDirty}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              style={{
+                backgroundColor: saving || !contextDirty ? 'var(--color-border)' : 'var(--color-primary)',
+                color: '#FFFFFF',
+                cursor: saving || !contextDirty ? 'not-allowed' : 'pointer',
+                fontFamily: "'Satoshi', system-ui, sans-serif",
               }}
             >
-              <Plus className="w-4 h-4" strokeWidth={1.5} />
-              Add objective
+              <Save className="w-3.5 h-3.5" strokeWidth={1.5} />
+              Save context
             </button>
           </div>
-        )}
-
-        {/* Context tab */}
-        {activeTab === 'context' && config && (
-          <div className="flex flex-col gap-4">
-            <div>
-              <label
-                className="block text-xs font-medium mb-2"
-                style={{ color: 'var(--color-text-muted)', fontFamily: "'Inter', system-ui, sans-serif" }}
-              >
-                Department context prompt
-              </label>
-              <textarea
-                value={contextPrompt}
-                onChange={(e) => {
-                  setContextPrompt(e.target.value);
-                  setContextDirty(true);
-                }}
-                rows={12}
-                placeholder="Provide context about this department that the AI coach should know. Markdown supported."
-                className="w-full rounded-md border px-4 py-3 text-sm outline-none resize-y transition-colors"
-                style={{
-                  borderColor: 'var(--color-border)',
-                  color: 'var(--color-text-primary)',
-                  fontFamily: "'Inter', system-ui, sans-serif",
-                  lineHeight: 1.6,
-                }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
-              />
-              <p
-                className="text-xs mt-1"
-                style={{ color: 'var(--color-text-placeholder)', fontFamily: "'Inter', system-ui, sans-serif" }}
-              >
-                This text is included in the AI system prompt for all users in this department.
-              </p>
-            </div>
-
-            <div>
-              <button
-                onClick={saveContext}
-                disabled={saving || !contextDirty}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                style={{
-                  backgroundColor: saving || !contextDirty ? 'var(--color-border)' : 'var(--color-primary)',
-                  color: '#FFFFFF',
-                  cursor: saving || !contextDirty ? 'not-allowed' : 'pointer',
-                  fontFamily: "'Inter', system-ui, sans-serif",
-                }}
-              >
-                <Save className="w-3.5 h-3.5" strokeWidth={1.5} />
-                Save context
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

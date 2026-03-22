@@ -71,6 +71,11 @@ class TipRepository(ABC):
         """Add a comment to a tip."""
         pass
 
+    @abstractmethod
+    async def count_by_authors(self, author_ids: list[str]) -> dict[str, int]:
+        """Count tips per author. Returns {author_id: count}."""
+        pass
+
 
 class DynamoDBTipRepository(TipRepository):
     """DynamoDB tip storage. Tips PK=tip_id, Votes PK=tip_id+SK=user_id, Comments PK=tip_id+SK=comment_id."""
@@ -355,6 +360,29 @@ class DynamoDBTipRepository(TipRepository):
             partial(self.comments_table.put_item, Item=self._serialize_comment(comment)),
         )
 
+    async def count_by_authors(self, author_ids: list[str]) -> dict[str, int]:
+        if not author_ids:
+            return {}
+        loop = asyncio.get_event_loop()
+        counts: dict[str, int] = {}
+        last_key = None
+        author_set = set(author_ids)
+        while True:
+            kwargs: dict = {"ProjectionExpression": "author_id"}
+            if last_key:
+                kwargs["ExclusiveStartKey"] = last_key
+            response = await loop.run_in_executor(
+                None, partial(self.tips_table.scan, **kwargs)
+            )
+            for item in response.get("Items", []):
+                aid = item.get("author_id", "")
+                if aid in author_set:
+                    counts[aid] = counts.get(aid, 0) + 1
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+        return counts
+
 
 class MemoryTipRepository(TipRepository):
     """In-memory tip storage for local dev and tests."""
@@ -468,3 +496,13 @@ class MemoryTipRepository(TipRepository):
             self._comments[comment.tip_id] = []
         self._comments[comment.tip_id].append(comment)
         self._save()
+
+    async def count_by_authors(self, author_ids: list[str]) -> dict[str, int]:
+        if not author_ids:
+            return {}
+        author_set = set(author_ids)
+        counts: dict[str, int] = {}
+        for tip in self._tips.values():
+            if tip.author_id in author_set:
+                counts[tip.author_id] = counts.get(tip.author_id, 0) + 1
+        return counts

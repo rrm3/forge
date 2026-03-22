@@ -42,6 +42,16 @@ class SessionRepository(ABC):
         """Delete a session."""
         pass
 
+    @abstractmethod
+    async def count_by_user(self, user_id: str) -> int:
+        """Count sessions for a user."""
+        pass
+
+    @abstractmethod
+    async def last_active(self, user_id: str) -> str | None:
+        """Return the most recent updated_at ISO string for a user's sessions, or None."""
+        pass
+
 
 class DynamoDBSessionRepository(SessionRepository):
     """DynamoDB session storage. Stores metadata only; transcript is on S3."""
@@ -133,6 +143,33 @@ class DynamoDBSessionRepository(SessionRepository):
             ),
         )
 
+    async def count_by_user(self, user_id: str) -> int:
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            partial(
+                self.table.query,
+                Select="COUNT",
+                KeyConditionExpression=Key("user_id").eq(user_id),
+            ),
+        )
+        return response.get("Count", 0)
+
+    async def last_active(self, user_id: str) -> str | None:
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            partial(
+                self.table.query,
+                KeyConditionExpression=Key("user_id").eq(user_id),
+                ProjectionExpression="updated_at",
+            ),
+        )
+        items = response.get("Items", [])
+        if not items:
+            return None
+        return max(item["updated_at"] for item in items)
+
 
 class MemorySessionRepository(SessionRepository):
     """In-memory session storage for local dev and tests."""
@@ -181,3 +218,13 @@ class MemorySessionRepository(SessionRepository):
     async def delete(self, user_id: str, session_id: str) -> None:
         self._sessions.pop((user_id, session_id), None)
         self._save()
+
+    async def count_by_user(self, user_id: str) -> int:
+        return sum(1 for (uid, _) in self._sessions if uid == user_id)
+
+    async def last_active(self, user_id: str) -> str | None:
+        user_sessions = [s for (uid, _), s in self._sessions.items() if uid == user_id]
+        if not user_sessions:
+            return None
+        latest = max(user_sessions, key=lambda s: s.updated_at)
+        return latest.updated_at.isoformat()

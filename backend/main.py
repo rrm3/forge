@@ -117,7 +117,13 @@ set_journal_deps(repos["journal"])
 set_ideas_deps(repos["ideas"])
 set_tips_deps(repos["tips"])
 set_user_ideas_deps(repos["user_ideas"])
-set_admin_deps(DepartmentConfigRepository(storage))
+set_admin_deps(
+    DepartmentConfigRepository(storage),
+    profiles_repo=repos["profiles"],
+    sessions_repo=repos["sessions"],
+    tips_repo=repos["tips"],
+    storage=storage,
+)
 
 # Include REST routers under /api prefix
 app.include_router(sessions_router, prefix="/api")
