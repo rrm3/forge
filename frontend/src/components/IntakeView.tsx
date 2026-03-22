@@ -66,13 +66,14 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
 
   // If cards are skipped (returning user with existing intake), select the existing session.
   // Only create a new intake if there isn't one already.
+  const needsNudge = useRef(false);
   useEffect(() => {
     if (!showCards && !intakeStarted.current) {
       intakeStarted.current = true;
       if (hasIntakeSession) {
-        // Reuse existing intake session
         const existing = state.sessions.find((s) => s.type === 'intake');
         if (existing) {
+          needsNudge.current = true;
           selectSession(existing.session_id);
         }
       } else {
@@ -80,6 +81,14 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
       }
     }
   }, [showCards, startTypedSession, hasIntakeSession, state.sessions, selectSession]);
+
+  // After selecting an existing intake session, if transcript is empty, nudge the AI
+  useEffect(() => {
+    if (needsNudge.current && activeSessionId && !isStreaming && messages.length === 0) {
+      needsNudge.current = false;
+      sendChatMessage('');
+    }
+  }, [activeSessionId, isStreaming, messages.length, sendChatMessage]);
 
   function handleInputChange(v: string) {
     inputValueRef.current = v;

@@ -106,10 +106,15 @@ async def reset_intake(user: AuthUser):
     if departments is None:
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    # Clear intake-related profile fields
+    # Clear ALL fields that the intake conversation can populate
     await _profiles_repo.update(user.user_id, {
         "intake_completed_at": None,
         "onboarding_complete": False,
+        "work_summary": "",
+        "ai_experience_level": "",
+        "interests": [],
+        "tools_used": [],
+        "goals": [],
         "products": [],
         "daily_tasks": "",
         "core_skills": [],
