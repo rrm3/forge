@@ -58,8 +58,14 @@ export function TopBar({ onAdminClick }: TopBarProps = {}) {
           borderBottom: '1px solid #E2E8F0',
         }}
       >
-      {/* Left: DS logo */}
-      <img src="/ds-logo.svg" alt="Digital Science" style={{ height: 24 }} />
+      {/* Left: DS logo + AI Tuesdays */}
+      <div className="flex items-center gap-3">
+        <img src="/ds-logo.svg" alt="Digital Science" style={{ height: 24 }} />
+        <span style={{ color: '#CBD5E1', fontSize: 18, fontWeight: 300 }}>|</span>
+        <span style={{ color: '#4A5568', fontSize: 14, fontWeight: 600, fontFamily: "'Satoshi', system-ui, sans-serif" }}>
+          AI Tuesdays
+        </span>
+      </div>
 
       {/* Right: Avatar + name + dropdown */}
       <div ref={menuRef} className="relative">
@@ -104,7 +110,7 @@ export function TopBar({ onAdminClick }: TopBarProps = {}) {
 
         {open && (
           <div
-            className="absolute right-0 top-full mt-1 rounded-lg shadow-lg overflow-hidden z-50 border"
+            className="absolute right-0 top-full mt-1 rounded-lg shadow-lg overflow-hidden z-50 border whitespace-nowrap"
             style={{
               backgroundColor: '#FFFFFF',
               borderColor: '#E2E8F0',
@@ -143,7 +149,6 @@ export function TopBar({ onAdminClick }: TopBarProps = {}) {
               <button
                 onClick={() => {
                   toggleAdminMode();
-                  setOpen(false);
                 }}
                 className="flex items-center justify-between w-full px-4 py-2.5 text-sm transition-colors"
                 style={{ color: '#4A5568' }}
@@ -155,13 +160,21 @@ export function TopBar({ onAdminClick }: TopBarProps = {}) {
                   Admin Mode
                 </span>
                 <span
-                  className="text-xs font-medium px-1.5 py-0.5 rounded"
+                  className="relative inline-block rounded-full transition-colors"
                   style={{
-                    backgroundColor: adminMode ? 'var(--color-primary-subtle)' : 'var(--color-surface-raised)',
-                    color: adminMode ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    width: 32,
+                    height: 18,
+                    backgroundColor: adminMode ? 'var(--color-primary)' : '#CBD5E1',
                   }}
                 >
-                  {adminMode ? 'ON' : 'OFF'}
+                  <span
+                    className="absolute top-0.5 rounded-full bg-white transition-all shadow-sm"
+                    style={{
+                      width: 14,
+                      height: 14,
+                      left: adminMode ? 16 : 2,
+                    }}
+                  />
                 </span>
               </button>
             )}
