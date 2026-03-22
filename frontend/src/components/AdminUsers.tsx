@@ -121,6 +121,7 @@ export function AdminUsers() {
       setSelectedUserId(null);
     } catch (err) {
       console.error('Failed to delete user:', err);
+      alert('Failed to delete user. Check the console for details.');
     }
   }
 

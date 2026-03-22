@@ -245,10 +245,11 @@ async def delete_user(user_id: str, user: AuthUser):
     if profile.email.lower() == user.email.lower():
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
-    # Remove admin access if they had it
+    # Remove admin access if they had it (case-insensitive lookup)
     admin_access = await _dept_config_repo.get_admin_access()
-    if profile.email in admin_access:
-        del admin_access[profile.email]
+    admin_key = next((k for k in admin_access if k.lower() == profile.email.lower()), None)
+    if admin_key is not None:
+        del admin_access[admin_key]
         await _dept_config_repo.save_admin_access(admin_access)
 
     # Delete sessions and their transcripts

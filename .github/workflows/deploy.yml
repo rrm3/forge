@@ -108,6 +108,7 @@ jobs:
               echo "  Status: ${STATUS} (${i}/60)"
               sleep 5
             done
+            [ "$STATUS" != "READY" ] && [ "$STATUS" != "FAILED" ] && echo "WARNING: Timed out waiting for provisioned concurrency (last status: ${STATUS})"
           fi
 
       - name: Update WebSocket Lambda function
@@ -161,6 +162,7 @@ jobs:
               echo "  Status: ${STATUS} (${i}/60)"
               sleep 5
             done
+            [ "$STATUS" != "READY" ] && [ "$STATUS" != "FAILED" ] && echo "WARNING: Timed out waiting for provisioned concurrency (last status: ${STATUS})"
           fi
 
   deploy-frontend:
