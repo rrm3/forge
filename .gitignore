@@ -55,3 +55,4 @@ uv.lock
 htmlcov/
 curriculum-source/
 .gstack/
+.env

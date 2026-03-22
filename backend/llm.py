@@ -113,6 +113,9 @@ async def call_llm(
     if settings.bedrock_access_key_id:
         kwargs["aws_access_key_id"] = settings.bedrock_access_key_id
         kwargs["aws_secret_access_key"] = settings.bedrock_secret_access_key
+        # Explicitly clear session token to prevent Lambda's injected role token
+        # from being mixed with the cross-account IAM user credentials
+        kwargs["aws_session_token"] = None
     if tools:
         kwargs["tools"] = tools
     if max_tokens is not None:
