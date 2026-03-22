@@ -43,6 +43,12 @@ cdk.out/
 *.tfstate.backup
 .terraform.lock.hcl
 
+# Claude Code
+.claude/
+
+# Dependencies
+uv.lock
+
 # Misc
 *.log
 .coverage
