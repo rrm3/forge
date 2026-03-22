@@ -330,7 +330,11 @@ export function SessionList({ ideaCount }: SessionListProps) {
                         session={session}
                         isActive={session.session_id === state.activeSessionId}
                         onSelect={() => navigate(`/chat/${session.session_id}`)}
-                        onDelete={() => removeSession(session.session_id)}
+                        onDelete={async () => {
+                          const wasActive = session.session_id === state.activeSessionId;
+                          await removeSession(session.session_id);
+                          if (wasActive) navigate('/');
+                        }}
                         onRename={(title) => updateSessionTitle(session.session_id, title)}
                         canDelete={session.type !== 'intake'}
                       />

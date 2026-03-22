@@ -58,12 +58,15 @@ function MainLayout({ profile, ideaCount }: { profile: UserProfile | null; ideaC
     }
   }, [state.activeSessionId, location.pathname, navigate]);
 
-  // Deselect session when navigating away from a chat route
+  // Deselect session when navigating away from a chat route.
+  // Only react to location changes - not activeSessionId changes - to avoid
+  // racing with the navigation effect during session creation.
   useEffect(() => {
     if (!location.pathname.startsWith('/chat/') && state.activeSessionId) {
       deselectSession();
     }
-  }, [location.pathname, deselectSession, state.activeSessionId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   const sidebar = (
     <div className="flex flex-col h-full">
