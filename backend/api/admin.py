@@ -242,7 +242,7 @@ async def delete_user(user_id: str, user: AuthUser):
     if profile is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if profile.email.lower() == user.email.lower():
+    if user_id == user.user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
     # Remove admin access if they had it (case-insensitive lookup)
