@@ -156,15 +156,13 @@ function AppContent() {
 
   return (
     <Routes>
-      {/* Intake / Day 1 */}
+      {/* Intake / Day 1 - always accessible (also used for "Show Intro" replay) */}
       <Route
         path="/day1"
         element={
-          intakeComplete
-            ? <Navigate to="/" replace />
-            : <IntakeView onComplete={() => {
-                getProfile().then((p) => setProfile(p)).catch(() => {});
-              }} />
+          <IntakeView onComplete={() => {
+            getProfile().then((p) => setProfile(p)).catch(() => {});
+          }} />
         }
       />
 

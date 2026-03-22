@@ -91,6 +91,13 @@ export async function updateProfile(fields: Partial<UserProfile>): Promise<void>
   await checkResponse(res);
 }
 
+export async function resetIntake(): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/profile/reset-intake`, {
+    method: 'POST',
+  });
+  await checkResponse(res);
+}
+
 // Journal API
 
 export async function listJournal(params?: {

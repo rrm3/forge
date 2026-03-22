@@ -15,13 +15,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/profile", tags=["profile"])
 
 _profiles_repo = None
+_sessions_repo = None
+_storage = None
 _orgchart: OrgChart | None = None
 
 
-def set_profile_deps(profiles_repo, orgchart=None):
-    global _profiles_repo, _orgchart
+def set_profile_deps(profiles_repo, orgchart=None, sessions_repo=None, storage=None):
+    global _profiles_repo, _orgchart, _sessions_repo, _storage
     _profiles_repo = profiles_repo
     _orgchart = orgchart
+    _sessions_repo = sessions_repo
+    _storage = storage
 
 
 async def _get_or_create_profile(user: AuthUser) -> UserProfile:
@@ -88,3 +92,57 @@ async def update_profile(body: dict, user: AuthUser):
     await _profiles_repo.update(user.user_id, body)
     updated = await _profiles_repo.get(user.user_id)
     return updated.model_dump(mode="json")
+
+
+@router.post("/reset-intake")
+async def reset_intake(user: AuthUser):
+    """Reset intake state: clear profile intake fields, delete intake session + transcript.
+
+    Requires admin mode (enforced by checking admin access).
+    """
+    from backend.api.admin import _get_admin_departments
+
+    departments = await _get_admin_departments(user.email)
+    if departments is None:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # Clear intake-related profile fields
+    await _profiles_repo.update(user.user_id, {
+        "intake_completed_at": None,
+        "onboarding_complete": False,
+        "products": [],
+        "daily_tasks": "",
+        "core_skills": [],
+        "learning_goals": [],
+        "ai_tools_used": [],
+        "ai_superpower": "",
+        "ai_proficiency": None,
+        "intake_summary": "",
+        "intake_fields_captured": [],
+    })
+
+    # Find and delete intake sessions
+    if _sessions_repo:
+        sessions = await _sessions_repo.list(user.user_id)
+        for s in sessions:
+            if s.type == "intake":
+                # Delete transcript
+                if _storage:
+                    key = f"sessions/{user.user_id}/{s.session_id}.json"
+                    try:
+                        await _storage.delete(key)
+                    except Exception:
+                        logger.warning("Failed to delete intake transcript %s", key)
+                # Delete intake responses
+                if _storage:
+                    responses_key = f"profiles/{user.user_id}/intake-responses.json"
+                    try:
+                        await _storage.delete(responses_key)
+                    except Exception:
+                        pass
+                # Delete session metadata
+                await _sessions_repo.delete(user.user_id, s.session_id)
+                logger.info("Deleted intake session %s for user %s", s.session_id, user.user_id)
+
+    logger.info("Reset intake for user %s (%s)", user.user_id, user.email)
+    return {"status": "reset"}

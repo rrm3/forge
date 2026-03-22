@@ -30,19 +30,19 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
 
   const [inputValue, setInputValue] = useState('');
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  // Don't show cards until we know whether an intake session exists
+  // Show cards for first-time users (no existing intake session when component mounts).
+  // Snapshot on first sessions load so pre-loading a session during cards doesn't hide them.
   const sessionsLoaded = state.sessionsLoaded;
+  const hasIntakeSessionOnMount = useRef<boolean | null>(null);
+  if (sessionsLoaded && hasIntakeSessionOnMount.current === null) {
+    hasIntakeSessionOnMount.current = state.sessions.some((s) => s.type === 'intake');
+  }
   const hasIntakeSession = state.sessions.some((s) => s.type === 'intake');
   const [cardsDismissed, setCardsDismissed] = useState(false);
 
-  const showCards = !cardsDismissed && !hasIntakeSession;
-
-  // Also dismiss cards once messages arrive (covers the streaming case)
-  useEffect(() => {
-    if (!cardsDismissed && messages.length > 0) {
-      setCardsDismissed(true);
-    }
-  }, [cardsDismissed, messages.length]);
+  // Cards stay visible until the user clicks through all 4.
+  // Pre-loaded session creation and AI messages must NOT dismiss them.
+  const showCards = !cardsDismissed && hasIntakeSessionOnMount.current === false;
   const [showCapsHint, setShowCapsHint] = useState(false);
   const capsHintDismissed = useRef(false);
   const inputValueRef = useRef(inputValue);
@@ -183,7 +183,7 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
   // Wait for sessions to load before deciding what to show
   if (!sessionsLoaded) {
     return (
-      <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--color-surface)' }}>
+      <div className="h-screen flex flex-col" style={{ backgroundColor: 'var(--color-surface)' }}>
         <TopBar />
       </div>
     );
@@ -191,7 +191,7 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
 
   return (
     <div
-      className="min-h-screen flex flex-col"
+      className="h-screen flex flex-col"
       style={{ backgroundColor: 'var(--color-surface)' }}
     >
       <TopBar />
@@ -200,7 +200,7 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
       {showCards ? (
         <OnboardingCards onComplete={handleCardsComplete} onCardChange={handleCardChange} />
       ) : (
-        <div className="flex-1 flex flex-col relative" style={{ minHeight: 0 }}>
+        <div className="flex-1 flex flex-col relative min-h-0">
           {/* Subtle gradient wash at top */}
           <div
             className="pointer-events-none absolute top-0 left-0 right-0 h-32 z-10"
@@ -210,7 +210,7 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
           />
 
           {/* Scrollable messages area */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto min-h-0">
             <div className="max-w-2xl mx-auto px-4 py-4 space-y-1 min-h-full flex flex-col justify-end">
               {messages.filter((msg) => adminMode || (msg.role !== 'tool_call' && msg.role !== 'tool_result')).map((msg, i) => (
                 <MessageBubble key={i} message={msg} />
@@ -294,8 +294,8 @@ export function IntakeView({ onComplete }: IntakeViewProps) {
             </div>
           </div>
 
-          {/* Input area - hidden after completion */}
-          {!intakeComplete && <div className="max-w-2xl mx-auto w-full px-4 pb-4">
+          {/* Input area - hidden after completion, pinned to bottom */}
+          {!intakeComplete && <div className="shrink-0 max-w-2xl mx-auto w-full px-4 pb-4">
             {/* CapsLock floating hint */}
             {showCapsHint && (
               <div className="flex justify-center mb-2">

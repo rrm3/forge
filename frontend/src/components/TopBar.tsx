@@ -7,9 +7,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, BookOpen, UserRoundCog, Settings, Code } from 'lucide-react';
+import { LogOut, RotateCcw, UserRoundCog, Settings, Code } from 'lucide-react';
 import { useAuth } from '../auth/useAuth';
 import { useAdminStore } from '../state/adminStore';
+import { resetIntake } from '../api/client';
 import { UserAvatar } from './UserAvatar';
 import type { UserProfile } from '../api/types';
 
@@ -98,19 +99,28 @@ export function TopBar({ profile }: TopBarProps = {}) {
               minWidth: 180,
             }}
           >
-            <button
-              onClick={() => {
-                setOpen(false);
-                window.location.reload();
-              }}
-              className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm transition-colors"
-              style={{ color: '#4A5568' }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-            >
-              <BookOpen className="w-4 h-4" strokeWidth={1.5} />
-              Show Intro
-            </button>
+            {adminMode && (
+              <button
+                onClick={async () => {
+                  setOpen(false);
+                  if (!confirm('Reset Day One? This will delete your intake session and all captured profile data.')) return;
+                  try {
+                    await resetIntake();
+                    // Hard reload to clear all in-memory state (session context, profile, etc.)
+                    window.location.href = '/day1';
+                  } catch (err) {
+                    console.error('Failed to reset intake:', err);
+                  }
+                }}
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm transition-colors"
+                style={{ color: '#D97706' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FFFBEB'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              >
+                <RotateCcw className="w-4 h-4" strokeWidth={1.5} />
+                Reset Day One
+              </button>
+            )}
             {isAdmin && (
               <button
                 onClick={() => {
