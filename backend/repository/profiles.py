@@ -98,6 +98,12 @@ class DynamoDBProfileRepository(ProfileRepository):
         if isinstance(intake_completed, str):
             intake_completed = datetime.fromisoformat(intake_completed)
 
+        # Coerce DynamoDB values: lists that should be strings, strings that should be lists
+        def _to_str(val, default=""):
+            if isinstance(val, list):
+                return "; ".join(str(v) for v in val)
+            return val if val is not None else default
+
         return UserProfile(
             user_id=item["user_id"],
             email=item.get("email", ""),
@@ -114,14 +120,14 @@ class DynamoDBProfileRepository(ProfileRepository):
             avatar_url=item.get("avatar_url", ""),
             location=item.get("location", ""),
             start_date=item.get("start_date", ""),
-            work_summary=item.get("work_summary", ""),
+            work_summary=_to_str(item.get("work_summary", "")),
             onboarding_complete=bool(item.get("onboarding_complete", False)),
             products=list(item.get("products", [])),
-            daily_tasks=item.get("daily_tasks", ""),
+            daily_tasks=_to_str(item.get("daily_tasks", "")),
             core_skills=list(item.get("core_skills", [])),
             learning_goals=list(item.get("learning_goals", [])),
             ai_tools_used=list(item.get("ai_tools_used", [])),
-            ai_superpower=item.get("ai_superpower", ""),
+            ai_superpower=_to_str(item.get("ai_superpower", "")),
             ai_proficiency=ai_prof,
             intake_summary=item.get("intake_summary", ""),
             intake_fields_captured=list(item.get("intake_fields_captured", [])),

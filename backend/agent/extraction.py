@@ -122,9 +122,11 @@ async def extract_profile_data(
                 continue
             if not value:
                 continue
-            # Ensure list fields are lists
+            # Ensure list fields are lists, string fields are strings
             if field in LIST_FIELDS and isinstance(value, str):
                 value = [v.strip() for v in value.split(",") if v.strip()]
+            elif field not in LIST_FIELDS and isinstance(value, list):
+                value = "; ".join(str(v) for v in value)
             result[field] = value
 
         if result:
