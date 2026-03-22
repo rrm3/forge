@@ -1,4 +1,4 @@
-import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, Tip, TipComment } from './types';
+import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, Tip, TipComment, UserIdea } from './types';
 
 let getTokenFn: (() => Promise<string | null>) | null = null;
 let tokenGetterReady: (() => void) | null = null;
@@ -205,4 +205,35 @@ export async function addTipComment(tipId: string, content: string): Promise<Tip
   });
   await checkResponse(res);
   return res.json();
+}
+
+// User Ideas API
+
+export async function listUserIdeas(): Promise<UserIdea[]> {
+  const res = await fetchWithAuth(`${API_BASE}/api/user-ideas`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function createUserIdea(idea: { title: string; description: string; tags: string[]; source?: string; source_session_id?: string }): Promise<UserIdea> {
+  const res = await fetchWithAuth(`${API_BASE}/api/user-ideas`, {
+    method: 'POST',
+    body: JSON.stringify(idea),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function updateUserIdea(ideaId: string, fields: { title?: string; description?: string; tags?: string[]; status?: string }): Promise<UserIdea> {
+  const res = await fetchWithAuth(`${API_BASE}/api/user-ideas/${encodeURIComponent(ideaId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(fields),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function deleteUserIdea(ideaId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/user-ideas/${encodeURIComponent(ideaId)}`, { method: 'DELETE' });
+  await checkResponse(res);
 }

@@ -8,19 +8,22 @@ import { SessionList } from './components/SessionList';
 import { ChatView } from './components/ChatView';
 import { HomeScreen } from './components/HomeScreen';
 import { TipsView } from './components/TipsView';
+import { IdeasView } from './components/IdeasView';
 import { IntakeView } from './components/IntakeView';
 import { TopBar } from './components/TopBar';
 import { AdminPanel } from './components/AdminPanel';
-import { getProfile, getAdminAccess } from './api/client';
+import { getProfile, getAdminAccess, listUserIdeas } from './api/client';
 import type { UserProfile } from './api/types';
 
 function AppContent() {
-  const { loadSessions, deselectSession, state } = useSession();
+  const { loadSessions, deselectSession, startTypedSession, state } = useSession();
   const { user } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showTips, setShowTips] = useState(false);
+  const [showIdeas, setShowIdeas] = useState(false);
+  const [ideaCount, setIdeaCount] = useState(0);
   const setIsAdmin = useAdminStore((s) => s.setIsAdmin);
   const isAdmin = useAdminStore((s) => s.isAdmin);
 
@@ -43,9 +46,19 @@ function AppContent() {
     }
   }, [user]);
 
-  // Clear tips view when a session becomes active
+  // Load idea count
   useEffect(() => {
-    if (state.activeSessionId) setShowTips(false);
+    if (user && profileLoaded) {
+      listUserIdeas().then((ideas) => setIdeaCount(ideas.length)).catch(() => {});
+    }
+  }, [user, profileLoaded]);
+
+  // Clear tips/ideas view when a session becomes active
+  useEffect(() => {
+    if (state.activeSessionId) {
+      setShowTips(false);
+      setShowIdeas(false);
+    }
   }, [state.activeSessionId]);
 
   // Check admin access on mount
@@ -88,19 +101,32 @@ function AppContent() {
     );
   }
 
+  const handleGoHome = () => {
+    deselectSession();
+    setShowTips(false);
+    setShowIdeas(false);
+  };
+
   const sidebar = (
     <div className="flex flex-col h-full">
       <div className="flex-1 min-h-0">
-        <SessionList />
+        <SessionList
+          onGoHome={handleGoHome}
+          onShowIdeas={() => { deselectSession(); setShowTips(false); setShowIdeas(true); }}
+          showIdeas={showIdeas && !state.activeSessionId}
+          ideaCount={ideaCount}
+        />
       </div>
     </div>
   );
 
   const content = state.activeSessionId
-    ? <ChatView onShowTips={() => { deselectSession(); setShowTips(true); }} />
-    : showTips
-      ? <TipsView onBack={() => setShowTips(false)} userDepartment={profile?.department} />
-      : <HomeScreen onShowTips={() => setShowTips(true)} />;
+    ? <ChatView onShowTips={() => { deselectSession(); setShowTips(true); setShowIdeas(false); }} />
+    : showIdeas
+      ? <IdeasView onBack={() => setShowIdeas(false)} onChatWithIdea={() => { setShowIdeas(false); startTypedSession('chat'); }} />
+      : showTips
+        ? <TipsView onBack={() => setShowTips(false)} userDepartment={profile?.department} />
+        : <HomeScreen onShowTips={() => setShowTips(true)} />;
 
   return (
     <div className="flex flex-col h-screen">

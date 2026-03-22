@@ -7,6 +7,7 @@ import { useAdminStore } from '../state/adminStore';
 import { MessageBubble, streamingMarkdownComponents } from './MessageBubble';
 import { VoiceButton } from './VoiceButton';
 import { TipPreviewCard } from './TipPreviewCard';
+import { IdeaPreviewCard } from './IdeaPreviewCard';
 
 const TOOL_ROLES = new Set(['tool_call', 'tool_result']);
 
@@ -189,6 +190,15 @@ export function ChatView({ onShowTips }: ChatViewProps) {
                   </button>
                 )}
               </div>
+            )}
+
+            {state.ideaReady && !isStreaming && (
+              <IdeaPreviewCard
+                initial={state.ideaReady}
+                sessionId={state.activeSessionId || ''}
+                onSaved={() => dispatch({ type: 'SET_IDEA_READY', idea: null })}
+                onSkip={() => dispatch({ type: 'SET_IDEA_READY', idea: null })}
+              />
             )}
 
             <div ref={bottomRef} />

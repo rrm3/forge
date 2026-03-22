@@ -105,3 +105,17 @@ export interface TipComment {
   content: string;
   created_at: string;
 }
+
+export interface UserIdea {
+  user_id: string;
+  idea_id: string;
+  title: string;
+  description: string;
+  source: string;
+  source_session_id: string;
+  linked_sessions: string[];
+  tags: string[];
+  status: string;
+  created_at: string;
+  updated_at: string;
+}

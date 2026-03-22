@@ -37,6 +37,7 @@ interface SessionState {
   intakeSuggestions: string[];
   tipReady: { title: string; content: string; tags: string[]; department: string } | null;
   tipPublished: boolean;
+  ideaReady: { title: string; description: string; tags: string[] } | null;
 }
 
 type SessionAction =
@@ -55,6 +56,7 @@ type SessionAction =
   | { type: 'SET_INTAKE_COMPLETE'; suggestions: string[] }
   | { type: 'SET_TIP_READY'; tip: { title: string; content: string; tags: string[]; department: string } }
   | { type: 'SET_TIP_PUBLISHED' }
+  | { type: 'SET_IDEA_READY'; idea: { title: string; description: string; tags: string[] } | null }
   | { type: 'DESELECT_SESSION' };
 
 const initialState: SessionState = {
@@ -70,6 +72,7 @@ const initialState: SessionState = {
   intakeSuggestions: [],
   tipReady: null,
   tipPublished: false,
+  ideaReady: null,
 };
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
@@ -142,8 +145,11 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
     case 'SET_TIP_PUBLISHED':
       return { ...state, tipPublished: true };
 
+    case 'SET_IDEA_READY':
+      return { ...state, ideaReady: action.idea };
+
     case 'DESELECT_SESSION':
-      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false, tipReady: null, tipPublished: false };
+      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false, tipReady: null, tipPublished: false, ideaReady: null };
 
     default:
       return state;
@@ -296,6 +302,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               content: (msg as any).content || '',
               tags: (msg as any).tags || [],
               department: (msg as any).department || 'Everyone',
+            },
+          });
+          break;
+
+        case 'idea_ready':
+          dispatch({
+            type: 'SET_IDEA_READY',
+            idea: {
+              title: (msg as any).title || '',
+              description: (msg as any).description || '',
+              tags: (msg as any).tags || [],
             },
           });
           break;
