@@ -6,43 +6,12 @@ import asyncio
 import json
 import logging
 import time
-import threading
 from dataclasses import dataclass
 
-import boto3
 import litellm
 
 from backend.config import settings
 from backend.models import TokenUsage
-
-# Cross-account role credentials cache (refreshed when expired)
-_role_credentials: dict | None = None
-_role_credentials_lock = threading.Lock()
-_role_credentials_expiry: float = 0
-
-
-def _get_role_credentials() -> dict:
-    """Assume the cross-account Bedrock role and cache temporary credentials."""
-    global _role_credentials, _role_credentials_expiry
-    with _role_credentials_lock:
-        # Refresh 5 minutes before expiry
-        if _role_credentials and time.time() < _role_credentials_expiry - 300:
-            return _role_credentials
-        sts = boto3.client("sts", region_name=settings.aws_region)
-        resp = sts.assume_role(
-            RoleArn=settings.bedrock_role_arn,
-            RoleSessionName="forge-bedrock",
-            DurationSeconds=3600,
-        )
-        creds = resp["Credentials"]
-        _role_credentials = {
-            "aws_access_key_id": creds["AccessKeyId"],
-            "aws_secret_access_key": creds["SecretAccessKey"],
-            "aws_session_token": creds["SessionToken"],
-        }
-        _role_credentials_expiry = creds["Expiration"].timestamp()
-        logger.info("Assumed cross-account Bedrock role, expires %s", creds["Expiration"])
-        return _role_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -141,18 +110,11 @@ async def call_llm(
         "stream": stream,
         "aws_region_name": settings.aws_region,
     }
-    if settings.bedrock_role_arn:
-        # Cross-account role assumption (preferred - no static keys needed)
-        creds = _get_role_credentials()
-        kwargs.update(creds)
-    elif settings.bedrock_access_key_id:
-        # Static IAM keys (local dev or production fallback)
+    # In production, uses the Lambda's IAM role (forge account Bedrock).
+    # Locally, uses explicit keys from .env if set.
+    if settings.bedrock_access_key_id:
         kwargs["aws_access_key_id"] = settings.bedrock_access_key_id
         kwargs["aws_secret_access_key"] = settings.bedrock_secret_access_key
-        # Must unset the Lambda-injected session token from env
-        import os
-        os.environ.pop("AWS_SESSION_TOKEN", None)
-        os.environ.pop("AWS_SECURITY_TOKEN", None)
     if tools:
         kwargs["tools"] = tools
     if max_tokens is not None:
