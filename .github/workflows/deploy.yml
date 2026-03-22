@@ -74,10 +74,13 @@ jobs:
             --function-name "${FUNCTION_NAME}"
 
       - name: Update WebSocket Lambda function
-        if: ${{ secrets.WS_LAMBDA_FUNCTION_NAME != '' }}
         env:
           WS_FUNCTION_NAME: ${{ secrets.WS_LAMBDA_FUNCTION_NAME }}
         run: |
+          if [ -z "${WS_FUNCTION_NAME}" ]; then
+            echo "WS_LAMBDA_FUNCTION_NAME secret not set — skipping WS Lambda deploy"
+            exit 0
+          fi
           aws lambda update-function-code \
             --function-name "${WS_FUNCTION_NAME}" \
             --image-uri "${{ steps.build.outputs.image_uri }}" \
