@@ -86,6 +86,11 @@ jobs:
             --name live \
             --function-version "${VERSION}"
 
+          # Record deployed version in SSM so CDK resolves the correct version
+          aws ssm put-parameter \
+            --name "/forge/live-versions/${FUNCTION_NAME}" \
+            --value "${VERSION}" --type String --overwrite
+
           # Wait for provisioned concurrency to initialize on the new version
           sleep 5  # Allow status to transition from old-version READY to IN_PROGRESS
           PROV_CHECK=$(aws lambda get-provisioned-concurrency-config \
@@ -139,6 +144,11 @@ jobs:
             --function-name "${WS_FUNCTION_NAME}" \
             --name live \
             --function-version "${VERSION}"
+
+          # Record deployed version in SSM so CDK resolves the correct version
+          aws ssm put-parameter \
+            --name "/forge/live-versions/${WS_FUNCTION_NAME}" \
+            --value "${VERSION}" --type String --overwrite
 
           # Wait for provisioned concurrency to initialize on the new version
           sleep 5  # Allow status to transition from old-version READY to IN_PROGRESS

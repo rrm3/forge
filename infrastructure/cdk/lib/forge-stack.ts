@@ -294,6 +294,13 @@ export class ForgeStack extends cdk.Stack {
       version: backendFunction.currentVersion,
       provisionedConcurrentExecutions: 10,
     });
+    // Override FunctionVersion with SSM dynamic reference so CDK doesn't revert
+    // the alias to a stale version on infra-only deploys. The deploy workflow
+    // writes the latest version number to SSM after each code deploy.
+    (backendAlias.node.defaultChild as lambda.CfnAlias).addPropertyOverride(
+      'FunctionVersion',
+      `{{resolve:ssm:/forge/live-versions/${prefix}-backend}}`,
+    );
 
     // Function URL on 'live' alias (not $LATEST) so requests hit warm instances
     const functionUrl = backendAlias.addFunctionUrl({
@@ -386,6 +393,10 @@ export class ForgeStack extends cdk.Stack {
       version: wsFunction.currentVersion,
       provisionedConcurrentExecutions: 20,
     });
+    (wsAlias.node.defaultChild as lambda.CfnAlias).addPropertyOverride(
+      'FunctionVersion',
+      `{{resolve:ssm:/forge/live-versions/${prefix}-ws}}`,
+    );
 
     // Grant WS Lambda permission to invoke itself (Dispatcher -> Worker)
     wsLambdaRole.addToPolicy(new iam.PolicyStatement({
