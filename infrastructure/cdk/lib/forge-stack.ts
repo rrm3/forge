@@ -446,6 +446,7 @@ export class ForgeStack extends cdk.Stack {
       apiId: wsApi.ref,
       stageName: 'v1',
       deploymentId: wsDeployment.ref,
+      autoDeploy: true,
     });
 
     // Grant API Gateway permission to invoke WS Lambda

@@ -87,6 +87,7 @@ jobs:
             --function-version "${VERSION}"
 
           # Wait for provisioned concurrency to initialize on the new version
+          sleep 5  # Allow status to transition from old-version READY to IN_PROGRESS
           PROV_CHECK=$(aws lambda get-provisioned-concurrency-config \
             --function-name "${FUNCTION_NAME}" --qualifier live \
             --query 'Status' --output text 2>/dev/null || echo "NONE")
@@ -139,6 +140,7 @@ jobs:
             --function-version "${VERSION}"
 
           # Wait for provisioned concurrency to initialize on the new version
+          sleep 5  # Allow status to transition from old-version READY to IN_PROGRESS
           PROV_CHECK=$(aws lambda get-provisioned-concurrency-config \
             --function-name "${WS_FUNCTION_NAME}" --qualifier live \
             --query 'Status' --output text 2>/dev/null || echo "NONE")
