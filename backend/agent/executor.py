@@ -93,10 +93,13 @@ async def run_agent_session(
 
     memory = await load_memory(deps.storage, user_id)
 
+    # Completed intake sessions behave like normal chats
+    intake_is_complete = session_type == "intake" and profile and profile.intake_completed_at
+
     # Load department config and intake responses for intake sessions
     department_config = None
     intake_responses = {}
-    if session_type == "intake" and profile and profile.department:
+    if session_type == "intake" and not intake_is_complete and profile and profile.department:
         dept_config_repo = DepartmentConfigRepository(deps.storage)
         department_config = await dept_config_repo.get_department_config(
             profile.department.lower().replace(" ", "-")
@@ -106,7 +109,10 @@ async def run_agent_session(
     # Load session-type prompt
     skill_instructions = None
     if session_type and session_type != "chat":
-        skill_instructions = load_skill(session_type)
+        if session_type == "intake" and intake_is_complete:
+            pass  # completed intake - no skill, behaves like chat
+        else:
+            skill_instructions = load_skill(session_type)
 
     # Build system prompt
     system_prompt = build_system_prompt(
@@ -138,7 +144,7 @@ async def run_agent_session(
     # For intake: evaluate objectives from the user's message BEFORE the agent responds.
     # This updates intake responses so the system prompt checklist is current.
     # Skip the silent start turn (session auto-created with no user message).
-    if session_type == "intake" and user_message.strip() and department_config:
+    if session_type == "intake" and not intake_is_complete and user_message.strip() and department_config:
         try:
             from backend.agent.extraction import evaluate_objectives
 
@@ -163,7 +169,7 @@ async def run_agent_session(
                 logger.info("Objective evaluation completed %d objectives for user=%s", len(newly_completed), user_id)
         except Exception:
             logger.warning("Objective evaluation failed, continuing without it", exc_info=True)
-    elif session_type == "intake" and user_message.strip() and not department_config:
+    elif session_type == "intake" and not intake_is_complete and user_message.strip() and not department_config:
         # Legacy fallback: field-based extraction when no department config
         try:
             from backend.agent.extraction import extract_profile_data
@@ -276,7 +282,7 @@ async def run_agent_session(
                 if event.usage:
                     usage_data = event.usage.model_dump()
                 # Send intake checklist state before done (for debug UI)
-                if session_type == "intake":
+                if session_type == "intake" and not intake_is_complete:
                     try:
                         from backend.agent.context import get_intake_checklist
                         await sender.send({
@@ -339,7 +345,7 @@ async def run_agent_session(
         await _check_idea_prepared(transcript, sender, session_id)
 
     # Intake state machine: check required fields and mark complete when done
-    if session_type == "intake":
+    if session_type == "intake" and not intake_is_complete:
         await _check_intake_completion(deps, user_id, transcript, sender, session_id, department_config, intake_responses)
 
     # Generate title for sessions
