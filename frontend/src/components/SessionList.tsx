@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck, Home, X } from 'lucide-react';
+import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck, Home, X, BookOpen } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
 import type { Session } from '../api/types';
 
@@ -205,6 +205,7 @@ export function SessionList({ ideaCount }: SessionListProps) {
 
   const isHome = location.pathname === '/';
   const showIdeas = location.pathname === '/ideas';
+  const showTips = location.pathname.startsWith('/tips');
 
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--color-surface-white)' }}>
@@ -265,6 +266,35 @@ export function SessionList({ ideaCount }: SessionListProps) {
           )}
         </button>
       </div>
+
+      {/* Tips & Tricks button */}
+      <div className="px-2">
+        <button
+          onClick={() => navigate('/tips')}
+          className={[
+            'flex items-center gap-2 w-full pl-2 pr-2 rounded-lg transition-colors',
+            showTips
+              ? 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)]'
+              : 'hover:bg-[var(--color-surface-raised)]',
+          ].join(' ')}
+          style={{ height: '32px', minHeight: '32px' }}
+        >
+          <BookOpen
+            className="flex-shrink-0 w-3.5 h-3.5"
+            strokeWidth={1.5}
+            style={{ color: showTips ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
+          />
+          <span
+            className="text-xs"
+            style={{ color: showTips ? 'var(--color-primary)' : 'var(--color-text-placeholder)' }}
+          >
+            Tips & Tricks
+          </span>
+        </button>
+      </div>
+
+      {/* Separator under nav items */}
+      <div className="mx-3 mt-1 mb-1 border-b" style={{ borderColor: 'var(--color-border)' }} />
 
       {/* Expandable search (shown when search icon clicked) */}
       {searchOpen && (
