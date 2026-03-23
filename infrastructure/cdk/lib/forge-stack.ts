@@ -516,9 +516,26 @@ export class ForgeStack extends cdk.Stack {
       : undefined;
 
     // Security response headers (CSP, HSTS, clickjacking, MIME sniffing)
+    const cspValue = [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline' https://api.fontshare.com https://fonts.googleapis.com",
+      "font-src 'self' https://cdn.fontshare.com https://fonts.gstatic.com",
+      "img-src 'self' data: https://media-process.hibob.com",
+      `connect-src 'self'${oidcProviderUrl ? ` ${oidcProviderUrl}` : ''} wss:`,
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ].join('; ');
+
     const securityHeaders = new cloudfront.ResponseHeadersPolicy(this, 'SecurityHeaders', {
       responseHeadersPolicyName: `${prefix}-security-headers`,
       securityHeadersBehavior: {
+        contentSecurityPolicy: {
+          contentSecurityPolicy: cspValue,
+          override: true,
+        },
         contentTypeOptions: { override: true },
         frameOptions: {
           frameOption: cloudfront.HeadersFrameOption.DENY,
@@ -529,26 +546,6 @@ export class ForgeStack extends cdk.Stack {
           includeSubdomains: true,
           override: true,
         },
-      },
-      customHeadersBehavior: {
-        customHeaders: [
-          {
-            header: 'Content-Security-Policy',
-            override: true,
-            value: [
-              "default-src 'self'",
-              "script-src 'self'",
-              "style-src 'self' 'unsafe-inline' https://api.fontshare.com https://fonts.googleapis.com",
-              "font-src 'self' https://cdn.fontshare.com https://fonts.gstatic.com",
-              "img-src 'self' data: https://media-process.hibob.com",
-              `connect-src 'self'${oidcProviderUrl ? ` ${oidcProviderUrl}` : ''} wss:`,
-              "object-src 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-              "frame-ancestors 'none'",
-            ].join('; '),
-          },
-        ],
       },
     });
 
