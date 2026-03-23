@@ -27,8 +27,8 @@ const ENV_CONFIG: Record<string, {
   staging: {
     domainName: 'aituesday-staging.digitalscience.ai',
     acmCertificateArn: 'arn:aws:acm:us-east-1:887690967243:certificate/e08087ef-0495-4364-b960-91aa02c8a97c',
-    oidcProviderUrl: 'https://id.digitalscience.ai',
-    oidcClientId: '40656eed824af4e6ebeaca1f99740bcc',
+    oidcProviderUrl: 'https://id-staging.digitalscience.ai',
+    oidcClientId: 'bf985c39ba613a31ddce92186bb374f8',
     backendProvisionedConcurrency: 0,
     wsProvisionedConcurrency: 0,
   },
