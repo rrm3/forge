@@ -515,6 +515,43 @@ export class ForgeStack extends cdk.Stack {
       ? acm.Certificate.fromCertificateArn(this, 'Certificate', acmCertificateArn)
       : undefined;
 
+    // Security response headers (CSP, HSTS, clickjacking, MIME sniffing)
+    const securityHeaders = new cloudfront.ResponseHeadersPolicy(this, 'SecurityHeaders', {
+      responseHeadersPolicyName: `${prefix}-security-headers`,
+      securityHeadersBehavior: {
+        contentTypeOptions: { override: true },
+        frameOptions: {
+          frameOption: cloudfront.HeadersFrameOption.DENY,
+          override: true,
+        },
+        strictTransportSecurity: {
+          accessControlMaxAge: cdk.Duration.seconds(31536000),
+          includeSubdomains: true,
+          override: true,
+        },
+      },
+      customHeadersBehavior: {
+        customHeaders: [
+          {
+            header: 'Content-Security-Policy',
+            override: true,
+            value: [
+              "default-src 'self'",
+              "script-src 'self'",
+              "style-src 'self' 'unsafe-inline' https://api.fontshare.com https://fonts.googleapis.com",
+              "font-src 'self' https://api.fontshare.com https://fonts.gstatic.com",
+              "img-src 'self' data:",
+              `connect-src 'self'${oidcProviderUrl ? ` ${oidcProviderUrl}` : ''} wss:`,
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'none'",
+            ].join('; '),
+          },
+        ],
+      },
+    });
+
     const distribution = new cloudfront.Distribution(this, 'Distribution', {
       enabled: true,
       defaultRootObject: 'index.html',
@@ -532,6 +569,7 @@ export class ForgeStack extends cdk.Stack {
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         compress: true,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        responseHeadersPolicy: securityHeaders,
       },
 
       additionalBehaviors: {
