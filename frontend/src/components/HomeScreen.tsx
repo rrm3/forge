@@ -94,9 +94,9 @@ export function HomeScreen() {
           onClick={() => navigate('/tips')}
           className="group flex items-center justify-center gap-2 px-5 py-4 rounded-xl border text-center transition-all duration-200 sm:col-span-2 hover:opacity-90"
           style={{
-            backgroundColor: '#FFF7ED',
-            borderColor: '#FED7AA',
-            color: '#C2410C',
+            backgroundColor: '#EEF0FF',
+            borderColor: '#C7D2FE',
+            color: '#4F46E5',
           }}
         >
           <Trophy className="w-4 h-4" strokeWidth={1.5} />
@@ -108,7 +108,7 @@ export function HomeScreen() {
           href="https://app.getguru.com/page/31fe984d-f863-4487-8080-849d9f3461ef"
           target="_blank"
           rel="noopener noreferrer"
-          className="group relative flex items-center justify-between px-5 rounded-xl transition-all duration-200 sm:col-span-2 hover:brightness-110 overflow-hidden"
+          className="group relative flex items-center justify-between px-5 rounded-xl transition-all duration-200 sm:col-span-2 overflow-hidden"
           style={{
             backgroundImage: 'url(/ai-tuesdays-bg.jpg)',
             backgroundSize: 'cover',
