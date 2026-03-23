@@ -23,6 +23,7 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 
 const TOKEN_KEY = 'oidc_id_token';
 const REFRESH_TOKEN_KEY = 'oidc_refresh_token';
+const REFRESH_LOCK_KEY = 'oidc_refresh_lock';
 
 // Refresh 5 minutes before expiry
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -56,6 +57,31 @@ function getTokenExpiresIn(token: string): number {
   }
 }
 
+// Poll localStorage for a fresh token written by another tab's refresh
+function waitForFreshToken(): Promise<OidcTokens> {
+  return new Promise((resolve, reject) => {
+    let remaining = 15; // 15 * 200ms = 3s max wait
+    const poll = () => {
+      const t = localStorage.getItem(TOKEN_KEY);
+      if (t && !isTokenExpired(t)) {
+        resolve({
+          idToken: t,
+          accessToken: '',
+          refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY) || '',
+          expiresIn: getTokenExpiresIn(t) / 1000,
+        });
+        return;
+      }
+      if (--remaining <= 0) {
+        reject(new Error('Cross-tab refresh timed out'));
+        return;
+      }
+      setTimeout(poll, 200);
+    };
+    setTimeout(poll, 200);
+  });
+}
+
 function getInitialAuthState(): { user: AuthUser | null; isLoading: boolean } {
   const params = new URLSearchParams(window.location.search);
   if (params.get('code') && params.get('state')) {
@@ -74,6 +100,10 @@ function getInitialAuthState(): { user: AuthUser | null; isLoading: boolean } {
   if (token) {
     localStorage.removeItem(TOKEN_KEY);
   }
+  // Refresh token present but no ID token - show loading while refresh is attempted
+  if (localStorage.getItem(REFRESH_TOKEN_KEY)) {
+    return { user: null, isLoading: true };
+  }
   return { user: null, isLoading: false };
 }
 
@@ -85,20 +115,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const callbackProcessed = useRef(false);
   const wsConnected = useRef(false);
   const signingOutRef = useRef(false);
+  const redirectingRef = useRef(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inflightRefreshRef = useRef<Promise<OidcTokens> | null>(null);
 
   // Single entry point for token refresh. Deduplicates concurrent calls
-  // so that token rotation doesn't cause the second caller to fail.
+  // within this tab AND coordinates across tabs via a localStorage lock
+  // so that token rotation doesn't cause a losing tab to wipe shared state.
   const doRefresh = useCallback((): Promise<OidcTokens> => {
     if (inflightRefreshRef.current) return inflightRefreshRef.current;
 
     const rt = localStorage.getItem(REFRESH_TOKEN_KEY);
     if (!rt) return Promise.reject(new Error('No refresh token'));
 
-    const promise = refreshWithToken(rt).finally(() => {
-      inflightRefreshRef.current = null;
-    });
+    // Cross-tab: if another tab is mid-refresh, wait for its result
+    const lockTs = parseInt(localStorage.getItem(REFRESH_LOCK_KEY) || '0', 10);
+    if (Date.now() - lockTs < 10_000) {
+      const promise = waitForFreshToken().finally(() => {
+        inflightRefreshRef.current = null;
+      });
+      inflightRefreshRef.current = promise;
+      return promise;
+    }
+
+    // Claim the lock and send the refresh request
+    localStorage.setItem(REFRESH_LOCK_KEY, String(Date.now()));
+
+    const promise = refreshWithToken(rt)
+      .catch((err) => {
+        // Race lost: another tab may have rotated the token before us.
+        // Re-check localStorage before propagating the failure.
+        const t = localStorage.getItem(TOKEN_KEY);
+        if (t && !isTokenExpired(t)) {
+          return {
+            idToken: t,
+            accessToken: '',
+            refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY) || '',
+            expiresIn: getTokenExpiresIn(t) / 1000,
+          } as OidcTokens;
+        }
+        throw err;
+      })
+      .finally(() => {
+        localStorage.removeItem(REFRESH_LOCK_KEY);
+        inflightRefreshRef.current = null;
+      });
+
     inflightRefreshRef.current = promise;
     return promise;
   }, []);
@@ -147,6 +209,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       scheduleRefresh(idToken);
       return idToken;
     } catch {
+      if (redirectingRef.current) return null;
+      redirectingRef.current = true;
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(REFRESH_TOKEN_KEY);
       setUser(null);
