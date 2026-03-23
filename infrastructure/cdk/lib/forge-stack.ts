@@ -18,6 +18,8 @@ interface ForgeStackProps extends cdk.StackProps {
   acmCertificateArn?: string;
   oidcProviderUrl?: string;
   oidcClientId?: string;
+  backendProvisionedConcurrency?: number;
+  wsProvisionedConcurrency?: number;
 }
 
 export class ForgeStack extends cdk.Stack {
@@ -291,18 +293,26 @@ export class ForgeStack extends cdk.Stack {
     // Publish version and create 'live' alias with provisioned concurrency.
     // The deploy workflow updates this alias to new versions on each code deploy.
     // Provisioned concurrency keeps instances pre-initialized to eliminate cold starts.
+    const backendPC = props.backendProvisionedConcurrency ?? 10;
     const backendAlias = new lambda.Alias(this, 'BackendLiveAlias', {
       aliasName: 'live',
       version: backendFunction.currentVersion,
-      provisionedConcurrentExecutions: 10,
+      ...(backendPC > 0 ? { provisionedConcurrentExecutions: backendPC } : {}),
     });
     // Override FunctionVersion with SSM dynamic reference so CDK doesn't revert
     // the alias to a stale version on infra-only deploys. The deploy workflow
     // writes the latest version number to SSM after each code deploy.
-    (backendAlias.node.defaultChild as lambda.CfnAlias).addPropertyOverride(
-      'FunctionVersion',
-      `{{resolve:ssm:/forge/live-versions/${prefix}-backend}}`,
-    );
+    // Skip on first deploy (--context skipSsmOverride=true) when SSM params don't exist yet.
+    const skipSsmOverride = this.node.tryGetContext('skipSsmOverride') === 'true';
+    if (!skipSsmOverride) {
+      (backendAlias.node.defaultChild as lambda.CfnAlias).addPropertyOverride(
+        'FunctionVersion',
+        `{{resolve:ssm:/forge/live-versions/${prefix}-backend}}`,
+      );
+      // The SSM override breaks the implicit CFn dependency on the version resource.
+      // Without this, CFn may create the alias before the version exists (race condition).
+      backendAlias.node.addDependency(backendFunction.currentVersion);
+    }
 
     // Function URL on 'live' alias (not $LATEST) so requests hit warm instances
     const functionUrl = backendAlias.addFunctionUrl({
@@ -390,15 +400,19 @@ export class ForgeStack extends cdk.Stack {
     });
 
     // Publish version and create 'live' alias with provisioned concurrency
+    const wsPC = props.wsProvisionedConcurrency ?? 20;
     const wsAlias = new lambda.Alias(this, 'WsLiveAlias', {
       aliasName: 'live',
       version: wsFunction.currentVersion,
-      provisionedConcurrentExecutions: 20,
+      ...(wsPC > 0 ? { provisionedConcurrentExecutions: wsPC } : {}),
     });
-    (wsAlias.node.defaultChild as lambda.CfnAlias).addPropertyOverride(
-      'FunctionVersion',
-      `{{resolve:ssm:/forge/live-versions/${prefix}-ws}}`,
-    );
+    if (!skipSsmOverride) {
+      (wsAlias.node.defaultChild as lambda.CfnAlias).addPropertyOverride(
+        'FunctionVersion',
+        `{{resolve:ssm:/forge/live-versions/${prefix}-ws}}`,
+      );
+      wsAlias.node.addDependency(wsFunction.currentVersion);
+    }
 
     // Grant WS Lambda permission to invoke itself (Dispatcher -> Worker)
     wsLambdaRole.addToPolicy(new iam.PolicyStatement({
