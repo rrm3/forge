@@ -468,6 +468,16 @@ async def _check_intake_completion(
                         except Exception:
                             logger.warning("Failed to create intake idea: %s", title, exc_info=True)
 
+            # Warn if the AI's final message ends with a question (user can't reply)
+            last_assistant = next(
+                (m for m in reversed(transcript) if m.role == "assistant"), None
+            )
+            if last_assistant and last_assistant.content.rstrip().endswith("?"):
+                logger.warning(
+                    "Intake closing message contains a question the user cannot answer: user=%s",
+                    user_id,
+                )
+
             # Notify the frontend immediately so it can show the completion card
             if sender and session_id:
                 await sender.send({
