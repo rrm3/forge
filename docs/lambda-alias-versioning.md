@@ -154,6 +154,40 @@ The pre-push hook warns when CDK files changed as a reminder to run `cdk deploy`
 After running `cdk deploy`, use `git push --no-verify` since the hook only checks
 git diffs, not deployed state.
 
+## Deploy Duration
+
+The zero-downtime flow takes ~15 minutes total for the backend deploy step:
+* REST Lambda: ~4 minutes (pre-warm 10 instances + alias PC transition)
+* WS Lambda: ~7 minutes (pre-warm 20 instances + alias PC transition)
+* These run sequentially, not in parallel
+
+This is longer than the old flow (~2 minutes) but eliminates cold starts for users.
+Do not assume the deploy is stuck if it runs for 10-15 minutes.
+
+## API Gateway Notes
+
+The WS API Gateway stage uses `autoDeploy: true`. This is incompatible with setting
+a `deploymentId` on the stage - AWS will reject the update with `BadRequestException`.
+If you need to manage deployments, either use `autoDeploy` OR explicit deployment IDs,
+never both.
+
+## Incident Response
+
+During an outage, do NOT manually fix Lambda configuration. Specifically:
+* Do NOT call `update-function-configuration` to set env vars
+* Do NOT call `update-alias` to swing the alias manually
+* Do NOT call `ssm put-parameter` to change version references
+
+Manual changes create inconsistent state (broken alias routing configs, SSM/alias
+version mismatches) that compound the outage. Instead:
+1. Fix the root cause in code
+2. Run `cdk deploy` if env vars or infra need to change
+3. Push to trigger the deploy workflow
+
+The only exception: if the deploy workflow itself is broken and can't run, manual
+intervention is a last resort. Document what you changed so the next deploy can
+reconcile the state.
+
 ## Troubleshooting
 
 **Deploy aborted with "Pre-warm failed":**
@@ -162,10 +196,19 @@ Check the StatusReason in the GitHub Actions log. Common causes:
 * Function code fails to initialize (import error, missing dependency)
 * Insufficient unreserved concurrent execution quota
 
+**Deploy failed with "ResourceConflictException" on update-alias:**
+The version-level PC wasn't deleted before swinging the alias. AWS doesn't allow
+an alias with PC to point to a version that also has PC. Check the workflow logic
+in the "delete version-level PC" step.
+
 **Auth broken after CDK deploy (empty OIDC vars):**
 Verify `ENV_CONFIG` in `app.ts` has the correct OIDC values for the environment.
 CDK reads env vars from `ENV_CONFIG`, not from CDK context. If values are wrong,
 fix `app.ts`, re-run `cdk deploy`, then trigger a code deploy.
+
+**CDK deploy fails with "Deployment ID cannot be set" on WsStage:**
+The WS API Gateway stage has `autoDeploy: true`, which is incompatible with
+`deploymentId`. Remove the `deploymentId` property from the stage definition.
 
 **Alias pointing to wrong version:**
 Check SSM: `aws ssm get-parameter --name /forge/live-versions/FUNCTION_NAME`
