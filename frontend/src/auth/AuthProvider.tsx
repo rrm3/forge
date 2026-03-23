@@ -128,9 +128,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const rt = localStorage.getItem(REFRESH_TOKEN_KEY);
     if (!rt) return Promise.reject(new Error('No refresh token'));
 
-    // Fast path: another tab may have just refreshed - check before doing work
+    // Fast path: another tab may have just refreshed - check before doing work.
+    // Only short-circuit if the token has plenty of time left. Don't skip the
+    // proactive refresh that fires within the REFRESH_BUFFER_MS window.
     const existing = localStorage.getItem(TOKEN_KEY);
-    if (existing && !isTokenExpired(existing)) {
+    if (existing && !isTokenExpired(existing) && getTokenExpiresIn(existing) > REFRESH_BUFFER_MS) {
       return Promise.resolve({
         idToken: existing, accessToken: '',
         refreshToken: rt, expiresIn: getTokenExpiresIn(existing) / 1000,
