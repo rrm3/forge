@@ -13,6 +13,9 @@ const SESSION_ICONS: Record<string, typeof Lightbulb> = {
   intake: ClipboardCheck,
 };
 
+// Session types that get visual emphasis (accent bar + always-colored icon)
+const FEATURED_SESSION_TYPES = new Set(['intake', 'wrapup']);
+
 function getSessionIcon(type: string) {
   return SESSION_ICONS[type] || MessageCircle;
 }
@@ -108,22 +111,36 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete
   }
 
   const Icon = getSessionIcon(session.type || 'chat');
+  const isFeatured = FEATURED_SESSION_TYPES.has(session.type || 'chat');
 
   return (
     <div
       className={[
-        'group flex items-center gap-2 pl-2 pr-2 rounded-lg cursor-pointer select-none',
+        'group flex items-center gap-2 pr-2 rounded-lg cursor-pointer select-none',
         isActive
           ? 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)]'
           : 'hover:bg-[var(--color-surface-raised)]',
       ].join(' ')}
-      style={{ height: '36px', minHeight: '36px' }}
+      style={{
+        height: '36px',
+        minHeight: '36px',
+        paddingLeft: isFeatured ? '0' : '8px',
+      }}
       onClick={onSelect}
     >
+      {isFeatured && (
+        <div
+          className="self-stretch rounded-l-lg flex-shrink-0"
+          style={{ width: '3px', backgroundColor: 'var(--color-primary)' }}
+        />
+      )}
       <Icon
         className="flex-shrink-0 w-3.5 h-3.5"
+        style={{
+          color: isActive || isFeatured ? 'var(--color-primary)' : 'var(--color-text-muted)',
+          marginLeft: isFeatured ? '5px' : '0',
+        }}
         strokeWidth={1.5}
-        style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
       />
 
       <div className="flex-1 min-w-0">

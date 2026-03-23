@@ -342,10 +342,14 @@ async def run_agent_session(
     if session_type == "intake":
         await _check_intake_completion(deps, user_id, transcript, sender, session_id, department_config, intake_responses)
 
-    # Generate title for new sessions (skip intake - it's always "Getting Started")
-    if is_new_session and assistant_text and session_type != "intake":
+    # Generate title for new sessions (skip intake/wrapup - they have hardcoded titles)
+    SESSION_TITLE_PREFIXES = {"brainstorm": "Brainstorm", "stuck": "Help"}
+    if is_new_session and assistant_text and session_type not in ("intake", "wrapup"):
         try:
             title = await _generate_title(user_message or "New conversation", assistant_text)
+            prefix = SESSION_TITLE_PREFIXES.get(session_type)
+            if prefix:
+                title = f"{prefix}: {title}"
             if session:
                 session.title = title
                 await deps.sessions_repo.update(session)
