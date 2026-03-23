@@ -76,7 +76,55 @@ jobs:
 
           echo "Published version: ${VERSION}"
 
-          # Point 'live' alias to new version (provisioned concurrency follows the alias)
+          # Zero-downtime deploy: warm the new version BEFORE swinging the alias.
+          # Fail closed: do NOT swing the alias unless pre-warm succeeds.
+          PC_COUNT=$(aws lambda get-provisioned-concurrency-config \
+            --function-name "${FUNCTION_NAME}" --qualifier live \
+            --query 'RequestedProvisionedConcurrentExecutions' --output text 2>/dev/null || echo "0")
+          PREWARM_OK="false"
+
+          if [ "$PC_COUNT" != "0" ] && [ "$PC_COUNT" != "None" ]; then
+            echo "Pre-warming version ${VERSION} with ${PC_COUNT} provisioned instances..."
+            aws lambda put-provisioned-concurrency-config \
+              --function-name "${FUNCTION_NAME}" \
+              --qualifier "${VERSION}" \
+              --provisioned-concurrent-executions "${PC_COUNT}"
+
+            for i in $(seq 1 60); do
+              PC_JSON=$(aws lambda get-provisioned-concurrency-config \
+                --function-name "${FUNCTION_NAME}" --qualifier "${VERSION}" \
+                --output json 2>/dev/null || echo '{}')
+              STATUS=$(echo "$PC_JSON" | jq -r '.Status // "UNKNOWN"')
+              REASON=$(echo "$PC_JSON" | jq -r '.StatusReason // ""')
+              if [ "$STATUS" = "READY" ]; then
+                echo "Version ${VERSION} warm (${PC_COUNT} instances ready)"
+                PREWARM_OK="true"
+                break
+              fi
+              if [ "$STATUS" = "FAILED" ]; then
+                echo "ERROR: Pre-warm FAILED: ${REASON}"
+                aws lambda delete-provisioned-concurrency-config \
+                  --function-name "${FUNCTION_NAME}" --qualifier "${VERSION}" 2>/dev/null || true
+                break
+              fi
+              echo "  Pre-warming: ${STATUS} (${i}/60)"
+              sleep 5
+            done
+            if [ "$PREWARM_OK" = "false" ] && [ "$STATUS" != "FAILED" ]; then
+              echo "ERROR: Pre-warm timed out (last status: ${STATUS})"
+              aws lambda delete-provisioned-concurrency-config \
+                --function-name "${FUNCTION_NAME}" --qualifier "${VERSION}" 2>/dev/null || true
+            fi
+          else
+            PREWARM_OK="true"  # No PC configured, nothing to pre-warm
+          fi
+
+          if [ "$PREWARM_OK" = "false" ]; then
+            echo "::error::Pre-warm failed for ${FUNCTION_NAME} v${VERSION}. Alias NOT swung. Aborting."
+            exit 1
+          fi
+
+          # Swing alias to the warm version - traffic immediately hits warm instances
           aws lambda update-alias \
             --function-name "${FUNCTION_NAME}" \
             --name live \
@@ -91,31 +139,26 @@ jobs:
             --name "/forge/live-versions/${FUNCTION_NAME}" \
             --value "${VERSION}" --type String --overwrite
 
-          # Wait for provisioned concurrency to initialize on the new version
-          sleep 5  # Allow status to transition from old-version READY to IN_PROGRESS
-          PROV_CHECK=$(aws lambda get-provisioned-concurrency-config \
-            --function-name "${FUNCTION_NAME}" --qualifier live \
-            --query 'Status' --output text 2>/dev/null || echo "NONE")
-          if [ "$PROV_CHECK" != "NONE" ]; then
-            echo "Waiting for provisioned concurrency on ${FUNCTION_NAME}..."
+          # Wait for alias-level provisioned concurrency to take over
+          if [ "$PC_COUNT" != "0" ] && [ "$PC_COUNT" != "None" ]; then
             for i in $(seq 1 60); do
               STATUS=$(aws lambda get-provisioned-concurrency-config \
                 --function-name "${FUNCTION_NAME}" --qualifier live \
-                --query 'Status' --output text 2>/dev/null)
+                --query 'Status' --output text 2>/dev/null || echo "UNKNOWN")
               if [ "$STATUS" = "READY" ]; then
-                ALLOC=$(aws lambda get-provisioned-concurrency-config \
-                  --function-name "${FUNCTION_NAME}" --qualifier live \
-                  --query 'AllocatedProvisionedConcurrentExecutions' --output text)
-                echo "Provisioned concurrency ready (${ALLOC} warm instances)"
+                echo "Alias provisioned concurrency ready"
                 break
               fi
-              [ "$STATUS" = "FAILED" ] && echo "WARNING: Provisioned concurrency failed" && break
-              echo "  Status: ${STATUS} (${i}/60)"
+              [ "$STATUS" = "FAILED" ] && echo "WARNING: Alias provisioned concurrency failed" && break
+              echo "  Alias PC: ${STATUS} (${i}/60)"
               sleep 5
             done
-            if [ "$STATUS" != "READY" ] && [ "$STATUS" != "FAILED" ]; then
-              echo "WARNING: Timed out waiting for provisioned concurrency (last status: ${STATUS})"
-            fi
+
+            # Clean up version-level PC (alias PC has taken over)
+            aws lambda delete-provisioned-concurrency-config \
+              --function-name "${FUNCTION_NAME}" \
+              --qualifier "${VERSION}" 2>/dev/null || true
+            echo "Cleaned up version-level provisioned concurrency"
           fi
 
       - name: Update WebSocket Lambda function
@@ -137,7 +180,55 @@ jobs:
 
           echo "Published version: ${VERSION}"
 
-          # Point 'live' alias to new version (provisioned concurrency follows the alias)
+          # Zero-downtime deploy: warm the new version BEFORE swinging the alias.
+          # Fail closed: do NOT swing the alias unless pre-warm succeeds.
+          PC_COUNT=$(aws lambda get-provisioned-concurrency-config \
+            --function-name "${WS_FUNCTION_NAME}" --qualifier live \
+            --query 'RequestedProvisionedConcurrentExecutions' --output text 2>/dev/null || echo "0")
+          PREWARM_OK="false"
+
+          if [ "$PC_COUNT" != "0" ] && [ "$PC_COUNT" != "None" ]; then
+            echo "Pre-warming version ${VERSION} with ${PC_COUNT} provisioned instances..."
+            aws lambda put-provisioned-concurrency-config \
+              --function-name "${WS_FUNCTION_NAME}" \
+              --qualifier "${VERSION}" \
+              --provisioned-concurrent-executions "${PC_COUNT}"
+
+            for i in $(seq 1 60); do
+              PC_JSON=$(aws lambda get-provisioned-concurrency-config \
+                --function-name "${WS_FUNCTION_NAME}" --qualifier "${VERSION}" \
+                --output json 2>/dev/null || echo '{}')
+              STATUS=$(echo "$PC_JSON" | jq -r '.Status // "UNKNOWN"')
+              REASON=$(echo "$PC_JSON" | jq -r '.StatusReason // ""')
+              if [ "$STATUS" = "READY" ]; then
+                echo "Version ${VERSION} warm (${PC_COUNT} instances ready)"
+                PREWARM_OK="true"
+                break
+              fi
+              if [ "$STATUS" = "FAILED" ]; then
+                echo "ERROR: Pre-warm FAILED: ${REASON}"
+                aws lambda delete-provisioned-concurrency-config \
+                  --function-name "${WS_FUNCTION_NAME}" --qualifier "${VERSION}" 2>/dev/null || true
+                break
+              fi
+              echo "  Pre-warming: ${STATUS} (${i}/60)"
+              sleep 5
+            done
+            if [ "$PREWARM_OK" = "false" ] && [ "$STATUS" != "FAILED" ]; then
+              echo "ERROR: Pre-warm timed out (last status: ${STATUS})"
+              aws lambda delete-provisioned-concurrency-config \
+                --function-name "${WS_FUNCTION_NAME}" --qualifier "${VERSION}" 2>/dev/null || true
+            fi
+          else
+            PREWARM_OK="true"  # No PC configured, nothing to pre-warm
+          fi
+
+          if [ "$PREWARM_OK" = "false" ]; then
+            echo "::error::Pre-warm failed for ${WS_FUNCTION_NAME} v${VERSION}. Alias NOT swung. Aborting."
+            exit 1
+          fi
+
+          # Swing alias to the warm version
           aws lambda update-alias \
             --function-name "${WS_FUNCTION_NAME}" \
             --name live \
@@ -152,31 +243,26 @@ jobs:
             --name "/forge/live-versions/${WS_FUNCTION_NAME}" \
             --value "${VERSION}" --type String --overwrite
 
-          # Wait for provisioned concurrency to initialize on the new version
-          sleep 5  # Allow status to transition from old-version READY to IN_PROGRESS
-          PROV_CHECK=$(aws lambda get-provisioned-concurrency-config \
-            --function-name "${WS_FUNCTION_NAME}" --qualifier live \
-            --query 'Status' --output text 2>/dev/null || echo "NONE")
-          if [ "$PROV_CHECK" != "NONE" ]; then
-            echo "Waiting for provisioned concurrency on ${WS_FUNCTION_NAME}..."
+          # Wait for alias-level provisioned concurrency to take over
+          if [ "$PC_COUNT" != "0" ] && [ "$PC_COUNT" != "None" ]; then
             for i in $(seq 1 60); do
               STATUS=$(aws lambda get-provisioned-concurrency-config \
                 --function-name "${WS_FUNCTION_NAME}" --qualifier live \
-                --query 'Status' --output text 2>/dev/null)
+                --query 'Status' --output text 2>/dev/null || echo "UNKNOWN")
               if [ "$STATUS" = "READY" ]; then
-                ALLOC=$(aws lambda get-provisioned-concurrency-config \
-                  --function-name "${WS_FUNCTION_NAME}" --qualifier live \
-                  --query 'AllocatedProvisionedConcurrentExecutions' --output text)
-                echo "Provisioned concurrency ready (${ALLOC} warm instances)"
+                echo "Alias provisioned concurrency ready"
                 break
               fi
-              [ "$STATUS" = "FAILED" ] && echo "WARNING: Provisioned concurrency failed" && break
-              echo "  Status: ${STATUS} (${i}/60)"
+              [ "$STATUS" = "FAILED" ] && echo "WARNING: Alias provisioned concurrency failed" && break
+              echo "  Alias PC: ${STATUS} (${i}/60)"
               sleep 5
             done
-            if [ "$STATUS" != "READY" ] && [ "$STATUS" != "FAILED" ]; then
-              echo "WARNING: Timed out waiting for provisioned concurrency (last status: ${STATUS})"
-            fi
+
+            # Clean up version-level PC (alias PC has taken over)
+            aws lambda delete-provisioned-concurrency-config \
+              --function-name "${WS_FUNCTION_NAME}" \
+              --qualifier "${VERSION}" 2>/dev/null || true
+            echo "Cleaned up version-level provisioned concurrency"
           fi
 
   deploy-frontend:
