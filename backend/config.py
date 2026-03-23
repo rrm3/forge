@@ -1,4 +1,21 @@
+import logging
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+
+def _get_ssm_parameter(name: str) -> str:
+    """Fetch a parameter from SSM Parameter Store. Returns empty string on failure."""
+    try:
+        import boto3
+
+        client = boto3.client("ssm")
+        resp = client.get_parameter(Name=name, WithDecryption=True)
+        return resp["Parameter"]["Value"]
+    except Exception:
+        logger.warning("Failed to load SSM parameter %s", name)
+        return ""
 
 
 class Settings(BaseSettings):
@@ -43,3 +60,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Load secrets from SSM in production (when env vars aren't set)
+if not settings.gemini_api_key and not settings.dev_mode:
+    settings.gemini_api_key = _get_ssm_parameter("/forge/gemini-api-key")
