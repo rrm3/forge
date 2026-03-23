@@ -60,7 +60,7 @@ function getTokenExpiresIn(token: string): number {
 // Poll localStorage for a fresh token written by another tab's refresh
 function waitForFreshToken(): Promise<OidcTokens> {
   return new Promise((resolve, reject) => {
-    let remaining = 15; // 15 * 200ms = 3s max wait
+    let remaining = 25; // 25 * 200ms = 5s max wait
     const poll = () => {
       const t = localStorage.getItem(TOKEN_KEY);
       if (t && !isTokenExpired(t)) {
@@ -145,7 +145,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .catch(() => {
           // Lock-holder failed or crashed. Claim the lock and try ourselves.
           localStorage.setItem(REFRESH_LOCK_KEY, String(Date.now()));
-          return refreshWithToken(rt).catch((retryErr) => {
+          return refreshWithToken(rt).then((tokens) => {
+            localStorage.setItem(TOKEN_KEY, tokens.idToken);
+            if (tokens.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+            return tokens;
+          }).catch((retryErr) => {
             const t = localStorage.getItem(TOKEN_KEY);
             if (t && !isTokenExpired(t)) {
               return { idToken: t, accessToken: '', refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY) || '', expiresIn: getTokenExpiresIn(t) / 1000 } as OidcTokens;
@@ -165,6 +169,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(REFRESH_LOCK_KEY, String(Date.now()));
 
     const promise = refreshWithToken(rt)
+      .then((tokens) => {
+        // Persist tokens BEFORE releasing the lock so other tabs
+        // see the new token when they check after the lock clears.
+        localStorage.setItem(TOKEN_KEY, tokens.idToken);
+        if (tokens.refreshToken) {
+          localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+        }
+        return tokens;
+      })
       .catch((err) => {
         // Race lost: another tab may have rotated the token before us.
         // Re-check localStorage before propagating the failure.
