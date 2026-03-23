@@ -144,9 +144,22 @@ async def list_users(user: AuthUser):
 
     profiles = await _profiles_repo.list_all()
 
-    # Filter to departments the admin can manage
+    # Filter to departments the admin can manage.
+    # Slugify profile departments (spaces -> dashes) to match config slugs.
+    # Always include users whose department isn't in any configured department
+    # so they don't silently disappear from the admin view.
+    all_configured = {d.lower() for d in await _dept_config_repo.list_departments()}
     dept_set = {d.lower() for d in departments}
-    profiles = [p for p in profiles if p.department.lower() in dept_set or not p.department]
+
+    def _dept_slug(name: str) -> str:
+        return name.lower().replace(" ", "-")
+
+    profiles = [
+        p for p in profiles
+        if _dept_slug(p.department) in dept_set
+        or not p.department
+        or _dept_slug(p.department) not in all_configured
+    ]
 
     user_ids = [p.user_id for p in profiles]
 
