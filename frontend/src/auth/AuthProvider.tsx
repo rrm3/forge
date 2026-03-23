@@ -67,7 +67,7 @@ function getInitialAuthState(): { user: AuthUser | null; isLoading: boolean } {
     return { user: getUserFromToken(token), isLoading: false };
   }
   // ID token expired but we might have a refresh token - show loading
-  // while we attempt to refresh (handled in the useEffect below)
+  // while getToken() attempts to refresh on first call
   if (token && localStorage.getItem(REFRESH_TOKEN_KEY)) {
     return { user: null, isLoading: true };
   }
@@ -85,35 +85,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const callbackProcessed = useRef(false);
   const wsConnected = useRef(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inflightRefreshRef = useRef<Promise<OidcTokens> | null>(null);
 
-  // Schedule a token refresh before the ID token expires
+  // Single entry point for token refresh. Deduplicates concurrent calls
+  // so that token rotation doesn't cause the second caller to fail.
+  const doRefresh = useCallback((): Promise<OidcTokens> => {
+    if (inflightRefreshRef.current) return inflightRefreshRef.current;
+
+    const rt = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!rt) return Promise.reject(new Error('No refresh token'));
+
+    const promise = refreshWithToken(rt).finally(() => {
+      inflightRefreshRef.current = null;
+    });
+    inflightRefreshRef.current = promise;
+    return promise;
+  }, []);
+
+  // Apply a successful refresh result to state + localStorage
+  const applyRefresh = useCallback((tokens: OidcTokens) => {
+    localStorage.setItem(TOKEN_KEY, tokens.idToken);
+    if (tokens.refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+    }
+    setUser(getUserFromToken(tokens.idToken));
+    return tokens.idToken;
+  }, []);
+
+  // Schedule a proactive refresh before the ID token expires
   const scheduleRefresh = useCallback((token: string) => {
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
     }
 
     const expiresIn = getTokenExpiresIn(token);
-    const refreshIn = Math.max(expiresIn - REFRESH_BUFFER_MS, 10000); // At least 10s from now
-
-    console.log(`Token refresh scheduled in ${Math.round(refreshIn / 1000)}s`);
+    const refreshIn = Math.max(expiresIn - REFRESH_BUFFER_MS, 10000);
 
     refreshTimerRef.current = setTimeout(async () => {
-      const rt = localStorage.getItem(REFRESH_TOKEN_KEY);
-      if (!rt) return;
       try {
-        const tokens = await refreshWithToken(rt);
-        localStorage.setItem(TOKEN_KEY, tokens.idToken);
-        if (tokens.refreshToken) {
-          localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
-        }
-        setUser(getUserFromToken(tokens.idToken));
+        const tokens = await doRefresh();
+        applyRefresh(tokens);
         scheduleRefresh(tokens.idToken);
       } catch {
-        // Refresh token expired or revoked. getToken() will handle
-        // the redirect to login when the next API call happens.
+        // Refresh failed. getToken() will handle redirect on next API call.
       }
     }, refreshIn);
-  }, []);
+  }, [doRefresh, applyRefresh]);
+
+  // getToken: the authoritative way to get a valid token.
+  // Returns cached token if valid, refreshes if expired, redirects if both dead.
+  const getToken = useCallback(async (): Promise<string | null> => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token && !isTokenExpired(token)) return token;
+
+    try {
+      const tokens = await doRefresh();
+      const idToken = applyRefresh(tokens);
+      scheduleRefresh(idToken);
+      return idToken;
+    } catch {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      setUser(null);
+      startLogin();
+      return null;
+    }
+  }, [doRefresh, applyRefresh, scheduleRefresh]);
 
   // Handle OIDC callback on mount
   useEffect(() => {
@@ -127,11 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       handleCallback(code, state)
         .then((tokens: OidcTokens) => {
-          localStorage.setItem(TOKEN_KEY, tokens.idToken);
-          if (tokens.refreshToken) {
-            localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
-          }
-          setUser(getUserFromToken(tokens.idToken));
+          applyRefresh(tokens);
           setAuthError(null);
           window.history.replaceState({}, '', '/');
           scheduleRefresh(tokens.idToken);
@@ -142,37 +175,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         .finally(() => setIsLoading(false));
     }
-  }, [scheduleRefresh]);
+  }, [applyRefresh, scheduleRefresh]);
 
   // On mount: schedule refresh for valid tokens, or attempt refresh for expired ones
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (token && !isTokenExpired(token)) {
       scheduleRefresh(token);
-    } else if (token && localStorage.getItem(REFRESH_TOKEN_KEY)) {
-      // ID token expired but refresh token exists - try to refresh now
-      const rt = localStorage.getItem(REFRESH_TOKEN_KEY)!;
-      refreshWithToken(rt)
-        .then((tokens) => {
-          localStorage.setItem(TOKEN_KEY, tokens.idToken);
-          if (tokens.refreshToken) {
-            localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
-          }
-          setUser(getUserFromToken(tokens.idToken));
-          scheduleRefresh(tokens.idToken);
-        })
-        .catch(() => {
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(REFRESH_TOKEN_KEY);
-        })
-        .finally(() => setIsLoading(false));
+    } else if (localStorage.getItem(REFRESH_TOKEN_KEY)) {
+      // Expired ID token + refresh token: use getToken() to refresh
+      getToken().finally(() => setIsLoading(false));
     }
     return () => {
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current);
       }
     };
-  }, [scheduleRefresh]);
+  }, [getToken, scheduleRefresh]);
 
   const signIn = useCallback(() => {
     setAuthError(null);
@@ -190,34 +209,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const logoutUrl = `${oidcConfig.providerUrl}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
     window.location.href = logoutUrl;
   }, []);
-
-  const getToken = useCallback(async (): Promise<string | null> => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (!token || isTokenExpired(token)) {
-      // Token is dead - try refresh_token grant before redirecting
-      const rt = localStorage.getItem(REFRESH_TOKEN_KEY);
-      if (rt) {
-        try {
-          const tokens = await refreshWithToken(rt);
-          localStorage.setItem(TOKEN_KEY, tokens.idToken);
-          if (tokens.refreshToken) {
-            localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
-          }
-          setUser(getUserFromToken(tokens.idToken));
-          scheduleRefresh(tokens.idToken);
-          return tokens.idToken;
-        } catch {
-          // Refresh token is also dead - fall through to login
-        }
-      }
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REFRESH_TOKEN_KEY);
-      setUser(null);
-      startLogin();
-      return null;
-    }
-    return token;
-  }, [scheduleRefresh]);
 
   // Wire token getters
   useEffect(() => {
