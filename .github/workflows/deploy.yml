@@ -31,9 +31,36 @@ jobs:
           DEV_MODE: "true"
         run: python -m pytest tests/ -q
 
+  deploy-infra:
+    name: Deploy Infrastructure (CDK)
+    needs: test
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CDK dependencies
+        working-directory: infrastructure/cdk
+        run: npm ci
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: CDK deploy
+        working-directory: infrastructure/cdk
+        run: |
+          ENV=${{ github.ref_name == 'main' && 'production' || 'staging' }}
+          npx cdk deploy "forge-${ENV}" --context env="${ENV}" --require-approval never
+
   deploy-backend:
     name: Deploy Backend
-    needs: test
+    needs: [test, deploy-infra]
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     outputs:
@@ -274,7 +301,7 @@ jobs:
 
   deploy-frontend:
     name: Deploy Frontend
-    needs: test
+    needs: [test, deploy-infra]
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
