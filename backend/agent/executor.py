@@ -342,9 +342,22 @@ async def run_agent_session(
     if session_type == "intake":
         await _check_intake_completion(deps, user_id, transcript, sender, session_id, department_config, intake_responses)
 
-    # Generate title for new sessions (skip intake/wrapup - they have hardcoded titles)
+    # Generate title for sessions
+    # - intake/wrapup: hardcoded titles, never overwritten
+    # - brainstorm/stuck: defer until user's first real message (opening prompt is generic)
+    # - chat/tip: generate immediately on first turn
     SESSION_TITLE_PREFIXES = {"brainstorm": "Brainstorm", "stuck": "Help"}
-    if is_new_session and assistant_text and session_type not in ("intake", "wrapup"):
+    DEFERRED_TITLE_TYPES = {"brainstorm", "stuck"}
+    needs_title = False
+    if session_type not in ("intake", "wrapup"):
+        if session_type in DEFERRED_TITLE_TYPES:
+            # Deferred: wait for user's first real message
+            if not is_new_session and user_message.strip() and assistant_text and session:
+                needs_title = len(transcript) <= 3  # opening + first user msg + response
+        elif is_new_session and assistant_text:
+            needs_title = True
+
+    if needs_title:
         try:
             title = await _generate_title(user_message or "New conversation", assistant_text)
             prefix = SESSION_TITLE_PREFIXES.get(session_type)
