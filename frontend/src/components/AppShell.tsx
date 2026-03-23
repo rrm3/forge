@@ -53,9 +53,7 @@ export function AppShell({ sidebar, content }: AppShellProps) {
           >
             <Menu className="w-5 h-5" strokeWidth={1.5} />
           </button>
-          <span className="ml-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-            AI Tuesdays
-          </span>
+          <img src="/ai-tuesdays-logo.png" alt="AI Tuesdays" className="ml-3" style={{ height: 20, filter: 'invert(1)' }} />
         </div>
 
         <div className="flex-1 overflow-hidden">

@@ -58,9 +58,7 @@ export function TopBar({ profile }: TopBarProps = {}) {
       <div className="flex items-center gap-3">
         <img src="/ds-logo.svg" alt="Digital Science" style={{ height: 24 }} />
         <span style={{ color: '#CBD5E1', fontSize: 18, fontWeight: 300 }}>|</span>
-        <span style={{ color: '#4A5568', fontSize: 14, fontWeight: 600, fontFamily: "'Satoshi', system-ui, sans-serif" }}>
-          AI Tuesdays
-        </span>
+        <img src="/ai-tuesdays-logo.png" alt="AI Tuesdays" style={{ height: 22, filter: 'invert(1)' }} />
       </div>
 
       {/* Right: Avatar + name + dropdown */}
