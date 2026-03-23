@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lightbulb, Compass, Star, Sunrise, ExternalLink, Trophy } from 'lucide-react';
+import { Lightbulb, Compass, Star, Sunrise, Trophy } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
 import { useAuth } from '../auth/useAuth';
 import { getProfile } from '../api/client';
@@ -108,17 +108,21 @@ export function HomeScreen() {
           href="https://app.getguru.com/page/31fe984d-f863-4487-8080-849d9f3461ef"
           target="_blank"
           rel="noopener noreferrer"
-          className="group flex items-center justify-center gap-2 px-5 py-4 rounded-xl border text-center transition-all duration-200 sm:col-span-2 hover:opacity-90"
+          className="group relative flex items-center justify-between px-5 rounded-xl transition-all duration-200 sm:col-span-2 hover:brightness-110 overflow-hidden"
           style={{
-            backgroundColor: '#F3F0FF',
-            borderColor: '#DDD6FE',
-            color: '#7C3AED',
+            backgroundImage: 'url(/ai-tuesdays-bg.jpg)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            height: '52px',
           }}
         >
-          <span className="text-sm font-medium">
-            AI Tuesdays on Guru
-          </span>
-          <ExternalLink className="w-4 h-4" strokeWidth={1.5} />
+          <img
+            src="/ai-tuesdays-logo.png"
+            alt="AI Tuesdays"
+            className="h-6"
+            style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))', marginTop: '-2px' }}
+          />
+          <span className="text-sm text-white font-bold">View on Guru &#x2197;</span>
         </a>
       </div>
     </div>
