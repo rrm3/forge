@@ -72,6 +72,16 @@ class TipRepository(ABC):
         pass
 
     @abstractmethod
+    async def update_comment(self, tip_id: str, comment_id: str, content: str) -> TipComment | None:
+        """Update a comment's content. Returns updated comment, or None if not found."""
+        pass
+
+    @abstractmethod
+    async def delete_comment(self, tip_id: str, comment_id: str) -> None:
+        """Delete a comment."""
+        pass
+
+    @abstractmethod
     async def count_by_authors(self, author_ids: list[str]) -> dict[str, int]:
         """Count tips per author. Returns {author_id: count}."""
         pass
@@ -360,6 +370,33 @@ class DynamoDBTipRepository(TipRepository):
             partial(self.comments_table.put_item, Item=self._serialize_comment(comment)),
         )
 
+    async def update_comment(self, tip_id: str, comment_id: str, content: str) -> TipComment | None:
+        loop = asyncio.get_event_loop()
+        try:
+            response = await loop.run_in_executor(
+                None,
+                partial(
+                    self.comments_table.update_item,
+                    Key={"tip_id": tip_id, "comment_id": comment_id},
+                    UpdateExpression="SET content = :c",
+                    ConditionExpression="attribute_exists(tip_id)",
+                    ExpressionAttributeValues={":c": content},
+                    ReturnValues="ALL_NEW",
+                ),
+            )
+            item = response.get("Attributes")
+            return self._deserialize_comment(item) if item else None
+        except ClientError:
+            logger.error("Failed to update comment %s on tip %s", comment_id, tip_id, exc_info=True)
+            return None
+
+    async def delete_comment(self, tip_id: str, comment_id: str) -> None:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            partial(self.comments_table.delete_item, Key={"tip_id": tip_id, "comment_id": comment_id}),
+        )
+
     async def count_by_authors(self, author_ids: list[str]) -> dict[str, int]:
         if not author_ids:
             return {}
@@ -496,6 +533,20 @@ class MemoryTipRepository(TipRepository):
             self._comments[comment.tip_id] = []
         self._comments[comment.tip_id].append(comment)
         self._save()
+
+    async def update_comment(self, tip_id: str, comment_id: str, content: str) -> TipComment | None:
+        for i, c in enumerate(self._comments.get(tip_id, [])):
+            if c.comment_id == comment_id:
+                updated = c.model_copy(update={"content": content})
+                self._comments[tip_id][i] = updated
+                self._save()
+                return updated
+        return None
+
+    async def delete_comment(self, tip_id: str, comment_id: str) -> None:
+        if tip_id in self._comments:
+            self._comments[tip_id] = [c for c in self._comments[tip_id] if c.comment_id != comment_id]
+            self._save()
 
     async def count_by_authors(self, author_ids: list[str]) -> dict[str, int]:
         if not author_ids:

@@ -222,3 +222,46 @@ async def add_comment(
     )
     await _tips_repo.add_comment(comment)
     return comment.model_dump(mode="json")
+
+
+class UpdateCommentRequest(BaseModel):
+    content: str
+
+
+@router.patch("/{tip_id}/comments/{comment_id}")
+async def update_comment(
+    tip_id: str,
+    comment_id: str,
+    body: UpdateCommentRequest,
+    user: AuthUser,
+):
+    """Update a comment. Only the author can edit their own comment."""
+    comments = await _tips_repo.list_comments(tip_id)
+    existing = next((c for c in comments if c.comment_id == comment_id), None)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if existing.author_id != user.user_id:
+        raise HTTPException(status_code=403, detail="You can only edit your own comments")
+
+    updated = await _tips_repo.update_comment(tip_id, comment_id, body.content)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    return updated.model_dump(mode="json")
+
+
+@router.delete("/{tip_id}/comments/{comment_id}")
+async def delete_comment(
+    tip_id: str,
+    comment_id: str,
+    user: AuthUser,
+):
+    """Delete a comment. Only the author can delete their own comment."""
+    comments = await _tips_repo.list_comments(tip_id)
+    existing = next((c for c in comments if c.comment_id == comment_id), None)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if existing.author_id != user.user_id:
+        raise HTTPException(status_code=403, detail="You can only delete your own comments")
+
+    await _tips_repo.delete_comment(tip_id, comment_id)
+    return {"status": "deleted"}

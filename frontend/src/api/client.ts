@@ -269,6 +269,23 @@ export async function addTipComment(tipId: string, content: string): Promise<Tip
   return res.json();
 }
 
+export async function updateTipComment(tipId: string, commentId: string, content: string): Promise<TipComment> {
+  const res = await fetchWithAuth(
+    `${API_BASE}/api/tips/${encodeURIComponent(tipId)}/comments/${encodeURIComponent(commentId)}`,
+    { method: 'PATCH', body: JSON.stringify({ content }) },
+  );
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function deleteTipComment(tipId: string, commentId: string): Promise<void> {
+  const res = await fetchWithAuth(
+    `${API_BASE}/api/tips/${encodeURIComponent(tipId)}/comments/${encodeURIComponent(commentId)}`,
+    { method: 'DELETE' },
+  );
+  await checkResponse(res);
+}
+
 // User Ideas API
 
 export async function listUserIdeas(): Promise<UserIdea[]> {

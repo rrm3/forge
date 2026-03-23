@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { voteTip, unvoteTip, updateTip, deleteTip } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import { ProfileChip } from './ProfileChip';
+import { TipCommentSection } from './TipCommentSection';
 import type { Tip } from '../api/types';
 
 const DEPARTMENTS = [
@@ -372,6 +373,9 @@ export function TipDetail({ tip, onBack, onVoteChange, onTipUpdated, onTipDelete
                 />
                 <span className="text-sm font-medium">{tip.vote_count}</span>
               </button>
+
+              {/* Discussion thread */}
+              <TipCommentSection tipId={tip.tip_id} />
             </>
           )}
         </div>
