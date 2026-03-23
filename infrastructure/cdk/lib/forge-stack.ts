@@ -458,8 +458,7 @@ export class ForgeStack extends cdk.Stack {
     const wsStage = new apigatewayv2.CfnStage(this, 'WsStage', {
       apiId: wsApi.ref,
       stageName: 'v1',
-      deploymentId: wsDeployment.ref,
-      autoDeploy: true,
+      autoDeploy: true,  // API Gateway creates deployments automatically; deploymentId is incompatible
     });
 
     // Grant API Gateway permission to invoke WS Lambda
