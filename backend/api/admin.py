@@ -33,9 +33,16 @@ async def _get_admin_departments(email: str) -> list[str] | None:
     """Return the list of departments this user can manage, or None if not an admin.
 
     A value of ``["*"]`` in admin-access.json means all departments.
+    Email lookup is case-insensitive since OIDC providers may return
+    different casing than what's stored in admin-access.json.
     """
     access = await _dept_config_repo.get_admin_access()
-    departments = access.get(email)
+    # Case-insensitive email lookup
+    email_lower = email.lower()
+    departments = next(
+        (v for k, v in access.items() if k.lower() == email_lower),
+        None,
+    )
     if departments is None:
         return None
     if "*" in departments:
