@@ -54,6 +54,7 @@ export async function startLogin(): Promise<void> {
 export interface OidcTokens {
   idToken: string;
   accessToken: string;
+  refreshToken?: string;
   expiresIn: number;
 }
 
@@ -94,6 +95,7 @@ export async function handleCallback(code: string, state: string): Promise<OidcT
   return {
     idToken: data.id_token,
     accessToken: data.access_token,
+    refreshToken: data.refresh_token,
     expiresIn: data.expires_in,
   };
 }
@@ -104,94 +106,33 @@ export function parseJwtPayload(token: string): Record<string, unknown> {
 }
 
 /**
- * Silent token refresh via hidden iframe.
+ * Refresh tokens using a refresh_token grant.
  *
- * Sends the user to the OIDC authorize endpoint with prompt=none in a
- * hidden iframe. If the provider's session is still alive, it redirects
- * back with a new auth code which we exchange for fresh tokens.
- * If the session is dead, the iframe returns an error and we fall back
- * to a full redirect.
+ * Sends a direct POST to the OIDC provider's /token endpoint with the
+ * stored refresh token. No iframes, no cross-origin storage - just a
+ * simple CORS request. The provider rotates the refresh token on each use.
  */
-export async function silentRefresh(): Promise<OidcTokens> {
-  const codeVerifier = generateRandomString(64);
-  const codeChallenge = base64urlEncode(await sha256(codeVerifier));
-  const state = generateRandomString(32);
-
-  // Use a dedicated silent callback path
-  const silentRedirectUri = `${window.location.origin}/silent-callback.html`;
-
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: oidcConfig.clientId,
-    redirect_uri: silentRedirectUri,
-    scope: oidcConfig.scopes,
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
-    prompt: 'none',
+export async function refreshWithToken(refreshToken: string): Promise<OidcTokens> {
+  const response = await fetch(`${oidcConfig.providerUrl}/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: oidcConfig.clientId,
+    }),
   });
 
-  const authorizeUrl = `${oidcConfig.providerUrl}/authorize?${params}`;
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error_description || error.error || 'Token refresh failed');
+  }
 
-  return new Promise<OidcTokens>((resolve, reject) => {
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('Silent refresh timed out'));
-    }, 10000);
-
-    function cleanup() {
-      clearTimeout(timeout);
-      window.removeEventListener('message', onMessage);
-      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-    }
-
-    function onMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type !== 'silent-callback') return;
-
-      cleanup();
-
-      const { code: cbCode, state: cbState, error } = event.data;
-
-      if (error) {
-        reject(new Error(error));
-        return;
-      }
-
-      if (cbState !== state) {
-        reject(new Error('State mismatch in silent refresh'));
-        return;
-      }
-
-      // Exchange code for tokens
-      fetch(`${oidcConfig.providerUrl}/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          code: cbCode,
-          redirect_uri: silentRedirectUri,
-          client_id: oidcConfig.clientId,
-          code_verifier: codeVerifier,
-        }),
-      })
-        .then(async (resp) => {
-          if (!resp.ok) throw new Error('Token exchange failed');
-          const data = await resp.json();
-          resolve({
-            idToken: data.id_token,
-            accessToken: data.access_token,
-            expiresIn: data.expires_in,
-          });
-        })
-        .catch(reject);
-    }
-
-    window.addEventListener('message', onMessage);
-    iframe.src = authorizeUrl;
-  });
+  const data = await response.json();
+  return {
+    idToken: data.id_token,
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresIn: data.expires_in,
+  };
 }

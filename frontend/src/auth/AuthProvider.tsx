@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
-import { startLogin, handleCallback, parseJwtPayload, silentRefresh, oidcConfig, type OidcTokens } from './oidc';
+import { startLogin, handleCallback, parseJwtPayload, refreshWithToken, oidcConfig, type OidcTokens } from './oidc';
 import { setTokenGetter } from '../api/client';
 import { setWsTokenGetter, forgeWs } from '../api/websocket';
 
@@ -22,6 +22,7 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | null>(null);
 
 const TOKEN_KEY = 'oidc_id_token';
+const REFRESH_TOKEN_KEY = 'oidc_refresh_token';
 
 // Refresh 5 minutes before expiry
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -65,6 +66,11 @@ function getInitialAuthState(): { user: AuthUser | null; isLoading: boolean } {
   if (token && !isTokenExpired(token)) {
     return { user: getUserFromToken(token), isLoading: false };
   }
+  // ID token expired but we might have a refresh token - show loading
+  // while we attempt to refresh (handled in the useEffect below)
+  if (token && localStorage.getItem(REFRESH_TOKEN_KEY)) {
+    return { user: null, isLoading: true };
+  }
   if (token) {
     localStorage.removeItem(TOKEN_KEY);
   }
@@ -80,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const wsConnected = useRef(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Schedule a silent refresh before the token expires
+  // Schedule a token refresh before the ID token expires
   const scheduleRefresh = useCallback((token: string) => {
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
@@ -92,18 +98,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log(`Token refresh scheduled in ${Math.round(refreshIn / 1000)}s`);
 
     refreshTimerRef.current = setTimeout(async () => {
-      // Attempt silent refresh via hidden iframe with prompt=none.
-      // If the OIDC session is still alive, we get fresh tokens silently.
-      // If it fails (session expired, network error), getToken() will
-      // handle the redirect when needed.
+      const rt = localStorage.getItem(REFRESH_TOKEN_KEY);
+      if (!rt) return;
       try {
-        const tokens = await silentRefresh();
+        const tokens = await refreshWithToken(rt);
         localStorage.setItem(TOKEN_KEY, tokens.idToken);
+        if (tokens.refreshToken) {
+          localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+        }
         setUser(getUserFromToken(tokens.idToken));
         scheduleRefresh(tokens.idToken);
       } catch {
-        // Silent refresh not supported or session expired.
-        // getToken() will handle the redirect when needed.
+        // Refresh token expired or revoked. getToken() will handle
+        // the redirect to login when the next API call happens.
       }
     }, refreshIn);
   }, []);
@@ -121,6 +128,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       handleCallback(code, state)
         .then((tokens: OidcTokens) => {
           localStorage.setItem(TOKEN_KEY, tokens.idToken);
+          if (tokens.refreshToken) {
+            localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+          }
           setUser(getUserFromToken(tokens.idToken));
           setAuthError(null);
           window.history.replaceState({}, '', '/');
@@ -134,11 +144,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [scheduleRefresh]);
 
-  // Schedule refresh for existing token on mount
+  // On mount: schedule refresh for valid tokens, or attempt refresh for expired ones
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (token && !isTokenExpired(token)) {
       scheduleRefresh(token);
+    } else if (token && localStorage.getItem(REFRESH_TOKEN_KEY)) {
+      // ID token expired but refresh token exists - try to refresh now
+      const rt = localStorage.getItem(REFRESH_TOKEN_KEY)!;
+      refreshWithToken(rt)
+        .then((tokens) => {
+          localStorage.setItem(TOKEN_KEY, tokens.idToken);
+          if (tokens.refreshToken) {
+            localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+          }
+          setUser(getUserFromToken(tokens.idToken));
+          scheduleRefresh(tokens.idToken);
+        })
+        .catch(() => {
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(REFRESH_TOKEN_KEY);
+        })
+        .finally(() => setIsLoading(false));
     }
     return () => {
       if (refreshTimerRef.current) {
@@ -157,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(refreshTimerRef.current);
     }
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
     forgeWs.disconnect();
     wsConnected.current = false;
     const logoutUrl = `${oidcConfig.providerUrl}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
@@ -166,20 +194,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const getToken = useCallback(async (): Promise<string | null> => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token || isTokenExpired(token)) {
-      // Token is dead - try one silent refresh before redirecting
-      try {
-        const tokens = await silentRefresh();
-        localStorage.setItem(TOKEN_KEY, tokens.idToken);
-        setUser(getUserFromToken(tokens.idToken));
-        scheduleRefresh(tokens.idToken);
-        return tokens.idToken;
-      } catch {
-        // Silent refresh failed - full redirect
-        localStorage.removeItem(TOKEN_KEY);
-        setUser(null);
-        startLogin();
-        return null;
+      // Token is dead - try refresh_token grant before redirecting
+      const rt = localStorage.getItem(REFRESH_TOKEN_KEY);
+      if (rt) {
+        try {
+          const tokens = await refreshWithToken(rt);
+          localStorage.setItem(TOKEN_KEY, tokens.idToken);
+          if (tokens.refreshToken) {
+            localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+          }
+          setUser(getUserFromToken(tokens.idToken));
+          scheduleRefresh(tokens.idToken);
+          return tokens.idToken;
+        } catch {
+          // Refresh token is also dead - fall through to login
+        }
       }
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      setUser(null);
+      startLogin();
+      return null;
     }
     return token;
   }, [scheduleRefresh]);
