@@ -124,7 +124,16 @@ jobs:
             exit 1
           fi
 
-          # Swing alias to the warm version - traffic immediately hits warm instances
+          # AWS doesn't allow an alias with PC to point to a version that also has PC.
+          # Delete version-level PC right before swinging the alias. The warm execution
+          # environments persist briefly, so the alias PC reuses them.
+          if [ "$PC_COUNT" != "0" ] && [ "$PC_COUNT" != "None" ]; then
+            echo "Removing version-level PC before alias swing..."
+            aws lambda delete-provisioned-concurrency-config \
+              --function-name "${FUNCTION_NAME}" --qualifier "${VERSION}" 2>/dev/null || true
+          fi
+
+          # Swing alias to the pre-warmed version
           aws lambda update-alias \
             --function-name "${FUNCTION_NAME}" \
             --name live \
@@ -139,8 +148,9 @@ jobs:
             --name "/forge/live-versions/${FUNCTION_NAME}" \
             --value "${VERSION}" --type String --overwrite
 
-          # Wait for alias-level provisioned concurrency to take over
+          # Wait for alias-level provisioned concurrency to be ready on the new version
           if [ "$PC_COUNT" != "0" ] && [ "$PC_COUNT" != "None" ]; then
+            echo "Waiting for alias PC to initialize on version ${VERSION}..."
             for i in $(seq 1 60); do
               STATUS=$(aws lambda get-provisioned-concurrency-config \
                 --function-name "${FUNCTION_NAME}" --qualifier live \
@@ -153,12 +163,6 @@ jobs:
               echo "  Alias PC: ${STATUS} (${i}/60)"
               sleep 5
             done
-
-            # Clean up version-level PC (alias PC has taken over)
-            aws lambda delete-provisioned-concurrency-config \
-              --function-name "${FUNCTION_NAME}" \
-              --qualifier "${VERSION}" 2>/dev/null || true
-            echo "Cleaned up version-level provisioned concurrency"
           fi
 
       - name: Update WebSocket Lambda function
@@ -228,7 +232,15 @@ jobs:
             exit 1
           fi
 
-          # Swing alias to the warm version
+          # AWS doesn't allow an alias with PC to point to a version that also has PC.
+          # Delete version-level PC right before swinging the alias.
+          if [ "$PC_COUNT" != "0" ] && [ "$PC_COUNT" != "None" ]; then
+            echo "Removing version-level PC before alias swing..."
+            aws lambda delete-provisioned-concurrency-config \
+              --function-name "${WS_FUNCTION_NAME}" --qualifier "${VERSION}" 2>/dev/null || true
+          fi
+
+          # Swing alias to the pre-warmed version
           aws lambda update-alias \
             --function-name "${WS_FUNCTION_NAME}" \
             --name live \
@@ -243,8 +255,9 @@ jobs:
             --name "/forge/live-versions/${WS_FUNCTION_NAME}" \
             --value "${VERSION}" --type String --overwrite
 
-          # Wait for alias-level provisioned concurrency to take over
+          # Wait for alias-level provisioned concurrency to be ready on the new version
           if [ "$PC_COUNT" != "0" ] && [ "$PC_COUNT" != "None" ]; then
+            echo "Waiting for alias PC to initialize on version ${VERSION}..."
             for i in $(seq 1 60); do
               STATUS=$(aws lambda get-provisioned-concurrency-config \
                 --function-name "${WS_FUNCTION_NAME}" --qualifier live \
@@ -257,12 +270,6 @@ jobs:
               echo "  Alias PC: ${STATUS} (${i}/60)"
               sleep 5
             done
-
-            # Clean up version-level PC (alias PC has taken over)
-            aws lambda delete-provisioned-concurrency-config \
-              --function-name "${WS_FUNCTION_NAME}" \
-              --qualifier "${VERSION}" 2>/dev/null || true
-            echo "Cleaned up version-level provisioned concurrency"
           fi
 
   deploy-frontend:

@@ -95,11 +95,21 @@ pre-warming fails, the alias is NOT swung and the deploy aborts.
 2. put-provisioned-concurrency-config     → start pre-warming new version
 3. poll until version PC is READY         → new version is warm
    (if FAILED or timeout: abort, do NOT swing alias)
-4. update-alias --name live               → traffic shifts to warm instances
-5. ssm put-parameter                      → record version for CDK
-6. poll until alias PC is READY           → alias takes over PC management
-7. delete-provisioned-concurrency-config  → clean up version-level PC
+4. delete-provisioned-concurrency-config  → remove version-level PC (see note below)
+5. update-alias --name live               → traffic shifts to pre-warmed version
+6. ssm put-parameter                      → record version for CDK
+7. poll until alias PC is READY           → alias PC initializes on new version
 ```
+
+### Why delete version PC before swinging the alias? (Step 4)
+
+AWS does not allow an alias with provisioned concurrency to point to a version that
+also has its own provisioned concurrency. The `update-alias` call will fail with
+`ResourceConflictException`. We must delete version-level PC first.
+
+The warm execution environments persist briefly after PC deletion (they become
+available as on-demand instances). Swinging the alias immediately after ensures
+the alias-level PC can reuse those warm environments.
 
 ### Why fail-closed?
 
@@ -109,13 +119,13 @@ Better to abort and keep traffic on the old working version.
 
 ### Temporary double provisioned concurrency
 
-During steps 2-7, both the old version (via alias) and new version (directly) have
+During steps 2-4, both the old version (via alias) and new version (directly) have
 provisioned concurrency active. This briefly doubles the PC count:
 * REST Lambda: 10 + 10 = 20 during transition
 * WS Lambda: 20 + 20 = 40 during transition
 
-This lasts ~60 seconds. If it exceeds account limits, the pre-warm will fail and
-the deploy will abort safely.
+This lasts ~60 seconds while the new version warms up. If it exceeds account limits,
+the pre-warm will fail and the deploy will abort safely.
 
 ## Rules
 
