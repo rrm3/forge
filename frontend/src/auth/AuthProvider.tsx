@@ -84,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const callbackProcessed = useRef(false);
   const wsConnected = useRef(false);
+  const signingOutRef = useRef(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inflightRefreshRef = useRef<Promise<OidcTokens> | null>(null);
 
@@ -135,6 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // getToken: the authoritative way to get a valid token.
   // Returns cached token if valid, refreshes if expired, redirects if both dead.
   const getToken = useCallback(async (): Promise<string | null> => {
+    if (signingOutRef.current) return null;
+
     const token = localStorage.getItem(TOKEN_KEY);
     if (token && !isTokenExpired(token)) return token;
 
@@ -199,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(() => {
+    signingOutRef.current = true;
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
     }
