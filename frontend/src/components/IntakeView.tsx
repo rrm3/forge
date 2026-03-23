@@ -112,7 +112,7 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, streamingText]);
+  }, [messages.length, streamingText, intakeComplete]);
 
   useEffect(() => {
     textareaRef.current?.focus();
