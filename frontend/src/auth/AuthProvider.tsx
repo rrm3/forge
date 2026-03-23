@@ -250,7 +250,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(REFRESH_TOKEN_KEY);
       setUser(null);
-      startLogin();
+      try {
+        await startLogin();
+      } catch {
+        // startLogin failed (e.g., crypto.subtle unavailable) - reset so
+        // future getToken calls can retry instead of being permanently stuck.
+        redirectingRef.current = false;
+      }
       return null;
     }
   }, [doRefresh, applyRefresh, scheduleRefresh]);
@@ -280,8 +286,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [applyRefresh, scheduleRefresh]);
 
-  // On mount: schedule refresh for valid tokens, or attempt refresh for expired ones
+  // On mount: schedule refresh for valid tokens, or attempt refresh for expired ones.
+  // Skip when an OIDC callback is in progress - the callback effect handles that.
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('code') && params.get('state')) return;
+
     const token = localStorage.getItem(TOKEN_KEY);
     if (token && !isTokenExpired(token)) {
       scheduleRefresh(token);
@@ -308,6 +318,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_LOCK_KEY);
     forgeWs.disconnect();
     wsConnected.current = false;
     const logoutUrl = `${oidcConfig.providerUrl}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
