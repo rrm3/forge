@@ -63,7 +63,7 @@ export function ChatView() {
   // Auto-scroll to bottom
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, streamingText]);
+  }, [messages.length, streamingText, state.tipReady, state.tipPublished, state.ideaReady]);
 
   // Focus input when session loads
   useEffect(() => {
