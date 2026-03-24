@@ -80,8 +80,7 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
     try {
       await skipIntake();
       deselectSession();
-      onComplete?.();
-      navigate('/');
+      window.location.href = '/';
     } catch {
       setSkipping(false);
     }

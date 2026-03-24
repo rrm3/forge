@@ -121,8 +121,14 @@ async def run_agent_session(
 
     memory = await load_memory(deps.storage, user_id)
 
-    # Completed intake sessions behave like normal chats
-    intake_is_complete = session_type == "intake" and profile and profile.intake_completed_at
+    # Completed intake sessions behave like normal chats.
+    # Skipped intakes stay in intake mode so objectives continue evaluating.
+    intake_is_complete = (
+        session_type == "intake"
+        and profile
+        and profile.intake_completed_at
+        and not profile.intake_skipped
+    )
 
     # Load company config (shared across all sessions)
     dept_config_repo = DepartmentConfigRepository(deps.storage)
@@ -191,6 +197,11 @@ async def run_agent_session(
             if newly_completed:
                 intake_responses.update(newly_completed)
                 await save_intake_responses(deps.storage, user_id, intake_responses)
+                # Update progress counts on profile for dashboard
+                await deps.profiles_repo.update(user_id, {
+                    "intake_objectives_done": len(intake_responses),
+                    "intake_objectives_total": len(objectives),
+                })
                 # Rebuild system prompt with updated progress
                 system_prompt = build_system_prompt(
                     profile=profile,
@@ -551,6 +562,7 @@ async def _check_intake_completion(
             await deps.profiles_repo.update(user_id, {
                 "intake_completed_at": datetime.now(UTC).isoformat(),
                 "onboarding_complete": True,
+                "intake_skipped": False,
             })
             if department_config:
                 logger.info("Intake complete: user=%s objectives_completed=%s", user_id, completed_ids)

@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useState, useMemo } from 'react';
-import { Search, X, ChevronUp, ChevronDown, Check, Clock, Shield } from 'lucide-react';
+import { Search, X, ChevronUp, ChevronDown, Shield } from 'lucide-react';
 import { listAdminUsers, getAdminUserIntake, setUserRole, setUserAdmin, deleteAdminUser } from '../api/client';
 import { UserAvatar } from './UserAvatar';
 import type { AdminUserSummary, AdminUserIntake } from '../api/types';
@@ -24,6 +24,30 @@ function relativeTime(iso: string | null): string {
   const diffDays = Math.floor(diffHrs / 24);
   if (diffDays < 7) return `${diffDays}d ago`;
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function ProgressRing({ done, total }: { done: number; total: number }) {
+  if (total === 0) return <span style={{ color: 'var(--color-text-placeholder)', fontSize: 11 }}>--</span>;
+  const pct = done / total;
+  const r = 10;
+  const stroke = 2.5;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference * (1 - pct);
+  const color = pct >= 1 ? 'var(--color-success, #059669)' : pct > 0 ? 'var(--color-primary)' : 'var(--color-text-placeholder)';
+  return (
+    <span title={`${done}/${total} objectives`} className="inline-flex items-center justify-center">
+      <svg width={26} height={26} className="block">
+        <circle cx={13} cy={13} r={r} fill="none" stroke="var(--color-border, #E2E8F0)" strokeWidth={stroke} />
+        <circle
+          cx={13} cy={13} r={r} fill="none"
+          stroke={color} strokeWidth={stroke}
+          strokeDasharray={circumference} strokeDashoffset={offset}
+          strokeLinecap="round"
+          transform="rotate(-90 13 13)"
+        />
+      </svg>
+    </span>
+  );
 }
 
 // Intake response display labels
@@ -154,8 +178,11 @@ export function AdminUsers() {
         case 'tip_count':
           cmp = a.tip_count - b.tip_count;
           break;
-        case 'intake':
-          cmp = (a.intake_completed_at ? 1 : 0) - (b.intake_completed_at ? 1 : 0);
+        case 'intake': {
+          const pctA = a.intake_objectives_total > 0 ? a.intake_objectives_done / a.intake_objectives_total : (a.intake_completed_at ? 1 : -1);
+          const pctB = b.intake_objectives_total > 0 ? b.intake_objectives_done / b.intake_objectives_total : (b.intake_completed_at ? 1 : -1);
+          cmp = pctA - pctB;
+        }
           break;
         case 'last_active':
           cmp = (a.last_active ?? '').localeCompare(b.last_active ?? '');
@@ -168,9 +195,8 @@ export function AdminUsers() {
 
   // Stats
   const totalUsers = users.length;
-  const intakeComplete = users.filter((u) => u.intake_completed_at && !u.intake_skipped).length;
-  const intakeSkipped = users.filter((u) => u.intake_skipped).length;
-  const intakePct = totalUsers > 0 ? Math.round(((intakeComplete + intakeSkipped) / totalUsers) * 100) : 0;
+  const intakeComplete = users.filter((u) => u.intake_completed_at).length;
+  const intakePct = totalUsers > 0 ? Math.round((intakeComplete / totalUsers) * 100) : 0;
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -231,7 +257,7 @@ export function AdminUsers() {
       <div className="grid grid-cols-2 gap-4 mb-6">
         {[
           { label: 'Total Users', value: totalUsers },
-          { label: 'Intake', value: `${intakeComplete} done${intakeSkipped ? `, ${intakeSkipped} skipped` : ''} (${intakePct}%)` },
+          { label: 'Day 1 Complete', value: `${intakeComplete}/${totalUsers} (${intakePct}%)` },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -322,7 +348,7 @@ export function AdminUsers() {
                 Tips <SortIcon col="tip_count" />
               </th>
               <th style={{ ...thStyle, textAlign: 'center' }} onClick={() => handleSort('intake')}>
-                Intake <SortIcon col="intake" />
+                Day 1 <SortIcon col="intake" />
               </th>
               <th style={thStyle} onClick={() => handleSort('last_active')}>
                 Last Active <SortIcon col="last_active" />
@@ -416,12 +442,7 @@ export function AdminUsers() {
                     {u.tip_count}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    {u.intake_completed_at
-                      ? u.intake_skipped
-                        ? <span className="text-xs font-medium" style={{ color: 'var(--color-warning, #D97706)' }} title="Skipped intake">Skipped</span>
-                        : <Check className="w-4 h-4 mx-auto" style={{ color: 'var(--color-success, #059669)' }} strokeWidth={2} />
-                      : <Clock className="w-4 h-4 mx-auto" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
-                    }
+                    <ProgressRing done={u.intake_objectives_done} total={u.intake_objectives_total} />
                   </td>
                   <td style={{ ...tdStyle, fontSize: 13, color: 'var(--color-text-muted)' }}>
                     {relativeTime(u.last_active)}
@@ -696,13 +717,13 @@ function DetailPanel({
       <Section title="Status">
         <div className="flex flex-col gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
           <div className="flex justify-between">
-            <span>Intake</span>
+            <span>Day 1</span>
             <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 13 }}>
               {p.intake_completed_at
-                ? p.intake_skipped
-                  ? `Skipped ${new Date(p.intake_completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
-                  : new Date(p.intake_completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                : 'Not yet'
+                ? new Date(p.intake_completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                : p.intake_objectives_total > 0
+                  ? `${p.intake_objectives_done}/${p.intake_objectives_total} objectives`
+                  : 'Not started'
               }
             </span>
           </div>

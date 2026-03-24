@@ -227,17 +227,22 @@ async def reevaluate_intake(user: AuthUser):
             len(newly_completed), user.user_id,
         )
 
-    # Check if all objectives are now complete
+    # Update progress counts on profile for dashboard
     objective_ids = {obj["id"] for obj in objectives}
     completed_ids = set(intake_responses.keys())
     all_complete = objective_ids.issubset(completed_ids)
 
+    progress_update: dict = {
+        "intake_objectives_done": len(completed_ids & objective_ids),
+        "intake_objectives_total": len(objective_ids),
+    }
     if all_complete:
-        await _profiles_repo.update(user.user_id, {
-            "intake_completed_at": datetime.now(UTC).isoformat(),
-            "onboarding_complete": True,
-        })
+        progress_update["intake_completed_at"] = datetime.now(UTC).isoformat()
+        progress_update["onboarding_complete"] = True
+        progress_update["intake_skipped"] = False
         logger.info("Reevaluation marked intake complete for user=%s", user.user_id)
+
+    await _profiles_repo.update(user.user_id, progress_update)
 
     return {"completed": all_complete, "newly_completed": len(newly_completed)}
 
@@ -263,28 +268,3 @@ async def skip_intake(user: AuthUser):
     })
     logger.info("Intake skipped for user=%s (%s)", user.user_id, user.email)
     return {"status": "skipped"}
-
-
-@router.post("/resume-intake")
-async def resume_intake(user: AuthUser):
-    """Resume intake by clearing completion state.
-
-    Called when a user clicks their intake session in the sidebar.
-    Clears intake_completed_at, onboarding_complete, and intake_skipped,
-    putting the profile back into genuine incomplete state. Preserves
-    the existing session, transcript, and captured intake responses.
-    """
-    profile = await _profiles_repo.get(user.user_id)
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-
-    if not profile.intake_completed_at:
-        return {"status": "already_incomplete"}
-
-    await _profiles_repo.update(user.user_id, {
-        "intake_completed_at": None,
-        "onboarding_complete": False,
-        "intake_skipped": False,
-    })
-    logger.info("Intake resumed (skip cleared) for user=%s (%s)", user.user_id, user.email)
-    return {"status": "resumed"}
