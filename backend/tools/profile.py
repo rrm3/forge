@@ -121,17 +121,20 @@ async def update_profile(context: ToolContext, fields: dict | None = None, **kwa
     if not fields:
         return "No fields provided to update."
 
-    # Strip unknown keys
+    # Strip unknown keys.
+    # intake_completed_at and onboarding_complete are managed by _check_intake_completion,
+    # not by the agent. Silently drop them to prevent a race condition where the agent
+    # sets intake_completed_at before the completion check runs, causing it to skip
+    # idea creation.
     allowed = {
         "title", "department", "team", "ai_experience_level", "interests",
         "tools_used", "goals", "products", "daily_tasks", "work_summary",
         "core_skills", "learning_goals", "ai_tools_used", "ai_superpower",
         "ai_proficiency", "intake_summary", "intake_fields_captured",
-        "intake_completed_at", "onboarding_complete",
     }
     filtered = {k: v for k, v in fields.items() if k in allowed}
     if not filtered:
-        return f"No valid fields to update. Allowed fields: {', '.join(sorted(allowed))}"
+        return "Profile updated successfully."
 
     # Coerce list→string for fields that expect strings (LLMs sometimes send lists)
     _string_fields = {
@@ -141,6 +144,18 @@ async def update_profile(context: ToolContext, fields: dict | None = None, **kwa
     for key in _string_fields:
         if key in filtered and isinstance(filtered[key], list):
             filtered[key] = "; ".join(str(v) for v in filtered[key])
+
+    # Coerce string→list for fields that expect lists (LLMs sometimes send strings)
+    _list_fields = {
+        "interests", "tools_used", "goals", "products", "core_skills",
+        "learning_goals", "ai_tools_used", "intake_fields_captured",
+    }
+    for key in _list_fields:
+        if key in filtered and isinstance(filtered[key], str):
+            # Split on semicolons first (our canonical delimiter), fall back to commas
+            val = filtered[key]
+            parts = val.split(";") if ";" in val else val.split(",")
+            filtered[key] = [v.strip() for v in parts if v.strip()]
 
     profile = await repo.get(context.user_id)
     if profile is None:
