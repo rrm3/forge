@@ -38,6 +38,7 @@ export interface UserProfile {
   work_summary: string;
   onboarding_complete: boolean;
   intake_completed_at: string | null;
+  intake_skipped: boolean;
   products: string[];
   daily_tasks: string;
   core_skills: string[];
@@ -127,6 +128,7 @@ export interface AdminUserSummary {
   team: string;
   avatar_url: string;
   intake_completed_at: string | null;
+  intake_skipped: boolean;
   is_department_admin: boolean;
   is_admin: boolean;
   session_count: number;

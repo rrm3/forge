@@ -17,6 +17,7 @@ import { OnboardingCards } from './OnboardingCards';
 import { TopBar } from './TopBar';
 import { IntakeDebugPanel } from './IntakeDebugPanel';
 import { useAdminStore } from '../state/adminStore';
+import { reevaluateIntake, skipIntake } from '../api/client';
 
 interface IntakeViewProps {
   onComplete?: () => void;
@@ -58,6 +59,36 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
   const intakeStarted = useRef(false);
 
   const sendCountRef = useRef(0);
+  const reevaluateAttempted = useRef(false);
+  const [skipping, setSkipping] = useState(false);
+
+  const showSkipOption = !intakeComplete && !showCards;
+
+  // Re-evaluate objectives on page reload for returning users with existing transcripts.
+  // This lets the updated evaluation logic retroactively detect completed objectives.
+  useEffect(() => {
+    if (reevaluateAttempted.current || !sessionsLoaded) return;
+    const intake = state.sessions.find((s) => s.type === 'intake');
+    if (!intake || (intake.message_count ?? 0) < 5) return;
+    reevaluateAttempted.current = true;
+    let cancelled = false;
+    reevaluateIntake().then((result) => {
+      if (result.completed && !cancelled) {
+        onComplete?.();
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [sessionsLoaded, state.sessions, onComplete]);
+
+  async function handleSkip() {
+    setSkipping(true);
+    try {
+      await skipIntake();
+      onComplete?.();
+    } catch {
+      setSkipping(false);
+    }
+  }
 
   // Pre-load: start the intake session on Card 1 so AI greeting is ready by "Let's go"
   function handleCardChange(cardIndex: number) {
@@ -214,6 +245,31 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
               background: 'linear-gradient(to bottom, rgba(34,211,238,0.03), rgba(129,140,248,0.02), transparent)',
             }}
           />
+
+          {/* Continue to app - escape valve */}
+          {showSkipOption && (
+            <div className="absolute top-3 right-4 z-20">
+              <button
+                onClick={handleSkip}
+                disabled={skipping}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                style={{
+                  color: 'var(--color-text-secondary)',
+                  backgroundColor: 'var(--color-surface-white)',
+                  border: '1px solid var(--color-border)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, #F1F5F9)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--color-surface-white)';
+                }}
+              >
+                {skipping ? 'Skipping...' : 'Skip'}
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          )}
 
           {/* Scrollable messages area */}
           <div className="flex-1 overflow-y-auto min-h-0">

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 
@@ -107,6 +108,7 @@ async def reset_intake(user: AuthUser):
     await _profiles_repo.update(user.user_id, {
         "intake_completed_at": None,
         "onboarding_complete": False,
+        "intake_skipped": False,
         "work_summary": "",
         "ai_experience_level": "",
         "interests": [],
@@ -159,3 +161,105 @@ async def reset_intake(user: AuthUser):
 
     logger.info("Reset intake for user %s (%s)", user.user_id, user.email)
     return {"status": "reset"}
+
+
+@router.post("/reevaluate-intake")
+async def reevaluate_intake(user: AuthUser):
+    """Re-run objective evaluation against the existing intake transcript.
+
+    Called on page reload when a user has an incomplete intake with messages.
+    Uses the current department config and evaluation logic to retroactively
+    detect objectives that were already covered.
+
+    Returns:
+        completed: bool - whether intake is now complete
+        newly_completed: int - number of objectives newly detected
+    """
+    profile = await _profiles_repo.get(user.user_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    if profile.intake_completed_at:
+        return {"completed": True, "newly_completed": 0}
+
+    # Find the intake session
+    if not _sessions_repo or not _storage:
+        raise HTTPException(status_code=500, detail="Dependencies not configured")
+
+    sessions = await _sessions_repo.list(user.user_id)
+    intake_session = next((s for s in sessions if s.type == "intake"), None)
+    if not intake_session:
+        return {"completed": False, "newly_completed": 0}
+
+    # Load transcript
+    from backend.storage import load_transcript, load_intake_responses, save_intake_responses
+    transcript = await load_transcript(_storage, user.user_id, intake_session.session_id)
+    if not transcript or len(transcript) < 5:
+        return {"completed": False, "newly_completed": 0}
+
+    # Load department config
+    from backend.repository.department_config import DepartmentConfigRepository
+    dept_config_repo = DepartmentConfigRepository(_storage)
+    department_config = None
+    if profile.department:
+        department_config = await dept_config_repo.get_department_config(
+            profile.department.lower().replace(" ", "-")
+        )
+
+    if not department_config:
+        return {"completed": False, "newly_completed": 0}
+
+    # Convert transcript to LLM messages
+    from backend.agent.executor import _transcript_to_llm_messages
+    llm_messages = _transcript_to_llm_messages(transcript)
+
+    # Load current responses and evaluate
+    intake_responses = await load_intake_responses(_storage, user.user_id)
+    from backend.agent.extraction import evaluate_objectives
+    objectives = department_config.get("objectives", [])
+    newly_completed = await evaluate_objectives(llm_messages, objectives, intake_responses)
+
+    if newly_completed:
+        intake_responses.update(newly_completed)
+        await save_intake_responses(_storage, user.user_id, intake_responses)
+        logger.info(
+            "Reevaluation completed %d objectives for user=%s",
+            len(newly_completed), user.user_id,
+        )
+
+    # Check if all objectives are now complete
+    objective_ids = {obj["id"] for obj in objectives}
+    completed_ids = set(intake_responses.keys())
+    all_complete = objective_ids.issubset(completed_ids)
+
+    if all_complete:
+        await _profiles_repo.update(user.user_id, {
+            "intake_completed_at": datetime.now(UTC).isoformat(),
+            "onboarding_complete": True,
+        })
+        logger.info("Reevaluation marked intake complete for user=%s", user.user_id)
+
+    return {"completed": all_complete, "newly_completed": len(newly_completed)}
+
+
+@router.post("/skip-intake")
+async def skip_intake(user: AuthUser):
+    """Skip remaining intake objectives and mark intake as complete.
+
+    Escape valve for users who've had a substantial conversation but
+    haven't triggered all objective completions.
+    """
+    profile = await _profiles_repo.get(user.user_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    if profile.intake_completed_at:
+        return {"status": "already_complete"}
+
+    await _profiles_repo.update(user.user_id, {
+        "intake_completed_at": datetime.now(UTC).isoformat(),
+        "onboarding_complete": True,
+        "intake_skipped": True,
+    })
+    logger.info("Intake skipped for user=%s (%s)", user.user_id, user.email)
+    return {"status": "skipped"}

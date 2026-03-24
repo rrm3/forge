@@ -230,7 +230,7 @@ REMAINING_OBJECTIVES_PLACEHOLDER
 Already completed (do not re-evaluate):
 COMPLETED_OBJECTIVES_PLACEHOLDER
 
-Based on what the USER said in the conversation below, determine which remaining objectives the user has directly addressed. An objective is covered when the user has shared enough that you wouldn't need to ask them about it again. A passing mention or vague reference doesn't count - the user should have actually talked about the topic, not just brushed past it. Generic answers that could apply to anyone (e.g., "I spend time in meetings and emails") don't count - the answer should be specific enough to tell you something about this person's actual situation.
+Based on what the USER said in the conversation below, determine which remaining objectives the user has addressed. An objective is covered when the user has shared something relevant to that topic. Brief or partial answers count - a single sentence or even a few words is enough if it tells you something about this person. The bar is low: if you learned anything about the topic from what the user said, mark it covered.
 
 IMPORTANT: Only evaluate based on USER messages, not the AI's questions or statements. If the AI said "you're a VP of Engineering" but the user never confirmed or discussed it, that doesn't count.
 
@@ -246,10 +246,9 @@ async def evaluate_objectives(
 ) -> dict:
     """Evaluate which intake objectives have been covered in the conversation.
 
-    Uses Sonnet for nuanced judgment - distinguishing direct answers from
-    vague or tangential mentions. Captures a brief summary of what the user
-    said for each covered objective, so the data is useful even without
-    the post-completion Opus enrichment pass.
+    Uses Sonnet to check which objectives the user has addressed, with a
+    low bar: any relevant mention counts. Evaluates the full transcript
+    each turn so objectives answered early aren't missed.
 
     Args:
         transcript_messages: The conversation as role/content dicts.
@@ -288,12 +287,14 @@ async def evaluate_objectives(
         "COMPLETED_OBJECTIVES_PLACEHOLDER", completed_text
     )
 
-    # Include last 6 messages, USER-only via _format_conversation
-    recent = transcript_messages[-6:] if len(transcript_messages) > 6 else transcript_messages
+    # Cache the system prompt (objective definitions + evaluation instructions).
+    # This is stable across turns unless an objective transitions from remaining
+    # to completed, so most consecutive evaluations get a cache hit here.
+    conversation = _format_conversation(transcript_messages)
 
     messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": _format_conversation(recent)},
+        {"role": "system", "content": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]},
+        {"role": "user", "content": conversation},
     ]
 
     valid_remaining_ids = {o["id"] for o in remaining}

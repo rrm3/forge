@@ -168,8 +168,9 @@ export function AdminUsers() {
 
   // Stats
   const totalUsers = users.length;
-  const intakeComplete = users.filter((u) => u.intake_completed_at).length;
-  const intakePct = totalUsers > 0 ? Math.round((intakeComplete / totalUsers) * 100) : 0;
+  const intakeComplete = users.filter((u) => u.intake_completed_at && !u.intake_skipped).length;
+  const intakeSkipped = users.filter((u) => u.intake_skipped).length;
+  const intakePct = totalUsers > 0 ? Math.round(((intakeComplete + intakeSkipped) / totalUsers) * 100) : 0;
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -230,7 +231,7 @@ export function AdminUsers() {
       <div className="grid grid-cols-2 gap-4 mb-6">
         {[
           { label: 'Total Users', value: totalUsers },
-          { label: 'Intake Complete', value: `${intakePct}%` },
+          { label: 'Intake', value: `${intakeComplete} done${intakeSkipped ? `, ${intakeSkipped} skipped` : ''} (${intakePct}%)` },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -416,7 +417,9 @@ export function AdminUsers() {
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
                     {u.intake_completed_at
-                      ? <Check className="w-4 h-4 mx-auto" style={{ color: 'var(--color-success, #059669)' }} strokeWidth={2} />
+                      ? u.intake_skipped
+                        ? <span className="text-xs font-medium" style={{ color: 'var(--color-warning, #D97706)' }} title="Skipped intake">Skipped</span>
+                        : <Check className="w-4 h-4 mx-auto" style={{ color: 'var(--color-success, #059669)' }} strokeWidth={2} />
                       : <Clock className="w-4 h-4 mx-auto" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
                     }
                   </td>
@@ -693,10 +696,12 @@ function DetailPanel({
       <Section title="Status">
         <div className="flex flex-col gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
           <div className="flex justify-between">
-            <span>Intake completed</span>
+            <span>Intake</span>
             <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 13 }}>
               {p.intake_completed_at
-                ? new Date(p.intake_completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                ? p.intake_skipped
+                  ? `Skipped ${new Date(p.intake_completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+                  : new Date(p.intake_completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
                 : 'Not yet'
               }
             </span>

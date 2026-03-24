@@ -214,7 +214,7 @@ async def list_users(user: AuthUser):
             "team": p.team,
             "avatar_url": p.avatar_url,
             "intake_completed_at": p.intake_completed_at.isoformat() if p.intake_completed_at else None,
-            # "ai_proficiency": p.ai_proficiency.model_dump() if p.ai_proficiency else None,
+            "intake_skipped": p.intake_skipped,
             "is_department_admin": p.is_department_admin,
             "is_admin": p.email.lower() in admin_emails,
             "session_count": session_counts.get(p.user_id, 0),

@@ -98,6 +98,21 @@ export async function resetIntake(): Promise<void> {
   await checkResponse(res);
 }
 
+export async function reevaluateIntake(): Promise<{ completed: boolean; newly_completed: number }> {
+  const res = await fetchWithAuth(`${API_BASE}/api/profile/reevaluate-intake`, {
+    method: 'POST',
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function skipIntake(): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/profile/skip-intake`, {
+    method: 'POST',
+  });
+  await checkResponse(res);
+}
+
 // Journal API
 
 export async function listJournal(params?: {
