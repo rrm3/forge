@@ -448,7 +448,7 @@ async def list_comments(
 
 
 class AddCommentRequest(BaseModel):
-    content: str
+    content: str = Field(max_length=10000)
 
 
 @router.post("/{tip_id}/comments")
@@ -458,6 +458,10 @@ async def add_comment(
     user: AuthUser,
 ):
     """Add a comment to a tip."""
+    tip = await _tips_repo.get(tip_id)
+    if tip is None:
+        raise HTTPException(status_code=404, detail="Tip not found")
+
     comment = TipComment(
         tip_id=tip_id,
         comment_id=str(uuid.uuid4()),

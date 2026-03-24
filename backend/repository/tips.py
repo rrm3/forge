@@ -416,16 +416,21 @@ class DynamoDBTipRepository(TipRepository):
             None,
             partial(self.comments_table.delete_item, Key={"tip_id": tip_id, "comment_id": comment_id}),
         )
-        # Atomic decrement comment_count on the tip
-        await loop.run_in_executor(
-            None,
-            partial(
-                self.tips_table.update_item,
-                Key={"tip_id": tip_id},
-                UpdateExpression="ADD comment_count :neg_one",
-                ExpressionAttributeValues={":neg_one": -1},
-            ),
-        )
+        # Atomic decrement comment_count, but never below zero
+        try:
+            await loop.run_in_executor(
+                None,
+                partial(
+                    self.tips_table.update_item,
+                    Key={"tip_id": tip_id},
+                    UpdateExpression="ADD comment_count :neg_one",
+                    ConditionExpression="comment_count > :zero",
+                    ExpressionAttributeValues={":neg_one": -1, ":zero": 0},
+                ),
+            )
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                raise
 
     async def count_by_authors(self, author_ids: list[str]) -> dict[str, int]:
         if not author_ids:
