@@ -274,7 +274,7 @@ export class ForgeStack extends cdk.Stack {
     const backendFunction = new lambda.DockerImageFunction(this, 'BackendFunction', {
       functionName: `${prefix}-backend`,
       code: lambda.DockerImageCode.fromEcr(ecrRepository, { tagOrDigest: 'latest' }),
-      memorySize: 4096,
+      memorySize: 2048,
       timeout: cdk.Duration.seconds(900),
       role: lambdaRole,
       environment: {
@@ -384,7 +384,7 @@ export class ForgeStack extends cdk.Stack {
         tagOrDigest: 'latest',
         cmd: ['python', '-m', 'awslambdaric', 'backend.lambda_ws.handler'],
       }),
-      memorySize: 4096,
+      memorySize: 2048,
       timeout: cdk.Duration.seconds(900), // 15 min for Worker path
       role: wsLambdaRole,
       environment: {
