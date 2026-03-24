@@ -116,7 +116,7 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete
   return (
     <div
       className={[
-        'group flex items-center gap-2 pr-2 rounded-lg cursor-pointer select-none',
+        'group flex items-center gap-2 px-2 rounded-lg cursor-pointer select-none',
         isActive
           ? 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)]'
           : 'hover:bg-[var(--color-surface-raised)]',
@@ -124,21 +124,13 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete
       style={{
         height: '36px',
         minHeight: '36px',
-        paddingLeft: isFeatured ? '0' : '8px',
       }}
       onClick={onSelect}
     >
-      {isFeatured && (
-        <div
-          className="self-stretch rounded-l-lg flex-shrink-0"
-          style={{ width: '3px', backgroundColor: 'var(--color-primary)' }}
-        />
-      )}
       <Icon
         className="flex-shrink-0 w-3.5 h-3.5"
         style={{
-          color: isActive || isFeatured ? 'var(--color-primary)' : 'var(--color-text-muted)',
-          marginLeft: isFeatured ? '5px' : '0',
+          color: isActive ? 'var(--color-primary)' : isFeatured ? '#8B5CF6' : 'var(--color-text-muted)',
         }}
         strokeWidth={1.5}
       />
@@ -158,7 +150,7 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete
         ) : (
           <p
             className="text-sm truncate"
-            style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
+            style={{ color: isActive ? 'var(--color-primary)' : isFeatured ? '#8B5CF6' : 'var(--color-text-secondary)' }}
             onDoubleClick={(e) => { e.stopPropagation(); startEdit(); }}
           >
             {session.title || 'New Chat'}
@@ -276,7 +268,7 @@ export function SessionList({ ideaCount }: SessionListProps) {
             className="text-sm font-medium flex-1 text-left"
             style={{ color: showIdeas ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
           >
-            Ideas
+            Ideas to Explore
           </span>
           {(ideaCount ?? 0) > 0 && (
             <span className="text-xs" style={{ color: 'var(--color-text-placeholder)' }}>{ideaCount}</span>
@@ -294,7 +286,7 @@ export function SessionList({ ideaCount }: SessionListProps) {
               ? 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)]'
               : 'hover:bg-[var(--color-surface-raised)]',
           ].join(' ')}
-          style={{ height: '32px', minHeight: '32px' }}
+          style={{ height: '36px', minHeight: '36px' }}
         >
           <BookOpen
             className="flex-shrink-0 w-3.5 h-3.5"
@@ -302,8 +294,8 @@ export function SessionList({ ideaCount }: SessionListProps) {
             style={{ color: showTips ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
           />
           <span
-            className="text-xs"
-            style={{ color: showTips ? 'var(--color-primary)' : 'var(--color-text-placeholder)' }}
+            className="text-sm font-medium"
+            style={{ color: showTips ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
           >
             Tips & Tricks
           </span>

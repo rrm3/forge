@@ -92,17 +92,11 @@ export function IdeasView() {
       {/* Header */}
       <div className="px-4 md:px-6 pt-5 pb-4">
         <div className="flex items-center gap-3 mb-2">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150 hover:bg-[var(--color-surface-raised)]"
-            aria-label="Go back"
-          >
-            <ArrowLeft className="w-5 h-5" style={{ color: 'var(--color-text-secondary)' }} strokeWidth={1.5} />
-          </button>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
             Ideas to Explore
           </h1>
         </div>
+        <div className="border-b" style={{ borderColor: 'var(--color-border)' }} />
       </div>
 
       {/* Content */}

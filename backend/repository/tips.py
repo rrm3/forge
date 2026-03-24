@@ -22,8 +22,8 @@ class TipRepository(ABC):
     """Abstract tip repository interface."""
 
     @abstractmethod
-    async def list(self, department: str | None = None, sort_by: str = "recent", limit: int = 50) -> list[Tip]:
-        """List tips, optionally filtered by department."""
+    async def list(self, department: str | None = None, sort_by: str = "recent", limit: int = 50, category: str | None = None) -> list[Tip]:
+        """List tips, optionally filtered by department and/or category."""
         pass
 
     @abstractmethod
@@ -104,11 +104,14 @@ class DynamoDBTipRepository(TipRepository):
             "title": tip.title,
             "content": tip.content,
             "tags": tip.tags,
+            "category": tip.category,
             "vote_count": tip.vote_count,
             "created_at": tip.created_at.isoformat(),
         }
         if tip.summary:
             d["summary"] = tip.summary
+        if tip.artifact:
+            d["artifact"] = tip.artifact
         return d
 
     def _deserialize_tip(self, item: dict) -> Tip:
@@ -120,6 +123,8 @@ class DynamoDBTipRepository(TipRepository):
             content=item["content"],
             summary=item.get("summary", ""),
             tags=list(item.get("tags", [])),
+            category=item.get("category", "tip"),
+            artifact=item.get("artifact", ""),
             vote_count=int(item.get("vote_count", 0)),
             created_at=datetime.fromisoformat(item["created_at"]),
         )
@@ -142,8 +147,8 @@ class DynamoDBTipRepository(TipRepository):
             created_at=datetime.fromisoformat(item["created_at"]),
         )
 
-    async def list(self, department: str | None = None, sort_by: str = "recent", limit: int = 50) -> list[Tip]:
-        """Scan all tips, filter by department in Python, sort in Python.
+    async def list(self, department: str | None = None, sort_by: str = "recent", limit: int = 50, category: str | None = None) -> list[Tip]:
+        """Scan all tips, filter by department/category in Python, sort in Python.
 
         Note: DynamoDB scan returns max 1MB per call. At ~5-10KB per tip this
         handles ~100-200 tips per scan. For 700 employees this is plenty.
@@ -163,6 +168,9 @@ class DynamoDBTipRepository(TipRepository):
         if department:
             dept_lower = department.lower()
             tips = [t for t in tips if t.department.lower() == dept_lower or t.department.lower() in ("everyone", "all", "")]
+
+        if category:
+            tips = [t for t in tips if t.category == category]
 
         if sort_by == "popular":
             tips.sort(key=lambda t: t.vote_count, reverse=True)
@@ -191,7 +199,7 @@ class DynamoDBTipRepository(TipRepository):
         )
 
     async def update(self, tip_id: str, fields: dict) -> Tip | None:
-        allowed = {"title", "content", "tags", "department", "summary"}
+        allowed = {"title", "content", "tags", "department", "summary", "category", "artifact"}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return await self.get(tip_id)
@@ -465,11 +473,13 @@ class MemoryTipRepository(TipRepository):
         }
         path.write_text(json.dumps(data, default=str))
 
-    async def list(self, department: str | None = None, sort_by: str = "recent", limit: int = 50) -> list[Tip]:
+    async def list(self, department: str | None = None, sort_by: str = "recent", limit: int = 50, category: str | None = None) -> list[Tip]:
         tips = list(self._tips.values())
         if department:
             dept_lower = department.lower()
             tips = [t for t in tips if t.department.lower() == dept_lower or t.department.lower() in ("everyone", "all", "")]
+        if category:
+            tips = [t for t in tips if t.category == category]
         if sort_by == "popular":
             tips.sort(key=lambda t: t.vote_count, reverse=True)
         else:
@@ -487,7 +497,7 @@ class MemoryTipRepository(TipRepository):
         tip = self._tips.get(tip_id)
         if tip is None:
             return None
-        allowed = {"title", "content", "tags", "department", "summary"}
+        allowed = {"title", "content", "tags", "department", "summary", "category", "artifact"}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if updates:
             self._tips[tip_id] = tip.model_copy(update=updates)

@@ -142,7 +142,8 @@ async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: d
     session_type = msg.get("type", "chat")
     idea_id = msg.get("idea_id")
     session_id = str(uuid.uuid4())
-    title = "Getting Started" if session_type == "intake" else ""
+    INITIAL_TITLES = {"intake": "Getting Started", "wrapup": "End of Day Wrap Up", "stuck": "Get Help", "tip": "New Tip"}
+    title = INITIAL_TITLES.get(session_type, "")
     session = Session(session_id=session_id, user_id=user.user_id, title=title, type=session_type)
     await _deps.sessions_repo.create(session)
 

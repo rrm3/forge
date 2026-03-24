@@ -203,11 +203,13 @@ export async function listAdminDepartments(): Promise<string[]> {
 export async function listTips(params?: {
   department?: string;
   sort_by?: 'recent' | 'popular';
+  category?: string;
   limit?: number;
 }): Promise<Tip[]> {
   const query = new URLSearchParams();
   if (params?.department) query.set('department', params.department);
   if (params?.sort_by) query.set('sort_by', params.sort_by);
+  if (params?.category) query.set('category', params.category);
   if (params?.limit) query.set('limit', params.limit.toString());
   const qs = query.toString();
   const res = await fetchWithAuth(`${API_BASE}/api/tips${qs ? '?' + qs : ''}`);
@@ -215,10 +217,30 @@ export async function listTips(params?: {
   return res.json();
 }
 
-export async function createTip(tip: { title: string; content: string; tags: string[]; department: string }): Promise<Tip> {
+export async function createTip(tip: {
+  title: string;
+  content: string;
+  tags: string[];
+  department: string;
+  category?: string;
+  artifact?: string;
+}): Promise<Tip> {
   const res = await fetchWithAuth(`${API_BASE}/api/tips`, {
     method: 'POST',
     body: JSON.stringify(tip),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function checkSimilarTips(body: {
+  title: string;
+  content: string;
+  artifact?: string;
+}): Promise<{ matches: import('./types').SimilarMatch[] }> {
+  const res = await fetchWithAuth(`${API_BASE}/api/tips/check-similar`, {
+    method: 'POST',
+    body: JSON.stringify(body),
   });
   await checkResponse(res);
   return res.json();
@@ -230,7 +252,14 @@ export async function getTip(tipId: string): Promise<Tip> {
   return res.json();
 }
 
-export async function updateTip(tipId: string, fields: { title?: string; content?: string; tags?: string[]; department?: string }): Promise<Tip> {
+export async function updateTip(tipId: string, fields: {
+  title?: string;
+  content?: string;
+  tags?: string[];
+  department?: string;
+  category?: string;
+  artifact?: string;
+}): Promise<Tip> {
   const res = await fetchWithAuth(`${API_BASE}/api/tips/${encodeURIComponent(tipId)}`, {
     method: 'PATCH',
     body: JSON.stringify(fields),

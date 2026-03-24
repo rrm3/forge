@@ -352,7 +352,7 @@ async def run_agent_session(
     # - intake/wrapup: hardcoded titles, never overwritten
     # - brainstorm/stuck: defer until user's first real message (opening prompt is generic)
     # - chat/tip: generate immediately on first turn
-    SESSION_TITLE_PREFIXES = {"brainstorm": "Brainstorm", "stuck": "Help"}
+    SESSION_TITLE_PREFIXES = {"brainstorm": "Brainstorm", "stuck": "Help", "tip": "New Tip"}
     DEFERRED_TITLE_TYPES = {"brainstorm", "stuck"}
     needs_title = False
     if session_type not in ("intake", "wrapup"):

@@ -19,7 +19,7 @@ const DEPARTMENTS = [
 ];
 
 interface TipPreviewCardProps {
-  initial: { title: string; content: string; tags: string[]; department: string };
+  initial: { title: string; content: string; tags: string[]; department: string; category?: string };
   onPublished: () => void;
   onShowTips?: () => void;
 }
@@ -61,7 +61,7 @@ export function TipPreviewCard({ initial, onPublished }: TipPreviewCardProps) {
   async function handlePublish() {
     setPublishing(true);
     try {
-      await createTip({ title, content, tags, department });
+      await createTip({ title, content, tags, department, category: initial.category || 'tip' });
       onPublished();
     } catch (err) {
       console.error('Failed to publish tip:', err);

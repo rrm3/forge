@@ -85,6 +85,8 @@ export interface DepartmentConfig {
   objectives: DepartmentObjective[];
 }
 
+export type TipCategory = 'tip' | 'gem' | 'skill';
+
 export interface Tip {
   tip_id: string;
   author_id: string;
@@ -93,9 +95,18 @@ export interface Tip {
   content: string;
   summary: string;
   tags: string[];
+  category: TipCategory;
+  artifact: string;
   vote_count: number;
   user_has_voted: boolean;
   created_at: string;
+}
+
+export interface SimilarMatch {
+  tip: Tip;
+  explanation: string;
+  suggested_comment: string;
+  confidence: number;
 }
 
 export interface TipComment {

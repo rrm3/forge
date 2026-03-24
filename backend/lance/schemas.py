@@ -56,11 +56,25 @@ DEPARTMENT_RESOURCES_SCHEMA = pa.schema(
     ]
 )
 
+TIPS_SCHEMA = pa.schema(
+    [
+        pa.field("id", pa.string(), nullable=False),
+        pa.field("tip_id", pa.string(), nullable=False),
+        pa.field("title", pa.string()),
+        pa.field("category", pa.string()),
+        pa.field("content", pa.string(), nullable=False),
+        pa.field("metadata", pa.string()),  # JSON blob
+        pa.field("created_at", pa.timestamp("us", tz="UTC"), nullable=False),
+        pa.field("vector", VECTOR_TYPE),
+    ]
+)
+
 # Maps collection name -> schema for auto-creation
 BUILTIN_SCHEMAS: dict[str, pa.Schema] = {
     "curriculum": CURRICULUM_SCHEMA,
     "profiles": PROFILES_SCHEMA,
     "department_resources": DEPARTMENT_RESOURCES_SCHEMA,
+    "tips": TIPS_SCHEMA,
 }
 
 # Maps collection name -> the field used as document-level ID for upsert
@@ -68,4 +82,5 @@ DOCUMENT_ID_FIELDS: dict[str, str] = {
     "curriculum": "document_key",
     "profiles": "user_id",
     "department_resources": "document_id",
+    "tips": "tip_id",
 }

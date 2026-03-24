@@ -262,7 +262,7 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
     mode = msg.get("mode", "text")
 
     session_id = str(uuid.uuid4())
-    HARDCODED_TITLES = {"intake": "Getting Started", "wrapup": "End of Day Wrap Up", "stuck": "Get Help"}
+    HARDCODED_TITLES = {"intake": "Getting Started", "wrapup": "End of Day Wrap Up", "stuck": "Get Help", "tip": "New Tip"}
     title = HARDCODED_TITLES.get(session_type, "")
     session = Session(session_id=session_id, user_id=user_data["user_id"], title=title, type=session_type)
     await _deps.sessions_repo.create(session)

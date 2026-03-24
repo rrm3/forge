@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
-import { ArrowLeft, ThumbsUp, Pencil, Trash2, X, Check } from 'lucide-react';
+import { ArrowLeft, ThumbsUp, Pencil, Trash2, X, Check, Copy } from 'lucide-react';
+import { GeminiIcon, ClaudeIcon } from './AiIcons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { voteTip, unvoteTip, updateTip, deleteTip } from '../api/client';
@@ -14,6 +15,23 @@ const DEPARTMENTS = [
   'Finance', 'Global', 'Legal', 'Marketing',
   'Operations', 'People', 'Product', 'Sales', 'Technology',
 ];
+
+const CATEGORY_LABELS: Record<string, string> = {
+  tip: 'General Tip',
+  gem: 'Gemini Gem',
+  skill: 'Claude Skill',
+};
+
+const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
+  tip: { bg: 'var(--color-surface-raised)', text: 'var(--color-text-muted)' },
+  gem: { bg: 'var(--color-surface-raised)', text: 'var(--color-text-muted)' },
+  skill: { bg: 'var(--color-surface-raised)', text: 'var(--color-text-muted)' },
+};
+
+const ARTIFACT_LABELS: Record<string, string> = {
+  gem: 'Gem Instructions',
+  skill: 'Skill Definition',
+};
 
 interface TipDetailProps {
   tip: Tip;
@@ -51,10 +69,14 @@ function relativeTime(dateStr: string): string {
 export function TipDetail({ tip, onBack, onVoteChange, onTipUpdated, onTipDeleted }: TipDetailProps) {
   const { user } = useAuth();
   const isAuthor = user?.userId === tip.author_id;
+  const cat = tip.category || 'tip';
+  const catColor = CATEGORY_COLORS[cat] || CATEGORY_COLORS.tip;
+  const hasArtifact = (cat === 'gem' || cat === 'skill') && tip.artifact;
 
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(tip.title);
   const [editContent, setEditContent] = useState(tip.content);
+  const [editArtifact, setEditArtifact] = useState(tip.artifact || '');
   const [editTags, setEditTags] = useState<string[]>(tip.tags);
   const [editDepartment, setEditDepartment] = useState(tip.department);
   const [tagInput, setTagInput] = useState('');
@@ -62,10 +84,12 @@ export function TipDetail({ tip, onBack, onVoteChange, onTipUpdated, onTipDelete
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   function startEditing() {
     setEditTitle(tip.title);
     setEditContent(tip.content);
+    setEditArtifact(tip.artifact || '');
     setEditTags([...tip.tags]);
     setEditDepartment(tip.department);
     setEditing(true);
@@ -89,12 +113,16 @@ export function TipDetail({ tip, onBack, onVoteChange, onTipUpdated, onTipDelete
     setSaving(true);
     setError(null);
     try {
-      const updated = await updateTip(tip.tip_id, {
+      const fields: Record<string, unknown> = {
         title: editTitle,
         content: editContent,
         tags: editTags,
         department: editDepartment,
-      });
+      };
+      if (cat === 'gem' || cat === 'skill') {
+        fields.artifact = editArtifact;
+      }
+      const updated = await updateTip(tip.tip_id, fields as any);
       onTipUpdated?.(updated);
       setEditing(false);
     } catch (err) {
@@ -116,6 +144,16 @@ export function TipDetail({ tip, onBack, onVoteChange, onTipUpdated, onTipDelete
       setError('Failed to delete tip.');
       setDeleting(false);
       setConfirmDelete(false);
+    }
+  }
+
+  async function handleCopyArtifact() {
+    try {
+      await navigator.clipboard.writeText(tip.artifact);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback
     }
   }
 
@@ -158,22 +196,44 @@ export function TipDetail({ tip, onBack, onVoteChange, onTipUpdated, onTipDelete
                 onChange={(e) => setEditTitle(e.target.value)}
                 className="w-full text-2xl font-semibold bg-transparent border-b outline-none pb-2"
                 style={{ color: 'var(--color-text-primary)', borderColor: 'var(--color-border)' }}
-                placeholder="Tip title..."
+                placeholder="Title..."
               />
 
               {/* Content */}
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                rows={10}
+                rows={6}
                 className="w-full text-sm bg-transparent border rounded-lg outline-none p-3 resize-y"
                 style={{
                   color: 'var(--color-text-primary)',
                   borderColor: 'var(--color-border)',
                   fontFamily: 'inherit',
                 }}
-                placeholder="Write your tip in markdown..."
+                placeholder="Description..."
               />
+
+              {/* Artifact (gems/skills only) */}
+              {(cat === 'gem' || cat === 'skill') && (
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block" style={{ color: 'var(--color-text-primary)' }}>
+                    {ARTIFACT_LABELS[cat] || 'Instructions'}
+                  </label>
+                  <textarea
+                    value={editArtifact}
+                    onChange={(e) => setEditArtifact(e.target.value)}
+                    rows={10}
+                    className="w-full text-sm border rounded-lg outline-none p-3 resize-y font-mono"
+                    style={{
+                      borderColor: 'var(--color-border)',
+                      color: 'var(--color-text-primary)',
+                      backgroundColor: 'var(--color-surface)',
+                      fontSize: '13px',
+                      lineHeight: '1.5',
+                    }}
+                  />
+                </div>
+              )}
 
               {/* Tags */}
               <div className="flex flex-wrap items-center gap-1.5">
@@ -257,18 +317,28 @@ export function TipDetail({ tip, onBack, onVoteChange, onTipUpdated, onTipDelete
           ) : (
             /* ---- View mode ---- */
             <>
-              {/* Title + action buttons */}
+              {/* Title + category badge + action buttons */}
               <div className="flex items-start justify-between gap-3 mb-3">
-                <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                  {tip.title}
-                </h1>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                    {tip.title}
+                  </h1>
+                  <span
+                    className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
+                    style={{ backgroundColor: catColor.bg, color: catColor.text }}
+                  >
+                    {cat === 'gem' && <GeminiIcon size={11} />}
+                    {cat === 'skill' && <ClaudeIcon size={11} />}
+                    {CATEGORY_LABELS[cat] || 'General Tip'}
+                  </span>
+                </div>
                 {isAuthor && (
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={startEditing}
                       className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors hover:bg-[var(--color-surface-raised)]"
-                      title="Edit tip"
-                      aria-label="Edit tip"
+                      title="Edit"
+                      aria-label="Edit"
                     >
                       <Pencil className="w-4 h-4" style={{ color: 'var(--color-text-muted)' }} strokeWidth={1.5} />
                     </button>
@@ -296,8 +366,8 @@ export function TipDetail({ tip, onBack, onVoteChange, onTipUpdated, onTipDelete
                       <button
                         onClick={() => setConfirmDelete(true)}
                         className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors hover:bg-[var(--color-surface-raised)]"
-                        title="Delete tip"
-                        aria-label="Delete tip"
+                        title="Delete"
+                        aria-label="Delete"
                       >
                         <Trash2 className="w-4 h-4" style={{ color: 'var(--color-text-muted)' }} strokeWidth={1.5} />
                       </button>
@@ -332,6 +402,53 @@ export function TipDetail({ tip, onBack, onVoteChange, onTipUpdated, onTipDelete
                   {tip.content}
                 </ReactMarkdown>
               </div>
+
+              {/* Artifact section (gems/skills only) */}
+              {hasArtifact && (
+                <div
+                  className="rounded-lg border mb-5 overflow-hidden"
+                  style={{
+                    borderColor: 'var(--color-border)',
+                    backgroundColor: 'var(--color-surface)',
+                  }}
+                >
+                  <div
+                    className="flex items-center justify-between px-4 py-2.5 border-b"
+                    style={{ borderColor: 'var(--color-border)' }}
+                  >
+                    <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                      {ARTIFACT_LABELS[cat] || 'Instructions'}
+                    </span>
+                    <button
+                      onClick={handleCopyArtifact}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors hover:bg-[var(--color-surface-raised)]"
+                      style={{ color: copied ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" strokeWidth={2} />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" strokeWidth={1.5} />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="px-4 py-3 overflow-x-auto">
+                    <div
+                      className="prose prose-sm max-w-none"
+                      style={{ color: 'var(--color-text-primary)', fontSize: '13px' }}
+                    >
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {tip.artifact}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Tags */}
               {tip.tags.length > 0 && (

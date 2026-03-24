@@ -95,6 +95,8 @@ class Tip(BaseModel):
     content: str
     summary: str = ""
     tags: list[str] = Field(default_factory=list)
+    category: str = "tip"  # tip, gem, skill
+    artifact: str = ""  # gem instructions or skill definition (markdown)
     vote_count: int = 0
     created_at: datetime = Field(default_factory=_now)
 
