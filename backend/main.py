@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
     orgchart = await asyncio.get_event_loop().run_in_executor(None, build_orgchart)
 
     # Wire orgchart into deps now that it's loaded
-    set_profile_deps(repos["profiles"], orgchart, sessions_repo=repos["sessions"], storage=storage)
+    set_profile_deps(repos["profiles"], orgchart, sessions_repo=repos["sessions"], storage=storage, user_ideas_repo=repos["user_ideas"])
     set_ws_deps(
         sessions_repo=repos["sessions"],
         profiles_repo=repos["profiles"],
@@ -112,7 +112,7 @@ set_ws_deps(
     orgchart=orgchart,
 )
 set_sessions_deps(repos["sessions"], storage)
-set_profile_deps(repos["profiles"], orgchart, sessions_repo=repos["sessions"], storage=storage)
+set_profile_deps(repos["profiles"], orgchart, sessions_repo=repos["sessions"], storage=storage, user_ideas_repo=repos["user_ideas"])
 set_journal_deps(repos["journal"])
 set_ideas_deps(repos["ideas"])
 set_tips_deps(repos["tips"])

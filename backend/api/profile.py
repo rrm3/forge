@@ -18,14 +18,16 @@ _profiles_repo = None
 _sessions_repo = None
 _storage = None
 _orgchart: OrgChart | None = None
+_user_ideas_repo = None
 
 
-def set_profile_deps(profiles_repo, orgchart=None, sessions_repo=None, storage=None):
-    global _profiles_repo, _orgchart, _sessions_repo, _storage
+def set_profile_deps(profiles_repo, orgchart=None, sessions_repo=None, storage=None, user_ideas_repo=None):
+    global _profiles_repo, _orgchart, _sessions_repo, _storage, _user_ideas_repo
     _profiles_repo = profiles_repo
     _orgchart = orgchart
     _sessions_repo = sessions_repo
     _storage = storage
+    _user_ideas_repo = user_ideas_repo
 
 
 async def _get_or_create_profile(user: AuthUser) -> UserProfile:
@@ -98,14 +100,9 @@ async def update_profile(body: dict, user: AuthUser):
 async def reset_intake(user: AuthUser):
     """Reset intake state: clear profile intake fields, delete intake session + transcript.
 
-    Requires admin mode (enforced by checking admin access).
+    Available to any authenticated user (resets their own data only).
+    Also used by the admin TopBar reset button.
     """
-    from backend.api.admin import _get_admin_departments
-
-    departments = await _get_admin_departments(user.email)
-    if departments is None:
-        raise HTTPException(status_code=403, detail="Admin access required")
-
     # Clear ALL fields that the intake conversation can populate
     await _profiles_repo.update(user.user_id, {
         "intake_completed_at": None,
@@ -148,6 +145,17 @@ async def reset_intake(user: AuthUser):
                 # Delete session metadata
                 await _sessions_repo.delete(user.user_id, s.session_id)
                 logger.info("Deleted intake session %s for user %s", s.session_id, user.user_id)
+
+    # Delete ideas that were captured during intake
+    deleted_ideas = 0
+    if _user_ideas_repo:
+        ideas = await _user_ideas_repo.list(user.user_id)
+        for idea in ideas:
+            if idea.source == "intake":
+                await _user_ideas_repo.delete(user.user_id, idea.idea_id)
+                deleted_ideas += 1
+        if deleted_ideas:
+            logger.info("Deleted %d intake ideas for user %s", deleted_ideas, user.user_id)
 
     logger.info("Reset intake for user %s (%s)", user.user_id, user.email)
     return {"status": "reset"}

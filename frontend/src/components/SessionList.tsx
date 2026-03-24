@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck, Home, X, BookOpen } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
+import { resetIntake } from '../api/client';
+import { ConfirmResetModal } from './ConfirmResetModal';
 import type { Session } from '../api/types';
 
 const SESSION_ICONS: Record<string, typeof Lightbulb> = {
@@ -66,9 +69,10 @@ interface SessionRowProps {
   onDelete: () => void;
   onRename: (title: string) => void;
   canDelete?: boolean;
+  immediateDelete?: boolean;  // skip inline "Delete?" confirm (e.g. intake uses a modal instead)
 }
 
-function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete = true }: SessionRowProps) {
+function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete = true, immediateDelete }: SessionRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(session.title || 'New Chat');
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -101,6 +105,10 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete
 
   function handleDeleteClick(e: React.MouseEvent) {
     e.stopPropagation();
+    if (immediateDelete) {
+      onDelete();
+      return;
+    }
     if (confirmDelete) {
       onDelete();
       setConfirmDelete(false);
@@ -192,6 +200,8 @@ export function SessionList({ ideaCount }: SessionListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [collapsedWeeks, setCollapsedWeeks] = useState<Set<string>>(new Set());
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   const filteredSessions = useMemo(() => {
     if (!searchQuery.trim()) return state.sessions;
@@ -368,17 +378,21 @@ export function SessionList({ ideaCount }: SessionListProps) {
                         session={session}
                         isActive={session.session_id === state.activeSessionId}
                         onSelect={() => navigate(`/chat/${session.session_id}`)}
-                        onDelete={async () => {
-                          try {
-                            const wasActive = session.session_id === state.activeSessionId;
-                            await removeSession(session.session_id);
-                            if (wasActive) navigate('/');
-                          } catch (err) {
-                            console.error('Failed to delete session:', err);
-                          }
-                        }}
+                        onDelete={session.type === 'intake'
+                          ? () => { setResetModalOpen(true); }
+                          : async () => {
+                              try {
+                                const wasActive = session.session_id === state.activeSessionId;
+                                await removeSession(session.session_id);
+                                if (wasActive) navigate('/');
+                              } catch (err) {
+                                console.error('Failed to delete session:', err);
+                              }
+                            }
+                        }
                         onRename={(title) => updateSessionTitle(session.session_id, title)}
-                        canDelete={session.type !== 'intake'}
+                        canDelete
+                        immediateDelete={session.type === 'intake'}
                       />
                     ))}
                   </div>
@@ -408,6 +422,26 @@ export function SessionList({ ideaCount }: SessionListProps) {
           <Plus className="w-4 h-4" strokeWidth={2} />
         </button>
       </div>
+
+      {createPortal(
+        <ConfirmResetModal
+          open={resetModalOpen}
+          onCancel={() => setResetModalOpen(false)}
+          onConfirm={async () => {
+            setResetLoading(true);
+            try {
+              await resetIntake();
+              window.location.href = '/day1';
+            } catch (err) {
+              console.error('Failed to reset intake:', err);
+              setResetLoading(false);
+              setResetModalOpen(false);
+            }
+          }}
+          loading={resetLoading}
+        />,
+        document.body
+      )}
     </div>
   );
 }

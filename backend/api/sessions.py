@@ -71,9 +71,9 @@ async def delete_session(session_id: str, user: AuthUser):
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Intake sessions ("Getting Started") cannot be deleted
+    # Intake sessions must be reset via /api/profile/reset-intake, not deleted directly
     if session.type == "intake":
-        raise HTTPException(status_code=403, detail="Intake session cannot be deleted")
+        raise HTTPException(status_code=403, detail="Use the reset option to delete your intake session")
 
     # Delete transcript from storage
     key = f"sessions/{user.user_id}/{session_id}.json"
