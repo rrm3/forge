@@ -12,6 +12,7 @@ import { createTip, checkSimilarTips, addTipComment } from '../api/client';
 import type { TipCategory, SimilarMatch } from '../api/types';
 import { ProfileChip } from './ProfileChip';
 import { GeminiIcon, ClaudeIcon } from './AiIcons';
+import { useProfileCache } from '../state/profileCache';
 
 const DEPARTMENTS = [
   'Everyone',
@@ -168,10 +169,10 @@ export function CreateGemSkillForm({ category, onBack, onPublished }: CreateGemS
                   </p>
 
                   {/* Editable suggested comment */}
-                  {editingComment[match.tip.tip_id] && (
+                  {editingComment[match.tip.tip_id] !== undefined && (
                     <div className="mb-3">
                       <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--color-text-muted)' }}>
-                        Your comment (editable):
+                        Instead of publishing a duplicate, add a comment to their tip:
                       </label>
                       <textarea
                         value={editingComment[match.tip.tip_id]}
@@ -187,14 +188,11 @@ export function CreateGemSkillForm({ category, onBack, onPublished }: CreateGemS
                     </div>
                   )}
 
-                  <button
+                  <GemSkillCommentButton
+                    authorId={match.tip.author_id}
                     onClick={() => handleAddToDiscussion(match.tip.tip_id)}
                     disabled={publishing || !editingComment[match.tip.tip_id]?.trim()}
-                    className="text-sm font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                    style={{ color: 'var(--color-primary)', backgroundColor: 'var(--color-primary-subtle)' }}
-                  >
-                    Add to Discussion
-                  </button>
+                  />
                 </div>
               ))}
             </div>
@@ -452,5 +450,21 @@ export function CreateGemSkillForm({ category, onBack, onPublished }: CreateGemS
         </div>
       </div>
     </div>
+  );
+}
+
+function GemSkillCommentButton({ authorId, onClick, disabled }: { authorId: string; onClick: () => void; disabled: boolean }) {
+  const profile = useProfileCache((s) => s.profiles[authorId]);
+  const firstName = profile?.name?.split(' ')[0] || 'Their';
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="text-sm font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+      style={{ color: 'var(--color-primary)', backgroundColor: 'var(--color-primary-subtle)' }}
+    >
+      Post a Comment on {firstName}'s Tip
+    </button>
   );
 }

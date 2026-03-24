@@ -1,17 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ThumbsUp, Plus, Info, X, Lightbulb } from 'lucide-react';
-import { listTips, getTip, voteTip, unvoteTip } from '../api/client';
+import { ThumbsUp, Plus, Info, X, Lightbulb, MessageCircle } from 'lucide-react';
+import { listTips, voteTip, unvoteTip } from '../api/client';
 import type { Tip, TipCategory } from '../api/types';
-import { TipDetail } from './TipDetail';
 import { CreateGemSkillForm } from './CreateGemSkillForm';
 import { ProfileChip } from './ProfileChip';
 import { GeminiIcon, ClaudeIcon } from './AiIcons';
 import { useSession } from '../state/SessionContext';
 
-interface TipsViewProps {
-  initialTipId?: string;
-}
+interface TipsViewProps {}
 
 const DEPARTMENTS = [
   'chief-of-staff',
@@ -88,7 +85,7 @@ function relativeTime(dateStr: string): string {
   return `${diffMonth}mo ago`;
 }
 
-export function TipsView({ initialTipId }: TipsViewProps) {
+export function TipsView() {
   const navigate = useNavigate();
   const { startTypedSession } = useSession();
   const [tips, setTips] = useState<Tip[]>([]);
@@ -97,17 +94,8 @@ export function TipsView({ initialTipId }: TipsViewProps) {
   const [department, setDepartment] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'popular'>('recent');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
-  const [selectedTip, setSelectedTip] = useState<Tip | null>(null);
   const [showCreateForm, setShowCreateForm] = useState<'gem' | 'skill' | null>(null);
   const [skillBannerDismissed, setSkillBannerDismissed] = useState(false);
-
-  useEffect(() => {
-    if (initialTipId && !selectedTip) {
-      getTip(initialTipId)
-        .then((tip) => setSelectedTip(tip))
-        .catch(() => navigate('/tips', { replace: true }));
-    }
-  }, [initialTipId, selectedTip, navigate]);
 
   const fetchTips = useCallback(async () => {
     setLoading(true);
@@ -159,43 +147,10 @@ export function TipsView({ initialTipId }: TipsViewProps) {
     }
   }, []);
 
-  const handleVoteChange = useCallback((tipId: string, voted: boolean, newCount: number) => {
-    setTips((prev) =>
-      prev.map((t) =>
-        t.tip_id === tipId
-          ? { ...t, user_has_voted: voted, vote_count: newCount }
-          : t
-      )
-    );
-  }, []);
-
-  const handleTipUpdated = useCallback((updated: Tip) => {
-    setTips((prev) => prev.map((t) => t.tip_id === updated.tip_id ? updated : t));
-    setSelectedTip(updated);
-  }, []);
-
-  const handleTipDeleted = useCallback((tipId: string) => {
-    setTips((prev) => prev.filter((t) => t.tip_id !== tipId));
-    setSelectedTip(null);
-  }, []);
-
   const handlePublished = useCallback(() => {
     setShowCreateForm(null);
     fetchTips();
   }, [fetchTips]);
-
-  // Detail view
-  if (selectedTip) {
-    return (
-      <TipDetail
-        tip={selectedTip}
-        onBack={() => { setSelectedTip(null); fetchTips(); navigate('/tips'); }}
-        onVoteChange={handleVoteChange}
-        onTipUpdated={handleTipUpdated}
-        onTipDeleted={handleTipDeleted}
-      />
-    );
-  }
 
   // Create gem/skill form
   if (showCreateForm) {
@@ -403,7 +358,7 @@ export function TipsView({ initialTipId }: TipsViewProps) {
               return (
                 <button
                   key={tip.tip_id}
-                  onClick={() => { setSelectedTip(tip); navigate(`/tips/${tip.tip_id}`); }}
+                  onClick={() => navigate(`/tips/${tip.tip_id}`)}
                   className="w-full text-left rounded-xl border p-4 transition-all duration-200 hover:border-[var(--color-primary)] cursor-pointer"
                   style={{
                     backgroundColor: 'var(--color-surface-white)',
@@ -472,29 +427,37 @@ export function TipsView({ initialTipId }: TipsViewProps) {
                     </div>
                   )}
 
-                  {/* Bottom row: date + upvote */}
+                  {/* Bottom row: date + comments + upvote */}
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                       {relativeTime(tip.created_at)}
                     </span>
-                    <div
-                      onClick={(e) => handleVote(e, tip)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleVote(e as any, tip); } }}
-                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg transition-colors duration-150"
-                      style={{
-                        backgroundColor: tip.user_has_voted ? 'var(--color-primary-subtle)' : 'transparent',
-                        color: tip.user_has_voted ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                      }}
-                      aria-label={tip.user_has_voted ? 'Remove upvote' : 'Upvote'}
-                    >
-                      <ThumbsUp
-                        className="w-3.5 h-3.5"
-                        strokeWidth={1.5}
-                        fill={tip.user_has_voted ? 'currentColor' : 'none'}
-                      />
-                      <span className="text-xs font-medium">{tip.vote_count}</span>
+                    <div className="flex items-center gap-3">
+                      {(tip.comment_count || 0) > 0 && (
+                        <div className="flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}>
+                          <MessageCircle className="w-3.5 h-3.5" strokeWidth={1.5} />
+                          <span className="text-xs font-medium">{tip.comment_count}</span>
+                        </div>
+                      )}
+                      <div
+                        onClick={(e) => handleVote(e, tip)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleVote(e as any, tip); } }}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-lg transition-colors duration-150"
+                        style={{
+                          backgroundColor: tip.user_has_voted ? 'var(--color-primary-subtle)' : 'transparent',
+                          color: tip.user_has_voted ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                        }}
+                        aria-label={tip.user_has_voted ? 'Remove upvote' : 'Upvote'}
+                      >
+                        <ThumbsUp
+                          className="w-3.5 h-3.5"
+                          strokeWidth={1.5}
+                          fill={tip.user_has_voted ? 'currentColor' : 'none'}
+                        />
+                        <span className="text-xs font-medium">{tip.vote_count}</span>
+                      </div>
                     </div>
                   </div>
                 </button>

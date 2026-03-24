@@ -106,6 +106,7 @@ class DynamoDBTipRepository(TipRepository):
             "tags": tip.tags,
             "category": tip.category,
             "vote_count": tip.vote_count,
+            "comment_count": tip.comment_count,
             "created_at": tip.created_at.isoformat(),
         }
         if tip.summary:
@@ -126,6 +127,7 @@ class DynamoDBTipRepository(TipRepository):
             category=item.get("category", "tip"),
             artifact=item.get("artifact", ""),
             vote_count=int(item.get("vote_count", 0)),
+            comment_count=int(item.get("comment_count", 0)),
             created_at=datetime.fromisoformat(item["created_at"]),
         )
 
@@ -377,6 +379,16 @@ class DynamoDBTipRepository(TipRepository):
             None,
             partial(self.comments_table.put_item, Item=self._serialize_comment(comment)),
         )
+        # Atomic increment comment_count on the tip
+        await loop.run_in_executor(
+            None,
+            partial(
+                self.tips_table.update_item,
+                Key={"tip_id": comment.tip_id},
+                UpdateExpression="ADD comment_count :one",
+                ExpressionAttributeValues={":one": 1},
+            ),
+        )
 
     async def update_comment(self, tip_id: str, comment_id: str, content: str) -> TipComment | None:
         loop = asyncio.get_event_loop()
@@ -403,6 +415,16 @@ class DynamoDBTipRepository(TipRepository):
         await loop.run_in_executor(
             None,
             partial(self.comments_table.delete_item, Key={"tip_id": tip_id, "comment_id": comment_id}),
+        )
+        # Atomic decrement comment_count on the tip
+        await loop.run_in_executor(
+            None,
+            partial(
+                self.tips_table.update_item,
+                Key={"tip_id": tip_id},
+                UpdateExpression="ADD comment_count :neg_one",
+                ExpressionAttributeValues={":neg_one": -1},
+            ),
         )
 
     async def count_by_authors(self, author_ids: list[str]) -> dict[str, int]:
@@ -542,6 +564,9 @@ class MemoryTipRepository(TipRepository):
         if comment.tip_id not in self._comments:
             self._comments[comment.tip_id] = []
         self._comments[comment.tip_id].append(comment)
+        tip = self._tips.get(comment.tip_id)
+        if tip:
+            self._tips[comment.tip_id] = tip.model_copy(update={"comment_count": tip.comment_count + 1})
         self._save()
 
     async def update_comment(self, tip_id: str, comment_id: str, content: str) -> TipComment | None:
@@ -556,6 +581,9 @@ class MemoryTipRepository(TipRepository):
     async def delete_comment(self, tip_id: str, comment_id: str) -> None:
         if tip_id in self._comments:
             self._comments[tip_id] = [c for c in self._comments[tip_id] if c.comment_id != comment_id]
+            tip = self._tips.get(tip_id)
+            if tip:
+                self._tips[tip_id] = tip.model_copy(update={"comment_count": max(0, tip.comment_count - 1)})
             self._save()
 
     async def count_by_authors(self, author_ids: list[str]) -> dict[str, int]:

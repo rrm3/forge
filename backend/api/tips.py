@@ -25,6 +25,7 @@ router = APIRouter(prefix="/tips", tags=["tips"])
 _tips_repo = None
 
 HAIKU_MODEL = "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
+SONNET_MODEL = "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0"
 LANCE_SCOPE = "tips"
 LANCE_COLLECTION = "tips"
 
@@ -119,12 +120,27 @@ Existing item:
 Title: {existing_title}
 Description: {existing_content}
 
-Determine:
-1. Is the new submission substantively the same as the existing item? (Not just topically related, but covering the same core insight, workflow, or technique.)
-2. If they are similar but the new one adds something, what is the new/different information?
+Is the new submission substantively the same as the existing item? Not just topically related, but covering the same core insight, workflow, or technique.
 
 Return JSON only:
-{{"is_duplicate": true/false, "confidence": 0.0-1.0, "explanation": "one sentence why", "new_info": "what the new submission adds (empty string if nothing new)"}}"""
+{{"is_duplicate": true/false, "confidence": 0.0-1.0, "explanation": "one sentence explaining the overlap to the submitter"}}"""
+
+_SUGGESTED_COMMENT_PROMPT = """\
+Someone tried to post a tip to a company knowledge base, but a colleague already posted something very similar. We'd like to suggest a comment they could add to the existing tip instead of creating a duplicate.
+
+Their submission:
+Title: {new_title}
+Description: {new_description}
+
+The existing tip they'd be commenting on:
+Title: {existing_title}
+Description: {existing_content}
+
+Write a friendly, first-person comment they could post on the existing tip. The tone should be like a colleague chiming in on a Slack thread - conversational, collaborative, helpful.
+
+If the two are essentially identical, write something acknowledging the tip and adding a small personal observation or endorsement. If the new one has a different angle, tool, or approach, highlight what's different and what they learned. Be as detailed as needed to capture the value of what they wanted to share.
+
+Do NOT write a clinical comparison or diff. Write it as if you ARE the person commenting. Just the comment text, no JSON, no quotes."""
 
 
 TipCategoryType = Literal["tip", "gem", "skill"]
@@ -179,7 +195,7 @@ async def check_similar(body: CheckSimilarRequest, user: AuthUser):
     if not candidate_tip_ids:
         return {"matches": []}
 
-    # Run Haiku duplicate check on each candidate
+    # Step 1: Haiku checks if each candidate is a true duplicate (fast, cheap)
     from backend.llm import call_llm
 
     matches = []
@@ -199,10 +215,9 @@ async def check_similar(body: CheckSimilarRequest, user: AuthUser):
             resp = await call_llm(
                 messages=[{"role": "user", "content": prompt}],
                 model=HAIKU_MODEL,
-                max_tokens=300,
+                max_tokens=200,
             )
             text = (resp.content or "").strip()
-            # Strip code fences if present
             if text.startswith("```"):
                 text = text.split("\n", 1)[1] if "\n" in text else text[3:]
                 if text.endswith("```"):
@@ -211,17 +226,42 @@ async def check_similar(body: CheckSimilarRequest, user: AuthUser):
 
             result = json.loads(text)
             if result.get("is_duplicate") and result.get("confidence", 0) >= 0.6:
-                tip_data = existing_tip.model_dump(mode="json")
                 matches.append({
-                    "tip": tip_data,
+                    "tip": existing_tip,
                     "explanation": result.get("explanation", ""),
-                    "suggested_comment": result.get("new_info", ""),
                     "confidence": result.get("confidence", 0),
                 })
         except (json.JSONDecodeError, ValueError):
             logger.debug("Haiku duplicate check returned invalid JSON for tip %s", tid)
         except Exception:
             logger.warning("Haiku duplicate check failed for tip %s", tid, exc_info=True)
+
+    if not matches:
+        return {"matches": []}
+
+    # Step 2: Sonnet writes a natural first-person comment for each match
+    for match in matches:
+        existing_tip = match["tip"]
+        comment_prompt = _SUGGESTED_COMMENT_PROMPT.format(
+            new_title=body.title,
+            new_description=body.content[:3000],
+            existing_title=existing_tip.title,
+            existing_content=existing_tip.content[:3000],
+        )
+
+        try:
+            resp = await call_llm(
+                messages=[{"role": "user", "content": comment_prompt}],
+                model=SONNET_MODEL,
+                max_tokens=500,
+            )
+            match["suggested_comment"] = (resp.content or "").strip()
+        except Exception:
+            logger.warning("Sonnet comment generation failed", exc_info=True)
+            match["suggested_comment"] = ""
+
+        # Serialize the tip for the response
+        match["tip"] = existing_tip.model_dump(mode="json")
 
     return {"matches": matches}
 

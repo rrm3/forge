@@ -193,8 +193,19 @@ export function TipCommentSection({ tipId }: TipCommentSectionProps) {
               {editingId === comment.comment_id ? (
                 <div className="pl-[30px]">
                   <textarea
+                    ref={(el) => {
+                      if (el) {
+                        el.style.height = 'auto';
+                        el.style.height = el.scrollHeight + 'px';
+                      }
+                    }}
                     value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
+                    onChange={(e) => {
+                      setEditContent(e.target.value);
+                      const el = e.target;
+                      el.style.height = 'auto';
+                      el.style.height = el.scrollHeight + 'px';
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                         e.preventDefault();
@@ -202,12 +213,12 @@ export function TipCommentSection({ tipId }: TipCommentSectionProps) {
                       }
                       if (e.key === 'Escape') cancelEditing();
                     }}
-                    rows={2}
-                    className="w-full text-sm bg-transparent border rounded-lg outline-none p-2 resize-none"
+                    className="w-full text-sm bg-transparent border rounded-lg outline-none p-3 resize-none leading-relaxed"
                     style={{
                       color: 'var(--color-text-primary)',
                       borderColor: 'var(--color-primary)',
                       fontFamily: 'inherit',
+                      minHeight: '80px',
                     }}
                     disabled={editSaving}
                     autoFocus

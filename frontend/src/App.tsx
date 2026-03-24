@@ -132,13 +132,14 @@ import { SessionList } from './components/SessionList';
 import { ChatView } from './components/ChatView';
 import { HomeScreen } from './components/HomeScreen';
 import { TipsView } from './components/TipsView';
+import { TipDetail } from './components/TipDetail';
 import { IdeasView } from './components/IdeasView';
 import { IntakeView } from './components/IntakeView';
 import { TopBar } from './components/TopBar';
 import { AdminPanel } from './components/AdminPanel';
 import { AdminLayout } from './components/AdminLayout';
 import { AdminUsers } from './components/AdminUsers';
-import { getProfile, getAdminAccess, listUserIdeas } from './api/client';
+import { getProfile, getAdminAccess, listUserIdeas, getTip } from './api/client';
 import { useProfileCache } from './state/profileCache';
 import type { UserProfile } from './api/types';
 
@@ -161,11 +162,37 @@ function ChatRoute() {
   return <ChatView />;
 }
 
-/** Wraps TipsView and passes the optional tipId from the URL path. */
+/** Wraps TipsView/TipDetail based on URL. */
 function TipsRoute() {
   const { '*': splat } = useParams();
   const tipId = splat || undefined;
-  return <TipsView initialTipId={tipId} />;
+  if (tipId) {
+    return <TipsDetailRoute tipId={tipId} />;
+  }
+  return <TipsView />;
+}
+
+function TipsDetailRoute({ tipId }: { tipId: string }) {
+  const navigate = useNavigate();
+  const [tip, setTip] = useState<import('./api/types').Tip | null>(null);
+
+  useEffect(() => {
+    getTip(tipId)
+      .then(setTip)
+      .catch(() => navigate('/tips', { replace: true }));
+  }, [tipId, navigate]);
+
+  if (!tip) return null;
+
+  return (
+    <TipDetail
+      tip={tip}
+      onBack={() => navigate('/tips')}
+      onVoteChange={(id, voted, count) => setTip(t => t ? { ...t, user_has_voted: voted, vote_count: count } : t)}
+      onTipUpdated={setTip}
+      onTipDeleted={() => navigate('/tips')}
+    />
+  );
 }
 
 /** Main layout with sidebar, used for all post-intake routes. */

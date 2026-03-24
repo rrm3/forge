@@ -98,6 +98,7 @@ class Tip(BaseModel):
     category: str = "tip"  # tip, gem, skill
     artifact: str = ""  # gem instructions or skill definition (markdown)
     vote_count: int = 0
+    comment_count: int = 0
     created_at: datetime = Field(default_factory=_now)
 
 

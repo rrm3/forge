@@ -98,6 +98,7 @@ export interface Tip {
   category: TipCategory;
   artifact: string;
   vote_count: number;
+  comment_count: number;
   user_has_voted: boolean;
   created_at: string;
 }
