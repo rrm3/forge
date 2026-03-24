@@ -116,7 +116,6 @@ async def run_agent_session(
             "location": profile.location,
             "onboarding_complete": profile.onboarding_complete,
             "intake_completed_at": profile.intake_completed_at.isoformat() if profile.intake_completed_at else None,
-            "ai_proficiency_level": profile.ai_proficiency.get("level") if isinstance(profile.ai_proficiency, dict) else None,
             "created_at": profile.created_at.isoformat() if profile.created_at else None,
         })
 
