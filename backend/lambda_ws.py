@@ -275,6 +275,7 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
 
     session_type = msg.get("type", "chat")
     mode = msg.get("mode", "text")
+    user_message = msg.get("message", "")
 
     session_id = str(uuid.uuid4())
     HARDCODED_TITLES = {"stuck": "Get Help", "tip": "New Tip"}
@@ -300,7 +301,7 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
             user_email=user_data.get("email", ""),
             user_name=user_data.get("name", ""),
             session_id=session_id,
-            user_message="",
+            user_message=user_message,
             deps=_deps,
             is_new_session=True,
             session_type=session_type,

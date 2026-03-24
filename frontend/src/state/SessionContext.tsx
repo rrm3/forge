@@ -411,8 +411,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Send to existing session
         forgeWs.chat(sessionId, message);
       } else {
-        // Create a new session of type 'chat'
-        forgeWs.startSession('chat');
+        // Create a new session of type 'chat' with the initial message
+        forgeWs.startSession('chat', undefined, message);
       }
     },
     []

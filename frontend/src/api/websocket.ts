@@ -168,9 +168,10 @@ class ForgeWebSocket {
   }
 
   // Convenience methods for common actions
-  startSession(type: string, ideaId?: string) {
+  startSession(type: string, ideaId?: string, message?: string) {
     const msg: Record<string, unknown> = { action: 'start_session', type };
     if (ideaId) msg.idea_id = ideaId;
+    if (message) msg.message = message;
     this.send(msg);
   }
 

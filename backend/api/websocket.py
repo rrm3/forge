@@ -162,8 +162,9 @@ async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: d
             await _deps.user_ideas_repo.link_session(user.user_id, idea_id, session_id)
 
     mode = msg.get("mode", "text")
+    user_message = msg.get("message", "")
     if mode == "text":
-        await _run_agent(sender, user, session_id, "", is_new_session=True, session_type=session_type, idea=idea)
+        await _run_agent(sender, user, session_id, user_message, is_new_session=True, session_type=session_type, idea=idea)
 
 
 async def _handle_chat(sender: MessageSender, user: CurrentUser, msg: dict):
