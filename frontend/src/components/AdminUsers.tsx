@@ -8,7 +8,7 @@ import { listAdminUsers, getAdminUserIntake, setUserRole, setUserAdmin, deleteAd
 import { UserAvatar } from './UserAvatar';
 import type { AdminUserSummary, AdminUserIntake } from '../api/types';
 
-type SortKey = 'name' | 'department' | 'role' | 'ai_proficiency' | 'session_count' | 'tip_count' | 'intake' | 'last_active';
+type SortKey = 'name' | 'department' | 'role' | 'session_count' | 'tip_count' | 'intake' | 'last_active';
 type SortDir = 'asc' | 'desc';
 
 function relativeTime(iso: string | null): string {
@@ -24,33 +24,6 @@ function relativeTime(iso: string | null): string {
   const diffDays = Math.floor(diffHrs / 24);
   if (diffDays < 7) return `${diffDays}d ago`;
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
-
-function ProficiencyBadge({ level }: { level: number }) {
-  const colors: Record<number, { bg: string; text: string }> = {
-    1: { bg: '#FEF2F2', text: '#DC2626' },
-    2: { bg: '#FFF7ED', text: '#D97706' },
-    3: { bg: '#FFFBEB', text: '#D97706' },
-    4: { bg: '#F0FDF4', text: '#059669' },
-    5: { bg: '#ECFDF5', text: '#059669' },
-  };
-  const c = colors[level] || colors[1];
-  return (
-    <span
-      className="inline-flex items-center justify-center rounded-full"
-      style={{
-        width: 24,
-        height: 24,
-        fontSize: 12,
-        fontWeight: 600,
-        fontFamily: "'Geist Mono', monospace",
-        backgroundColor: c.bg,
-        color: c.text,
-      }}
-    >
-      {level}
-    </span>
-  );
 }
 
 // Intake response display labels
@@ -175,9 +148,6 @@ export function AdminUsers() {
           cmp = roleWeight(a) - roleWeight(b);
           break;
         }
-        case 'ai_proficiency':
-          cmp = (a.ai_proficiency?.level ?? 0) - (b.ai_proficiency?.level ?? 0);
-          break;
         case 'session_count':
           cmp = a.session_count - b.session_count;
           break;
@@ -200,10 +170,6 @@ export function AdminUsers() {
   const totalUsers = users.length;
   const intakeComplete = users.filter((u) => u.intake_completed_at).length;
   const intakePct = totalUsers > 0 ? Math.round((intakeComplete / totalUsers) * 100) : 0;
-  const proficiencyUsers = users.filter((u) => u.ai_proficiency && u.ai_proficiency.level > 0);
-  const avgProficiency = proficiencyUsers.length > 0
-    ? (proficiencyUsers.reduce((sum, u) => sum + (u.ai_proficiency?.level ?? 0), 0) / proficiencyUsers.length).toFixed(1)
-    : '-';
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -261,11 +227,10 @@ export function AdminUsers() {
   return (
     <div className="relative">
       {/* Stats bar */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 gap-4 mb-6">
         {[
           { label: 'Total Users', value: totalUsers },
           { label: 'Intake Complete', value: `${intakePct}%` },
-          { label: 'Avg AI Proficiency', value: avgProficiency },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -349,9 +314,6 @@ export function AdminUsers() {
               <th style={{ ...thStyle, textAlign: 'center' }} onClick={() => handleSort('role')}>
                 Role <SortIcon col="role" />
               </th>
-              <th style={{ ...thStyle, textAlign: 'center' }} onClick={() => handleSort('ai_proficiency')}>
-                AI Level <SortIcon col="ai_proficiency" />
-              </th>
               <th style={{ ...thStyle, textAlign: 'center' }} onClick={() => handleSort('session_count')}>
                 Sessions <SortIcon col="session_count" />
               </th>
@@ -370,7 +332,7 @@ export function AdminUsers() {
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={7}
                   className="text-center py-8 text-sm"
                   style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
                 >
@@ -445,12 +407,6 @@ export function AdminUsers() {
                         </span>
                       )}
                     </div>
-                  </td>
-                  <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    {u.ai_proficiency && u.ai_proficiency.level > 0
-                      ? <ProficiencyBadge level={u.ai_proficiency.level} />
-                      : <span style={{ color: 'var(--color-text-placeholder)' }}>-</span>
-                    }
                   </td>
                   <td style={{ ...monoTd, textAlign: 'center' }}>
                     {u.session_count}
@@ -683,23 +639,6 @@ function DetailPanel({
           {user.is_department_admin && (
             <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
               Can view and edit department settings for {p.department || 'their department'}
-            </p>
-          )}
-        </Section>
-      )}
-
-      {/* AI Proficiency */}
-      {p.ai_proficiency && p.ai_proficiency.level > 0 && (
-        <Section title="AI Proficiency">
-          <div className="flex items-center gap-2 mb-1">
-            <ProficiencyBadge level={p.ai_proficiency.level} />
-            <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-              Level {p.ai_proficiency.level}/5
-            </span>
-          </div>
-          {p.ai_proficiency.rationale && (
-            <p className="text-sm" style={{ color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-              {p.ai_proficiency.rationale}
             </p>
           )}
         </Section>

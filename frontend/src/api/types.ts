@@ -44,10 +44,6 @@ export interface UserProfile {
   learning_goals: string[];
   ai_tools_used: string[];
   ai_superpower: string;
-  ai_proficiency: {
-    level: number;
-    rationale: string;
-  } | null;
   intake_summary: string;
   created_at: string;
   updated_at: string;
@@ -131,7 +127,6 @@ export interface AdminUserSummary {
   team: string;
   avatar_url: string;
   intake_completed_at: string | null;
-  ai_proficiency: { level: number; rationale: string } | null;
   is_department_admin: boolean;
   is_admin: boolean;
   session_count: number;
