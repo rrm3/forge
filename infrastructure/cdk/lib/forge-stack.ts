@@ -20,6 +20,7 @@ interface ForgeStackProps extends cdk.StackProps {
   oidcClientId?: string;
   backendProvisionedConcurrency?: number;
   wsProvisionedConcurrency?: number;
+  posthogApiKey?: string;
 }
 
 export class ForgeStack extends cdk.Stack {
@@ -33,6 +34,7 @@ export class ForgeStack extends cdk.Stack {
     const oidcProviderUrl = props.oidcProviderUrl || '';
     const oidcClientId = props.oidcClientId || '';
     const githubRepo = this.node.tryGetContext('githubRepo') || 'rrm3/forge';
+    const posthogApiKey = props.posthogApiKey || '';
     const domainName = props.domainName || '';
     const acmCertificateArn = props.acmCertificateArn || '';
 
@@ -286,6 +288,8 @@ export class ForgeStack extends cdk.Stack {
         LLM_MODEL: 'bedrock/us.anthropic.claude-opus-4-6-v1',
         ORGCHART_S3_KEY: 'orgchart/org-chart.db',
         CONNECTIONS_TABLE: connectionsTable.tableName,
+        POSTHOG_API_KEY: posthogApiKey,
+        POSTHOG_HOST: 'https://us.i.posthog.com',
       },
       logGroup,
     });
@@ -395,6 +399,8 @@ export class ForgeStack extends cdk.Stack {
         ORGCHART_S3_KEY: 'orgchart/org-chart.db',
         CONNECTIONS_TABLE: connectionsTable.tableName,
         LAMBDA_FUNCTION_NAME: `${prefix}-ws:live`, // self-invoke targets alias for warm instances
+        POSTHOG_API_KEY: posthogApiKey,
+        POSTHOG_HOST: 'https://us.i.posthog.com',
       },
       logGroup: wsLogGroup,
     });

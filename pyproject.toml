@@ -17,6 +17,7 @@ dependencies = [
     "pydantic>=2.10",
     "pydantic-settings>=2.7",
     "awslambdaric>=3",
+    "posthog>=3",
 ]
 
 [project.optional-dependencies]

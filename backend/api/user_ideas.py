@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.analytics import track as posthog_track
 from backend.auth import AuthUser
 from backend.models import UserIdea
 
@@ -63,6 +64,10 @@ async def create_user_idea(body: CreateUserIdeaRequest, user: AuthUser):
         source_session_id=body.source_session_id,
     )
     await _user_ideas_repo.create(idea)
+    posthog_track(user.user_id, "idea_created", {
+        "idea_id": idea.idea_id,
+        "source": idea.source,
+    })
     return idea.model_dump(mode="json")
 
 

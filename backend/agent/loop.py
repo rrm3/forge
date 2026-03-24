@@ -40,6 +40,7 @@ async def react_loop(
     context: ToolContext,
     max_iterations: int = 10,
     cancel_event: asyncio.Event | None = None,
+    metadata: dict | None = None,
 ) -> AsyncGenerator[LoopEvent, None]:
     """Run the ReAct loop, yielding events as they occur.
 
@@ -81,7 +82,7 @@ async def react_loop(
 
         try:
             response, text_parts = await _call_llm_streaming(
-                messages, tool_schemas, model
+                messages, tool_schemas, model, metadata=metadata
             )
         except Exception as exc:
             msg = classify_llm_error(exc)
@@ -173,6 +174,7 @@ async def _call_llm_streaming(
     messages: list[dict],
     tools: list[dict],
     model: str,
+    metadata: dict | None = None,
 ) -> tuple[object, list[str]]:
     """Call the LLM with streaming enabled, yielding text deltas as they arrive.
 
@@ -192,6 +194,8 @@ async def _call_llm_streaming(
         kwargs["aws_secret_access_key"] = settings.bedrock_secret_access_key
     if tools:
         kwargs["tools"] = tools
+    if metadata:
+        kwargs["metadata"] = metadata
 
     last_exc: Exception | None = None
     for attempt in range(_MAX_RETRIES):

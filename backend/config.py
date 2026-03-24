@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     websocket_api_endpoint: str = ""
     lambda_function_name: str = ""  # for Dispatcher self-invoke
 
+    # PostHog analytics (empty key = disabled, e.g. in dev)
+    posthog_api_key: str = ""
+    posthog_host: str = "https://us.i.posthog.com"
+
     # Dev
     dev_mode: bool = False
 
@@ -64,3 +68,5 @@ settings = Settings()
 # Load secrets from SSM in production (when env vars aren't set)
 if not settings.gemini_api_key and not settings.dev_mode:
     settings.gemini_api_key = _get_ssm_parameter("/forge/gemini-api-key")
+if not settings.posthog_api_key and not settings.dev_mode:
+    settings.posthog_api_key = _get_ssm_parameter("/forge/posthog-api-key")

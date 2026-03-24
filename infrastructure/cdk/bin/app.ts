@@ -15,6 +15,7 @@ const ENV_CONFIG: Record<string, {
   oidcClientId: string;
   backendProvisionedConcurrency: number;
   wsProvisionedConcurrency: number;
+  posthogApiKey: string;
 }> = {
   production: {
     domainName: 'aituesday.digitalscience.ai',
@@ -23,6 +24,7 @@ const ENV_CONFIG: Record<string, {
     oidcClientId: '0bfe6d8ddb94027981248d2a0bd21991',
     backendProvisionedConcurrency: 10,
     wsProvisionedConcurrency: 20,
+    posthogApiKey: 'phc_Qn6PGsXODJxvYCMV8Vv099fYpf9oAi1OPctdvgwb828',
   },
   staging: {
     domainName: 'aituesday-staging.digitalscience.ai',
@@ -31,6 +33,7 @@ const ENV_CONFIG: Record<string, {
     oidcClientId: 'bf985c39ba613a31ddce92186bb374f8',
     backendProvisionedConcurrency: 0,
     wsProvisionedConcurrency: 0,
+    posthogApiKey: 'phc_7wUFuz56pMvIhqnSalLqHakMDY2PKeT4KIM1NZHFQpB',
   },
 };
 
@@ -45,6 +48,7 @@ new ForgeStack(app, `forge-${environment}`, {
   oidcClientId: app.node.tryGetContext('oidcClientId') || envConfig?.oidcClientId || '',
   backendProvisionedConcurrency: envConfig?.backendProvisionedConcurrency ?? 0,
   wsProvisionedConcurrency: envConfig?.wsProvisionedConcurrency ?? 0,
+  posthogApiKey: envConfig?.posthogApiKey || '',
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION || 'us-east-1',

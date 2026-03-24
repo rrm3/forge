@@ -42,6 +42,18 @@ def _init():
         from backend.repository.connections import ConnectionsRepository
         _connections_repo = ConnectionsRepository()
 
+    # Register LiteLLM PostHog callbacks (production LLM calls go through this Lambda)
+    if settings.posthog_api_key:
+        import litellm
+
+        os.environ["POSTHOG_API_KEY"] = settings.posthog_api_key
+        os.environ["POSTHOG_API_URL"] = settings.posthog_host
+        if "posthog" not in litellm.success_callback:
+            litellm.success_callback.append("posthog")
+        if "posthog" not in litellm.failure_callback:
+            litellm.failure_callback.append("posthog")
+        logger.info("PostHog LiteLLM callbacks registered")
+
 
 def handler(event, context):
     """Lambda entry point. Routes by requestContext.routeKey or WORKER flag."""
@@ -209,6 +221,9 @@ def _handle_worker(event) -> dict:
         if action in ("chat", "start_session") and session_id and _connections_repo:
             _connections_repo.clear_processing(session_id)
             _connections_repo.clear_cancelled(session_id)
+        # Flush PostHog events before Lambda freezes
+        from backend.analytics import flush as posthog_flush
+        posthog_flush()
 
     return {"statusCode": 200}
 

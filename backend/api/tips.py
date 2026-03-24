@@ -15,6 +15,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from backend.analytics import track as posthog_track
 from backend.auth import AuthUser
 from backend.models import Tip as TipModel, TipComment
 
@@ -293,6 +294,12 @@ async def create_tip(body: CreateTipRequest, user: AuthUser):
         artifact=body.artifact,
     )
     await _tips_repo.create(tip)
+    posthog_track(user.user_id, "tip_created", {
+        "tip_id": tip.tip_id,
+        "category": tip.category,
+        "department": tip.department,
+        "tags": tip.tags,
+    })
 
     # Index into LanceDB for similarity search (fire-and-forget)
     try:
@@ -423,6 +430,7 @@ async def vote_tip(
     """Upvote a tip."""
     is_new = await _tips_repo.upvote(tip_id, user.user_id)
     if is_new:
+        posthog_track(user.user_id, "tip_voted", {"tip_id": tip_id})
         return {"status": "voted"}
     return {"status": "already_voted"}
 

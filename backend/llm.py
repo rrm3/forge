@@ -84,6 +84,7 @@ async def call_llm(
     model: str | None = None,
     stream: bool = False,
     max_tokens: int | None = None,
+    metadata: dict | None = None,
 ) -> LLMResponse:
     """Call LLM via LiteLLM and return a parsed response.
 
@@ -119,6 +120,8 @@ async def call_llm(
         kwargs["tools"] = tools
     if max_tokens is not None:
         kwargs["max_tokens"] = max_tokens
+    if metadata:
+        kwargs["metadata"] = metadata
 
     last_exc: Exception | None = None
     for attempt in range(_MAX_RETRIES):

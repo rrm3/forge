@@ -24,6 +24,7 @@ from backend.agent.events import (
 )
 from backend.agent.loop import react_loop
 from backend.agent.skills import load_skill
+from backend.analytics import identify as posthog_identify, track as posthog_track
 from backend.api.transport import MessageSender
 from backend.config import settings
 from backend.deps import AgentDeps
@@ -70,6 +71,21 @@ async def run_agent_session(
         cancel_check: Optional callable that returns True if the session is cancelled.
         idea: Optional UserIdea to provide context for idea-focused chat.
     """
+    # PostHog: identify user on new sessions, track all session starts
+    trace_id = str(uuid.uuid4())
+    if is_new_session:
+        posthog_identify(user_id, {"email": user_email, "name": user_name})
+    posthog_track(user_id, "session_started", {
+        "session_id": session_id,
+        "session_type": session_type,
+        "is_new_session": is_new_session,
+    })
+    posthog_metadata = {
+        "user_id": user_id,
+        "session_id": session_id,
+        "trace_id": trace_id,
+    }
+
     # Load session transcript
     transcript: list[Message] = []
     if not is_new_session:
@@ -235,6 +251,7 @@ async def run_agent_session(
             tools=deps.tool_registry,
             context=context,
             cancel_event=cancel_event,
+            metadata=posthog_metadata,
         ):
             if isinstance(event, TextEvent):
                 first_assistant_text.append(event.text)
@@ -298,12 +315,22 @@ async def run_agent_session(
                     "session_id": session_id,
                     "usage": usage_data,
                 })
+                posthog_track(user_id, "agent_completed", {
+                    "session_id": session_id,
+                    "session_type": session_type,
+                    **(usage_data or {}),
+                })
             elif isinstance(event, ErrorEvent):
                 await flush_tokens()
                 await sender.send({
                     "type": "error",
                     "session_id": session_id,
                     "message": event.error,
+                })
+                posthog_track(user_id, "agent_error", {
+                    "session_id": session_id,
+                    "session_type": session_type,
+                    "error": event.error,
                 })
     finally:
         if cancel_task:
@@ -365,7 +392,7 @@ async def run_agent_session(
 
     if needs_title:
         try:
-            title = await _generate_title(user_message or "New conversation", assistant_text)
+            title = await _generate_title(user_message or "New conversation", assistant_text, metadata=posthog_metadata)
             prefix = SESSION_TITLE_PREFIXES.get(session_type)
             if prefix:
                 title = f"{prefix}: {title}"
@@ -637,7 +664,7 @@ async def _check_idea_prepared(transcript: list[Message], sender: MessageSender,
         logger.warning("Failed to check idea prepared", exc_info=True)
 
 
-async def _generate_title(user_msg: str, assistant_msg: str) -> str:
+async def _generate_title(user_msg: str, assistant_msg: str, metadata: dict | None = None) -> str:
     """Call the LLM to generate a short session title."""
     prompt_messages = [
         {"role": "system", "content": "Generate a short title (max 6 words) for this conversation. Return only the title, no quotes or punctuation."},
@@ -645,6 +672,6 @@ async def _generate_title(user_msg: str, assistant_msg: str) -> str:
         {"role": "assistant", "content": assistant_msg},
         {"role": "user", "content": "Generate a short title for this conversation."},
     ]
-    response = await call_llm(prompt_messages)
+    response = await call_llm(prompt_messages, metadata=metadata)
     title = (response.content or "New Chat").strip().strip('"').strip("'")
     return title[:100]

@@ -139,6 +139,7 @@ import { TopBar } from './components/TopBar';
 import { AdminPanel } from './components/AdminPanel';
 import { AdminLayout } from './components/AdminLayout';
 import { AdminUsers } from './components/AdminUsers';
+import posthog from './posthog';
 import { getProfile, getAdminAccess, listUserIdeas, getTip } from './api/client';
 import { useProfileCache } from './state/profileCache';
 import type { UserProfile } from './api/types';
@@ -275,6 +276,10 @@ function AppContent() {
             avatar_url: p.avatar_url,
             team: p.team,
           });
+          // PostHog: set department group for group analytics
+          if (p.department) {
+            posthog.group('department', p.department);
+          }
         })
         .catch((err) => {
           if (err?.message?.includes('401')) return;

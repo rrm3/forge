@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import posthog from '../posthog';
 import { startLogin, handleCallback, parseJwtPayload, refreshWithToken, oidcConfig, type OidcTokens } from './oidc';
 import { setTokenGetter } from '../api/client';
 import { setWsTokenGetter, forgeWs } from '../api/websocket';
@@ -323,6 +324,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(REFRESH_LOCK_KEY);
     forgeWs.disconnect();
     wsConnected.current = false;
+    posthog.reset();
     const logoutUrl = `${oidcConfig.providerUrl}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
     window.location.href = logoutUrl;
   }, []);
@@ -333,11 +335,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setWsTokenGetter(getToken);
   }, [getToken]);
 
-  // Connect WebSocket when authenticated
+  // Connect WebSocket and identify to PostHog when authenticated
   useEffect(() => {
     if (user && !wsConnected.current) {
       wsConnected.current = true;
       forgeWs.connect();
+      posthog.identify(user.userId, { email: user.email, name: user.name });
     }
   }, [user]);
 

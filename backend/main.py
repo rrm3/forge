@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -60,6 +61,18 @@ async def lifespan(app: FastAPI):
         orgchart=orgchart,
     )
 
+    # PostHog: register LiteLLM callbacks for LLM analytics
+    if settings.posthog_api_key:
+        import litellm
+
+        os.environ["POSTHOG_API_KEY"] = settings.posthog_api_key
+        os.environ["POSTHOG_API_URL"] = settings.posthog_host
+        if "posthog" not in litellm.success_callback:
+            litellm.success_callback.append("posthog")
+        if "posthog" not in litellm.failure_callback:
+            litellm.failure_callback.append("posthog")
+        logger.info("PostHog LiteLLM callbacks registered")
+
     logger.info(
         "Forge started: dev_mode=%s, model=%s, orgchart=%s",
         settings.dev_mode,
@@ -69,6 +82,10 @@ async def lifespan(app: FastAPI):
     yield
     if orgchart:
         orgchart.close()
+
+    from backend.analytics import shutdown as posthog_shutdown
+
+    posthog_shutdown()
     logger.info("Forge shutting down")
 
 
