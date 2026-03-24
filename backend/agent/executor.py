@@ -435,10 +435,32 @@ async def _check_intake_completion(
         if not profile:
             return
 
-        # Already completed in a previous turn - just notify the frontend
+        # Already completed in a previous turn - ensure ideas exist and notify frontend
         if profile.intake_completed_at:
+            suggestions = await _extract_suggestions(transcript)
+            if suggestions and deps.user_ideas_repo and session_id:
+                existing = await deps.user_ideas_repo.list(user_id)
+                intake_ideas = [i for i in existing if i.source == "intake"]
+                if not intake_ideas:
+                    for suggestion in suggestions:
+                        title = suggestion.get("title", "")
+                        description = suggestion.get("description", "")
+                        if title:
+                            idea = UserIdea(
+                                user_id=user_id,
+                                idea_id=str(uuid.uuid4()),
+                                title=title,
+                                description=description,
+                                source="intake",
+                                source_session_id=session_id,
+                                tags=["intake"],
+                            )
+                            try:
+                                await deps.user_ideas_repo.create(idea)
+                                logger.info("Created intake idea (recovery): user=%s title=%s", user_id, title)
+                            except Exception:
+                                logger.warning("Failed to create intake idea: %s", title, exc_info=True)
             if sender and session_id:
-                suggestions = await _extract_suggestions(transcript)
                 await sender.send({
                     "type": "intake_complete",
                     "session_id": session_id,
