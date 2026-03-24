@@ -55,7 +55,7 @@ async def list_company_software(
         catalog = [
             item for item in catalog
             if any(
-                dept_lower in d.lower() or d.lower() == "everyone"
+                dept_lower in d.lower() or d.lower() == "general"
                 for d in item.get("departments", [])
             )
         ]
