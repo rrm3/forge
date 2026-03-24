@@ -123,6 +123,8 @@ async def reset_intake(user: AuthUser):
         "ai_proficiency": None,
         "intake_summary": "",
         "intake_fields_captured": [],
+        "intake_objectives_done": 0,
+        "intake_objectives_total": 0,
     })
 
     # Find and delete intake sessions
