@@ -61,6 +61,7 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
   const sendCountRef = useRef(0);
   const reevaluateAttempted = useRef(false);
   const [skipping, setSkipping] = useState(false);
+  const [showSkipModal, setShowSkipModal] = useState(false);
 
   const showSkipOption = !intakeComplete && !showCards;
 
@@ -71,20 +72,16 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
     const intake = state.sessions.find((s) => s.type === 'intake');
     if (!intake || (intake.message_count ?? 0) < 5) return;
     reevaluateAttempted.current = true;
-    let cancelled = false;
-    reevaluateIntake().then((result) => {
-      if (result.completed && !cancelled) {
-        onComplete?.();
-      }
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [sessionsLoaded, state.sessions, onComplete]);
+    reevaluateIntake().catch(() => {});
+  }, [sessionsLoaded, state.sessions]);
 
   async function handleSkip() {
     setSkipping(true);
     try {
       await skipIntake();
+      deselectSession();
       onComplete?.();
+      navigate('/');
     } catch {
       setSkipping(false);
     }
@@ -246,12 +243,11 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
             }}
           />
 
-          {/* Continue to app - escape valve */}
+          {/* Skip button - escape valve */}
           {showSkipOption && (
             <div className="absolute top-3 right-4 z-20">
               <button
-                onClick={handleSkip}
-                disabled={skipping}
+                onClick={() => setShowSkipModal(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
                 style={{
                   color: 'var(--color-text-secondary)',
@@ -265,9 +261,50 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
                   e.currentTarget.style.backgroundColor = 'var(--color-surface-white)';
                 }}
               >
-                {skipping ? 'Skipping...' : 'Skip'}
+                Skip
                 <ArrowRight className="w-3 h-3" />
               </button>
+            </div>
+          )}
+
+          {/* Skip confirmation modal */}
+          {showSkipModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }} onClick={() => setShowSkipModal(false)}>
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="rounded-xl border p-6 mx-4 max-w-lg w-full shadow-lg"
+                style={{ backgroundColor: 'var(--color-surface-white)', borderColor: 'var(--color-border)' }}
+              >
+                <h3 className="text-base font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                  Skip getting started?
+                </h3>
+                <p className="text-sm mb-3" style={{ color: 'var(--color-text-secondary)' }}>
+                  This conversation helps us understand your role and goals so we can make better suggestions throughout the program. The more you share, the more relevant your experience will be.
+                </p>
+                <p className="text-sm mb-5" style={{ color: 'var(--color-text-secondary)' }}>
+                  If you'd like to come back to this later, you can resume anytime by clicking <strong>Day 1 Getting Started</strong> in the sidebar.
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => setShowSkipModal(false)}
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                    style={{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => { setShowSkipModal(false); handleSkip(); }}
+                    disabled={skipping}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors"
+                    style={{ backgroundColor: 'var(--color-primary)' }}
+                  >
+                    {skipping ? 'Skipping...' : 'Skip'}
+                  </button>
+                </div>
+                <p className="text-xs mt-4 text-center" style={{ color: 'var(--color-text-placeholder)' }}>
+                  Having a technical issue? <a href="mailto:aituesdayscompanion@digital-science.com" style={{ textDecoration: 'underline' }}>Email us</a> or post in <a href="https://digital-science.slack.com/archives/C0AH3SAFR50" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'underline' }}><strong>#ai-tuesdays</strong></a> on Slack
+                </p>
+              </div>
             </div>
           )}
 

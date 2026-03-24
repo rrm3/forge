@@ -74,7 +74,7 @@ export function HomeScreen() {
     <div className="h-full overflow-y-auto">
       <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Greeting */}
-        <div className="mb-8">
+        <div className={`mb-8 ${hasIdeas ? '' : 'text-center'}`}>
           <h1 className="text-3xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>
             {greeting}
           </h1>
@@ -88,7 +88,7 @@ export function HomeScreen() {
         {/* Two-column layout: main content + ideas sidebar */}
         <div className={hasIdeas ? 'flex flex-col lg:flex-row gap-6' : ''}>
           {/* Main content */}
-          <div className={hasIdeas ? 'flex-1 min-w-0' : 'max-w-lg'}>
+          <div className={hasIdeas ? 'flex-1 min-w-0' : 'max-w-lg mx-auto'}>
             {/* Action buttons */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {ACTION_BUTTONS.map((btn) => (

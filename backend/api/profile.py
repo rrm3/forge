@@ -263,3 +263,28 @@ async def skip_intake(user: AuthUser):
     })
     logger.info("Intake skipped for user=%s (%s)", user.user_id, user.email)
     return {"status": "skipped"}
+
+
+@router.post("/resume-intake")
+async def resume_intake(user: AuthUser):
+    """Resume intake by clearing completion state.
+
+    Called when a user clicks their intake session in the sidebar.
+    Clears intake_completed_at, onboarding_complete, and intake_skipped,
+    putting the profile back into genuine incomplete state. Preserves
+    the existing session, transcript, and captured intake responses.
+    """
+    profile = await _profiles_repo.get(user.user_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    if not profile.intake_completed_at:
+        return {"status": "already_incomplete"}
+
+    await _profiles_repo.update(user.user_id, {
+        "intake_completed_at": None,
+        "onboarding_complete": False,
+        "intake_skipped": False,
+    })
+    logger.info("Intake resumed (skip cleared) for user=%s (%s)", user.user_id, user.email)
+    return {"status": "resumed"}

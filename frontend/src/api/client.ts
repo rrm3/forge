@@ -113,6 +113,13 @@ export async function skipIntake(): Promise<void> {
   await checkResponse(res);
 }
 
+export async function resumeIntake(): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/profile/resume-intake`, {
+    method: 'POST',
+  });
+  await checkResponse(res);
+}
+
 // Journal API
 
 export async function listJournal(params?: {

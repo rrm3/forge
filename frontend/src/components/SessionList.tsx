@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck, Home, X, BookOpen } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
-import { resetIntake } from '../api/client';
+import { resetIntake, resumeIntake } from '../api/client';
 import { ConfirmResetModal } from './ConfirmResetModal';
 import type { Session } from '../api/types';
 
@@ -377,7 +377,13 @@ export function SessionList({ ideaCount }: SessionListProps) {
                         key={session.session_id}
                         session={session}
                         isActive={session.session_id === state.activeSessionId}
-                        onSelect={() => navigate(`/chat/${session.session_id}`)}
+                        onSelect={session.type === 'intake'
+                          ? async () => {
+                              try { await resumeIntake(); } catch {}
+                              window.location.href = '/day1';
+                            }
+                          : () => navigate(`/chat/${session.session_id}`)
+                        }
                         onDelete={session.type === 'intake'
                           ? () => { setResetModalOpen(true); }
                           : async () => {
