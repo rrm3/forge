@@ -11,6 +11,7 @@ import { LogOut, RotateCcw, UserRoundCog, Settings, Code } from 'lucide-react';
 import { useAuth } from '../auth/useAuth';
 import { useAdminStore } from '../state/adminStore';
 import { resetIntake } from '../api/client';
+import { intakeTitle } from '../program';
 import { UserAvatar } from './UserAvatar';
 import type { UserProfile } from '../api/types';
 
@@ -102,14 +103,14 @@ export function TopBar({ profile }: TopBarProps = {}) {
               <button
                 onClick={async () => {
                   setOpen(false);
-                  if (!confirm('Reset Day One? This will delete your intake session and all captured profile data.')) return;
+                  if (!confirm(`Reset ${intakeTitle()}? This will delete your intake session and all captured profile data.`)) return;
                   try {
                     await resetIntake();
                     // Hard reload to clear all in-memory state (session context, profile, etc.)
                     window.location.href = '/day1';
                   } catch (err) {
                     console.error('Failed to reset intake:', err);
-                    alert('Failed to reset intake. You may not have admin access.');
+                    alert('Failed to reset intake.');
                   }
                 }}
                 className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm transition-colors"
@@ -118,7 +119,7 @@ export function TopBar({ profile }: TopBarProps = {}) {
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 <RotateCcw className="w-4 h-4" strokeWidth={1.5} />
-                Reset Day One
+                Reset {intakeTitle()}
               </button>
             )}
             {hasAdminAccess && (

@@ -1,7 +1,25 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+# AI Tuesdays 12-week program: first Tuesday is March 24, 2026
+PROGRAM_START_DATE = date(2026, 3, 24)
+PROGRAM_WEEKS = 12
+
+
+def get_program_week(as_of: date | None = None) -> int:
+    """Return the current program week (1-12), clamped to valid range."""
+    d = as_of or date.today()
+    days_elapsed = (d - PROGRAM_START_DATE).days
+    week = max(1, (days_elapsed // 7) + 1)
+    return min(week, PROGRAM_WEEKS)
+
+
+def intake_title(week: int | None = None) -> str:
+    """Session title for the intake of a given program week."""
+    w = week if week is not None else get_program_week()
+    return f"Day {w}"
 
 
 def _now() -> datetime:

@@ -11,6 +11,7 @@ import { MessageCircle, MoreVertical, Pencil, Trash2, X, Check, Bold, Italic, Li
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { listUserIdeas, updateUserIdea, deleteUserIdea } from '../api/client';
+import { intakeTitle } from '../program';
 import { useSession } from '../state/SessionContext';
 import type { UserIdea } from '../api/types';
 
@@ -35,7 +36,7 @@ function relativeTime(dateStr: string): string {
 function sourceLabel(source: string): string {
   switch (source) {
     case 'brainstorm': return 'Brainstorm';
-    case 'intake': return 'Day One';  // historical label; actual session title is dynamic
+    case 'intake': return intakeTitle();
     case 'chat': return 'Chat';
     default: return source || 'Manual';
   }
