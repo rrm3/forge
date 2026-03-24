@@ -40,7 +40,16 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
   );
   const [cardsDismissed, setCardsDismissed] = useState(false);
 
-  const showCards = !cardsDismissed && !intakeSessionHasMessages;
+  // Freeze the "has messages" check at the moment sessions first load.
+  // Without this, the background preload (started on Card 1 for performance)
+  // causes intakeSessionHasMessages to flip true mid-card-sequence, which
+  // dismisses the cards before the user clicks "Let's go".
+  const initialIntakeHasMessages = useRef<boolean | null>(null);
+  if (sessionsLoaded && initialIntakeHasMessages.current === null) {
+    initialIntakeHasMessages.current = intakeSessionHasMessages;
+  }
+
+  const showCards = !cardsDismissed && !(initialIntakeHasMessages.current ?? false);
   const [showCapsHint, setShowCapsHint] = useState(false);
   const capsHintDismissed = useRef(false);
   const inputValueRef = useRef(inputValue);
