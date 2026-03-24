@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
-    "litellm>=1.56",
+    "litellm @ https://github.com/BerriAI/litellm/archive/refs/tags/v1.82.3.tar.gz",
     "lancedb>=0.17",
     "boto3>=1.36",
     "pyjwt[crypto]>=2.10",
