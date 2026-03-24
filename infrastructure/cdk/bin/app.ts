@@ -18,8 +18,8 @@ const ENV_CONFIG: Record<string, {
   posthogApiKey: string;
 }> = {
   production: {
-    domainName: 'aituesday.digitalscience.ai',
-    acmCertificateArn: 'arn:aws:acm:us-east-1:887690967243:certificate/9af158db-48c5-43b4-a0d7-61ce2db15b89',
+    domainName: 'aituesdays.digitalscience.ai',
+    acmCertificateArn: 'arn:aws:acm:us-east-1:887690967243:certificate/3c05f20c-617f-4dcf-8958-374b3c09770d',
     oidcProviderUrl: 'https://id.digitalscience.ai',
     oidcClientId: '0bfe6d8ddb94027981248d2a0bd21991',
     backendProvisionedConcurrency: 10,
@@ -27,8 +27,8 @@ const ENV_CONFIG: Record<string, {
     posthogApiKey: 'phc_Qn6PGsXODJxvYCMV8Vv099fYpf9oAi1OPctdvgwb828',
   },
   staging: {
-    domainName: 'aituesday-staging.digitalscience.ai',
-    acmCertificateArn: 'arn:aws:acm:us-east-1:887690967243:certificate/e08087ef-0495-4364-b960-91aa02c8a97c',
+    domainName: 'aituesdays-staging.digitalscience.ai',
+    acmCertificateArn: 'arn:aws:acm:us-east-1:887690967243:certificate/25bf51b4-4b07-42b7-8d97-c87be6f06c48',
     oidcProviderUrl: 'https://id-staging.digitalscience.ai',
     oidcClientId: 'bf985c39ba613a31ddce92186bb374f8',
     backendProvisionedConcurrency: 0,

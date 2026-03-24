@@ -49,7 +49,7 @@
 
 | | Production | Staging | Local Dev |
 |---|---|---|---|
-| **App URL** | aituesday.digitalscience.ai | aituesday-staging.digitalscience.ai | localhost:5173 |
+| **App URL** | aituesdays.digitalscience.ai | aituesdays-staging.digitalscience.ai | localhost:5173 |
 | **Branch** | main | staging | any |
 | **OIDC Provider** | id.digitalscience.ai | id.digitalscience.ai | id.digitalscience.ai |
 | **OIDC Client ID** | 0bfe6d8ddb94027981248d2a0bd21991 | 40656eed824af4e6ebeaca1f99740bcc | 40656eed824af4e6ebeaca1f99740bcc (staging) |

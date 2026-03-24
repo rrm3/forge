@@ -108,8 +108,8 @@ else:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
-            "https://aituesday.digitalscience.ai",
-            "https://aituesday-staging.digitalscience.ai",
+            "https://aituesdays.digitalscience.ai",
+            "https://aituesdays-staging.digitalscience.ai",
         ],
         allow_credentials=True,
         allow_methods=["*"],
