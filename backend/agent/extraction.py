@@ -20,8 +20,11 @@ from backend.models import UserProfile
 
 logger = logging.getLogger(__name__)
 
-# Fast, cheap model for extraction
+# Fast, cheap model for profile field extraction
 EXTRACTION_MODEL = "bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0"
+
+# More capable model for nuanced judgment (objective evaluation)
+EVALUATION_MODEL = "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0"
 
 # Fields we extract and their descriptions (for the extraction prompt)
 EXTRACTABLE_FIELDS = {
@@ -227,11 +230,11 @@ REMAINING_OBJECTIVES_PLACEHOLDER
 Already completed (do not re-evaluate):
 COMPLETED_OBJECTIVES_PLACEHOLDER
 
-Based on what the USER said in the conversation below, determine which remaining objectives the user has answered.
+Based on what the USER said in the conversation below, determine which remaining objectives the user has directly addressed. An objective is covered when the user has shared enough that you wouldn't need to ask them about it again. A passing mention or vague reference doesn't count - the user should have actually talked about the topic, not just brushed past it. Generic answers that could apply to anyone (e.g., "I spend time in meetings and emails") don't count - the answer should be specific enough to tell you something about this person's actual situation.
 
-Return a JSON object where keys are objective IDs and values are true. Only include objectives that ARE covered. If none are newly covered, return {}.
+IMPORTANT: Only evaluate based on USER messages, not the AI's questions or statements. If the AI said "you're a VP of Engineering" but the user never confirmed or discussed it, that doesn't count.
 
-IMPORTANT: Only evaluate based on USER messages, not the AI's questions or statements.
+Return a JSON object where keys are objective IDs and values are a brief summary (1-2 sentences) of what the user said that covers it. Only include objectives that ARE covered. If none are newly covered, return {}.
 
 Return ONLY valid JSON. No explanation, no markdown, no code fences."""
 
@@ -243,8 +246,10 @@ async def evaluate_objectives(
 ) -> dict:
     """Evaluate which intake objectives have been covered in the conversation.
 
-    Fast yes/no check using Haiku. Detailed summaries are generated later
-    by the post-completion Opus pass.
+    Uses Sonnet for nuanced judgment - distinguishing direct answers from
+    vague or tangential mentions. Captures a brief summary of what the user
+    said for each covered objective, so the data is useful even without
+    the post-completion Opus enrichment pass.
 
     Args:
         transcript_messages: The conversation as role/content dicts.
@@ -252,7 +257,7 @@ async def evaluate_objectives(
         current_responses: Already-captured responses {objective_id: {value, captured_at}}.
 
     Returns:
-        Dict of newly completed objectives: {objective_id: {"value": "answered", "captured_at": "ISO datetime"}}
+        Dict of newly completed objectives: {objective_id: {"value": "summary", "captured_at": "ISO datetime"}}
         Only includes objectives that are NEW (not already in current_responses).
     """
     if not transcript_messages or not objectives:
@@ -294,7 +299,7 @@ async def evaluate_objectives(
     valid_remaining_ids = {o["id"] for o in remaining}
 
     try:
-        response = await call_llm(messages, model=EXTRACTION_MODEL, stream=False)
+        response = await call_llm(messages, model=EVALUATION_MODEL, stream=False)
         if not response.content:
             return {}
 
@@ -311,7 +316,7 @@ async def evaluate_objectives(
         if not isinstance(extracted, dict):
             return {}
 
-        # Filter to valid remaining objective IDs
+        # Filter to valid remaining objective IDs, store summaries as values
         now = datetime.now(UTC).isoformat()
         result = {}
         for obj_id, val in extracted.items():
@@ -319,7 +324,9 @@ async def evaluate_objectives(
                 continue
             if not val:
                 continue
-            result[obj_id] = {"value": "answered", "captured_at": now}
+            # Sonnet returns summary strings; fall back to "answered" for booleans
+            summary = str(val) if not isinstance(val, bool) else "answered"
+            result[obj_id] = {"value": summary, "captured_at": now}
 
         if result:
             logger.info("Objectives completed: %s", list(result.keys()))
