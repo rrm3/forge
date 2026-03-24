@@ -120,9 +120,11 @@ class TestBuiltinMappings:
         assert "curriculum" in BUILTIN_SCHEMAS
         assert "profiles" in BUILTIN_SCHEMAS
         assert "department_resources" in BUILTIN_SCHEMAS
-        assert len(BUILTIN_SCHEMAS) == 3
+        assert "tips" in BUILTIN_SCHEMAS
+        assert len(BUILTIN_SCHEMAS) == 4
 
     def test_document_id_fields(self):
         assert DOCUMENT_ID_FIELDS["curriculum"] == "document_key"
         assert DOCUMENT_ID_FIELDS["profiles"] == "user_id"
         assert DOCUMENT_ID_FIELDS["department_resources"] == "document_id"
+        assert DOCUMENT_ID_FIELDS["tips"] == "tip_id"
