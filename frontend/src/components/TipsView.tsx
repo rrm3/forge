@@ -8,7 +8,6 @@ import { ProfileChip } from './ProfileChip';
 import { GeminiIcon, ClaudeIcon } from './AiIcons';
 import { useSession } from '../state/SessionContext';
 
-interface TipsViewProps {}
 
 const DEPARTMENTS = [
   'chief-of-staff',

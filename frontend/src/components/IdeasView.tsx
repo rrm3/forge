@@ -7,7 +7,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageCircle, MoreVertical, Pencil, Trash2, X, Check, Bold, Italic, List } from 'lucide-react';
+import { MessageCircle, MoreVertical, Pencil, Trash2, X, Check, Bold, Italic, List } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { listUserIdeas, updateUserIdea, deleteUserIdea } from '../api/client';
@@ -35,7 +35,7 @@ function relativeTime(dateStr: string): string {
 function sourceLabel(source: string): string {
   switch (source) {
     case 'brainstorm': return 'Brainstorm';
-    case 'intake': return 'Getting Started';
+    case 'intake': return 'Day One';  // historical label; actual session title is dynamic
     case 'chat': return 'Chat';
     default: return source || 'Manual';
   }

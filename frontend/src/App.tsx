@@ -188,7 +188,7 @@ function TipsDetailRoute({ tipId }: { tipId: string }) {
     <TipDetail
       tip={tip}
       onBack={() => navigate('/tips')}
-      onVoteChange={(id, voted, count) => setTip(t => t ? { ...t, user_has_voted: voted, vote_count: count } : t)}
+      onVoteChange={(_id, voted, count) => setTip(t => t ? { ...t, user_has_voted: voted, vote_count: count } : t)}
       onTipUpdated={setTip}
       onTipDeleted={() => navigate('/tips')}
     />

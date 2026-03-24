@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lightbulb, Compass, Star, Sunrise, Trophy, MessageCircle, ArrowRight } from 'lucide-react';
+import { Lightbulb, Compass, Star, Sunrise, Trophy, ArrowRight } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
 import { useAuth } from '../auth/useAuth';
 import { getProfile, listUserIdeas } from '../api/client';

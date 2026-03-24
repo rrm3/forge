@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { ArrowLeft, X, Check, Info } from 'lucide-react';
 import { createTip, checkSimilarTips, addTipComment } from '../api/client';
-import type { TipCategory, SimilarMatch } from '../api/types';
+import type { SimilarMatch } from '../api/types';
 import { ProfileChip } from './ProfileChip';
 import { GeminiIcon, ClaudeIcon } from './AiIcons';
 import { useProfileCache } from '../state/profileCache';
