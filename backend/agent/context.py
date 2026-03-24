@@ -220,11 +220,11 @@ def _build_intake_progress(
         # All objectives complete
         lines.append("")
         lines.append("**ALL OBJECTIVES COMPLETE. THE INTAKE IS DONE.**")
-        lines.append("DO NOT ask any more questions. DO NOT continue the conversation.")
+        lines.append("This is your FINAL message. The conversation ends immediately after it and the user CANNOT reply.")
+        lines.append("Do NOT ask any questions or end any sentence with a question mark - they will go unanswered.")
         lines.append("Give a brief, warm wrap-up acknowledging what you learned about them,")
         lines.append("then give 2-3 personalized suggestions for their first AI Tuesday.")
         lines.append("Ideas are automatically saved from your suggestions.")
-        lines.append("End your message there. No follow-up questions.")
         return "\n".join(lines)
 
     if done:
@@ -370,11 +370,11 @@ def _build_intake_checklist(profile: UserProfile) -> str:
     if not remaining:
         lines.append("")
         lines.append("**ALL FIELDS CAPTURED. THE INTAKE IS COMPLETE.**")
-        lines.append("DO NOT ask any more questions. DO NOT continue the conversation.")
+        lines.append("This is your FINAL message. The conversation ends immediately after it and the user CANNOT reply.")
+        lines.append("Do NOT ask any questions or end any sentence with a question mark - they will go unanswered.")
         lines.append("Give a brief, warm wrap-up acknowledging what you learned about them,")
         lines.append("then give 2-3 personalized suggestions for their first AI Tuesday.")
         lines.append("Ideas are automatically saved from your suggestions.")
-        lines.append("End your message there. No follow-up questions.")
     elif len(remaining) <= 2:
         # Almost done - be very directive
         lines.append("")
