@@ -8,14 +8,18 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useAdminStore } from '../state/adminStore';
 
-type Tab = 'settings' | 'users';
+type Tab = 'settings' | 'company' | 'users';
 
 export function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isAdmin = useAdminStore((s) => s.isAdmin);
 
-  const activeTab: Tab = location.pathname.includes('/admin/users') ? 'users' : 'settings';
+  const activeTab: Tab = location.pathname.includes('/admin/users')
+    ? 'users'
+    : location.pathname.includes('/admin/company')
+      ? 'company'
+      : 'settings';
 
   // Mobile gate
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -92,11 +96,16 @@ export function AdminLayout() {
           Admin
         </h1>
 
-        {/* Tab nav - Users tab only visible to full admins */}
+        {/* Tab nav - Company Context and Users tabs only visible to full admins */}
         <div className="flex gap-6 mb-6 mt-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <button onClick={() => navigate('/admin/settings')} style={tabStyle('settings')}>
-            Department Settings
+            Department Context
           </button>
+          {isAdmin && (
+            <button onClick={() => navigate('/admin/company')} style={tabStyle('company')}>
+              Company Context
+            </button>
+          )}
           {isAdmin && (
             <button onClick={() => navigate('/admin/users')} style={tabStyle('users')}>
               Users

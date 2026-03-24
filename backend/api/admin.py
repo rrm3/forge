@@ -112,6 +112,22 @@ async def check_access(user: AuthUser):
     return {"is_admin": False, "is_department_admin": False, "departments": []}
 
 
+@router.get("/company")
+async def get_company_config(user: AuthUser):
+    """Get company-wide context config. Full admin only."""
+    await _require_admin(user.email)
+    config = await _dept_config_repo.get_company_config()
+    return config or {"prompt": ""}
+
+
+@router.put("/company")
+async def update_company_config(config: dict, user: AuthUser):
+    """Update company-wide context config. Full admin only."""
+    await _require_admin(user.email)
+    await _dept_config_repo.save_company_config(config)
+    return {"status": "updated"}
+
+
 @router.get("/departments")
 async def list_departments(user: AuthUser):
     """List all departments the user can manage."""

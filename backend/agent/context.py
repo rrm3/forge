@@ -27,6 +27,7 @@ def build_system_prompt(
     department_config: dict | None = None,
     intake_responses: dict | None = None,
     idea: UserIdea | None = None,
+    company_prompt: str | None = None,
 ) -> str:
     """Build a system prompt with optional profile, memory, and skill content.
 
@@ -37,11 +38,22 @@ def build_system_prompt(
         session_type: Session type (chat, intake, tip, stuck, etc.)
         department_config: Department config with prompt and objectives.
         intake_responses: Current intake responses (objective_id -> {value, captured_at}).
+        idea: Optional idea for idea-focused coaching chats.
+        company_prompt: Company-wide context injected into all sessions.
 
     Returns:
         The assembled system prompt string.
     """
     parts = [_BASE_PROMPT]
+
+    # Company context - shared across all sessions
+    if company_prompt and company_prompt.strip():
+        parts.append(
+            "## Company Context\n"
+            "The following context is provided by program administrators. "
+            "Use it to tailor your advice to the user's organization.\n\n"
+            f"{company_prompt.strip()}"
+        )
 
     if profile:
         lines = []
@@ -80,20 +92,19 @@ def build_system_prompt(
     if skill_instructions:
         parts.append(skill_instructions)
 
-    # For intake sessions, inject department context + objectives + progress
+    # Department context - injected for all session types
+    if department_config is not None:
+        dept_ctx = _build_department_context(department_config)
+        if dept_ctx:
+            parts.append(dept_ctx)
+
+    # Intake-specific: objectives and progress tracking
     if session_type == "intake":
         if department_config is not None:
-            # Layer 2: Department context
-            dept_ctx = _build_department_context(department_config)
-            if dept_ctx:
-                parts.append(dept_ctx)
-
-            # Layer 3: Intake objectives
             objectives_section = _build_intake_objectives(department_config)
             if objectives_section:
                 parts.append(objectives_section)
 
-            # Layer 4: Turn progress
             progress_section = _build_intake_progress(department_config, intake_responses)
             if progress_section:
                 parts.append(progress_section)
@@ -149,7 +160,12 @@ def _build_department_context(department_config: dict) -> str | None:
     prompt = department_config.get("prompt", "")
     if not prompt or not prompt.strip():
         return None
-    return f"## Department Context\n{prompt.strip()}"
+    return (
+        "## Department Context\n"
+        "The following context is provided by the user's department administrators. "
+        "Use it to tailor your advice to their team's priorities and tools.\n\n"
+        f"{prompt.strip()}"
+    )
 
 
 # ---------------------------------------------------------------------------

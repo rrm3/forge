@@ -111,9 +111,11 @@ class TestSkills:
             result = load_skill(name)
             assert result is not None, f"Failed to load {name}"
 
-    def test_chat_type_has_no_prompt(self):
-        """The 'chat' type has no dedicated prompt."""
-        assert load_skill("chat") is None
+    def test_chat_type_has_prompt(self):
+        """The 'chat' type has a lightweight skill prompt."""
+        result = load_skill("chat")
+        assert result is not None
+        assert "journal" in result.lower()
 
 
 # ---------------------------------------------------------------------------

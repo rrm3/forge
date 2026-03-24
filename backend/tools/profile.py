@@ -227,7 +227,8 @@ async def search_profiles(query: str, context: ToolContext) -> str:
     return "\n".join(lines)
 
 
-def register_profile_tools(registry) -> None:
+def register_profile_tools(registry, include_search: bool = True) -> None:
     registry.register(READ_PROFILE_SCHEMA, read_profile)
     registry.register(UPDATE_PROFILE_SCHEMA, update_profile)
-    registry.register(SEARCH_PROFILES_SCHEMA, search_profiles)
+    if include_search:
+        registry.register(SEARCH_PROFILES_SCHEMA, search_profiles)

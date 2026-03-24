@@ -1,4 +1,4 @@
-import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, Tip, TipComment, UserIdea, AdminUserSummary, AdminUserIntake } from './types';
+import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, CompanyConfig, Tip, TipComment, UserIdea, AdminUserSummary, AdminUserIntake } from './types';
 
 let getTokenFn: (() => Promise<string | null>) | null = null;
 let tokenGetterReady: (() => void) | null = null;
@@ -151,6 +151,20 @@ export async function getDepartmentConfig(department: string): Promise<Departmen
 
 export async function saveDepartmentConfig(department: string, config: DepartmentConfig): Promise<void> {
   const res = await fetchWithAuth(`${API_BASE}/api/admin/departments/${encodeURIComponent(department)}`, {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  });
+  await checkResponse(res);
+}
+
+export async function getCompanyConfig(): Promise<CompanyConfig> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/company`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function saveCompanyConfig(config: CompanyConfig): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/company`, {
     method: 'PUT',
     body: JSON.stringify(config),
   });

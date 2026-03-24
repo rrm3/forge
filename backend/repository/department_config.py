@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 CONFIG_PREFIX = "config/departments/"
 ADMIN_ACCESS_KEY = "config/admin-access.json"
+COMPANY_CONFIG_KEY = "config/company.json"
 
 
 class DepartmentConfigRepository:
@@ -52,6 +53,21 @@ class DepartmentConfigRepository:
         """Write the admin access mapping."""
         data = json.dumps(access, indent=2).encode()
         await self.storage.write(ADMIN_ACCESS_KEY, data, content_type="application/json")
+
+    async def get_company_config(self) -> dict | None:
+        """Read the company-wide config (prompt shared across all sessions).
+
+        Returns None if the company config does not exist.
+        """
+        data = await self.storage.read(COMPANY_CONFIG_KEY)
+        if data is None:
+            return None
+        return json.loads(data.decode())
+
+    async def save_company_config(self, config: dict) -> None:
+        """Write the company-wide config."""
+        data = json.dumps(config, indent=2).encode()
+        await self.storage.write(COMPANY_CONFIG_KEY, data, content_type="application/json")
 
     async def list_departments(self) -> list[str]:
         """List all departments that have config files.

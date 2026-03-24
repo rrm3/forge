@@ -131,31 +131,3 @@ class TestIntakeResume:
         assert loaded[1].content == "I'm a product manager at Dimensions."
 
 
-class TestAnalyzeAndAdvise:
-    """Test the analyze_and_advise tool."""
-
-    def test_schema_registered(self):
-        """The analyze_and_advise tool should be in the registry."""
-        from backend.main import tool_registry
-        schemas = tool_registry.get_schemas()
-        names = [s["name"] for s in schemas]
-        assert "analyze_and_advise" in names
-
-    @pytest.mark.asyncio
-    async def test_analyze_requires_transcript(self):
-        """Should return error message if no transcript exists."""
-        from backend.tools.analyze import analyze_and_advise
-        from backend.tools.registry import ToolContext
-
-        context = ToolContext(
-            user_id="u1",
-            session_id="no-such-session",
-            storage=LocalStorage("/tmp/forge-test-empty"),
-        )
-
-        result = await analyze_and_advise(
-            session_id="no-such-session",
-            question="Score proficiency",
-            context=context,
-        )
-        assert "No transcript" in result

@@ -99,12 +99,12 @@ def build_orgchart():
 
 def build_tool_registry():
     """Create tool registry and register all tools."""
-    from backend.tools.analyze import register_analyze_tools
     from backend.tools.ideas import register_ideas_tools
     from backend.tools.journal import register_journal_tools
     from backend.tools.profile import register_profile_tools
     from backend.tools.registry import ToolRegistry
     from backend.tools.search import register_search_tools
+    from backend.tools.software import register_software_tools
     from backend.tools.tips import register_tips_tools
     from backend.tools.user_ideas import register_user_ideas_tools
 
@@ -112,8 +112,11 @@ def build_tool_registry():
     register_search_tools(registry)
     register_ideas_tools(registry)
     register_journal_tools(registry)
-    register_profile_tools(registry)
-    register_analyze_tools(registry)
+    # TODO: search_profiles disabled pre-launch - needs access control review
+    # to prevent exposing sensitive profile data across users. Re-enable after
+    # adding field-level filtering. See register_profile_tools() in profile.py.
+    register_profile_tools(registry, include_search=False)
+    register_software_tools(registry)
     register_tips_tools(registry)
     register_user_ideas_tools(registry)
     return registry

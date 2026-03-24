@@ -63,7 +63,10 @@ class TestAgentDeps:
         assert "search" in names
         assert "read_profile" in names
         assert "update_profile" in names
-        assert "analyze_and_advise" in names
+        # analyze_and_advise removed pre-launch
+        assert "analyze_and_advise" not in names
+        # search_profiles disabled pre-launch (security review needed)
+        assert "search_profiles" not in names
 
     def test_build_agent_deps(self):
         repos = build_repos()

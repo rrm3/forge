@@ -71,10 +71,8 @@ async def run_agent_session(
         cancel_check: Optional callable that returns True if the session is cancelled.
         idea: Optional UserIdea to provide context for idea-focused chat.
     """
-    # PostHog: identify user on new sessions, track all session starts
+    # PostHog: track session start (identify with full profile happens after profile load)
     trace_id = str(uuid.uuid4())
-    if is_new_session:
-        posthog_identify(user_id, {"email": user_email, "name": user_name})
     posthog_track(user_id, "session_started", {
         "session_id": session_id,
         "session_type": session_type,
@@ -107,28 +105,48 @@ async def run_agent_session(
         profile = UserProfile(**kwargs)
         await deps.profiles_repo.create(profile)
 
+    # PostHog: identify with full profile on new sessions
+    if is_new_session and profile:
+        posthog_identify(user_id, {
+            "email": profile.email,
+            "name": profile.name,
+            "title": profile.title,
+            "department": profile.department,
+            "team": profile.team,
+            "location": profile.location,
+            "onboarding_complete": profile.onboarding_complete,
+            "intake_completed_at": profile.intake_completed_at.isoformat() if profile.intake_completed_at else None,
+            "ai_proficiency_level": profile.ai_proficiency.get("level") if isinstance(profile.ai_proficiency, dict) else None,
+            "created_at": profile.created_at.isoformat() if profile.created_at else None,
+        })
+
     memory = await load_memory(deps.storage, user_id)
 
     # Completed intake sessions behave like normal chats
     intake_is_complete = session_type == "intake" and profile and profile.intake_completed_at
 
-    # Load department config and intake responses for intake sessions
+    # Load company config (shared across all sessions)
+    dept_config_repo = DepartmentConfigRepository(deps.storage)
+    company_config = await dept_config_repo.get_company_config()
+    company_prompt = (company_config or {}).get("prompt", "") or None
+
+    # Load department config for all sessions when user has a department
     department_config = None
     intake_responses = {}
-    if session_type == "intake" and not intake_is_complete and profile and profile.department:
-        dept_config_repo = DepartmentConfigRepository(deps.storage)
+    if profile and profile.department:
         department_config = await dept_config_repo.get_department_config(
             profile.department.lower().replace(" ", "-")
         )
+    # Load intake responses only for incomplete intake sessions
+    if session_type == "intake" and not intake_is_complete:
         intake_responses = await load_intake_responses(deps.storage, user_id)
 
     # Load session-type prompt
     skill_instructions = None
-    if session_type and session_type != "chat":
-        if session_type == "intake" and intake_is_complete:
-            pass  # completed intake - no skill, behaves like chat
-        else:
-            skill_instructions = load_skill(session_type)
+    if session_type == "intake" and intake_is_complete:
+        skill_instructions = load_skill("chat")  # completed intake behaves like chat
+    else:
+        skill_instructions = load_skill(session_type)
 
     # Build system prompt
     system_prompt = build_system_prompt(
@@ -139,6 +157,7 @@ async def run_agent_session(
         department_config=department_config,
         intake_responses=intake_responses,
         idea=idea,
+        company_prompt=company_prompt,
     )
 
     # Build tool context
@@ -181,6 +200,7 @@ async def run_agent_session(
                     session_type=session_type,
                     department_config=department_config,
                     intake_responses=intake_responses,
+                    company_prompt=company_prompt,
                 )
                 logger.info("Objective evaluation completed %d objectives for user=%s", len(newly_completed), user_id)
         except Exception:
@@ -206,6 +226,8 @@ async def run_agent_session(
                     memory=memory,
                     skill_instructions=skill_instructions,
                     session_type=session_type,
+                    department_config=department_config,
+                    company_prompt=company_prompt,
                 )
                 logger.info("Shadow extraction updated %d fields for user=%s", len(extracted), user_id)
         except Exception:

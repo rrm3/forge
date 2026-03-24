@@ -138,6 +138,7 @@ import { IntakeView } from './components/IntakeView';
 import { TopBar } from './components/TopBar';
 import { AdminPanel } from './components/AdminPanel';
 import { AdminLayout } from './components/AdminLayout';
+import { CompanyContextPanel } from './components/CompanyContextPanel';
 import { AdminUsers } from './components/AdminUsers';
 import posthog from './posthog';
 import { getProfile, getAdminAccess, listUserIdeas, getTip } from './api/client';
@@ -276,7 +277,17 @@ function AppContent() {
             avatar_url: p.avatar_url,
             team: p.team,
           });
-          // PostHog: set department group for group analytics
+          // PostHog: enrich person profile and set department group
+          posthog.identify(p.user_id, {
+            email: p.email,
+            name: p.name,
+            title: p.title,
+            department: p.department,
+            team: p.team,
+            location: p.location,
+            onboarding_complete: p.onboarding_complete,
+            intake_completed_at: p.intake_completed_at,
+          });
           if (p.department) {
             posthog.group('department', p.department);
           }
@@ -346,7 +357,7 @@ function AppContent() {
       >
         <Route index element={<Navigate to="settings" replace />} />
         <Route path="settings" element={<AdminPanel />} />
-        {/* Users tab only for full admins */}
+        <Route path="company" element={isAdmin ? <CompanyContextPanel /> : <Navigate to="/admin/settings" replace />} />
         <Route path="users" element={isAdmin ? <AdminUsers /> : <Navigate to="/admin/settings" replace />} />
       </Route>
 

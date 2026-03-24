@@ -1,0 +1,484 @@
+[
+  {
+    "product": "OpenAI / ChatGPT",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "Claude (Claude Code, CoWork) - Pilot",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "Gemini",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "Zapier",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "Google Workspace",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "Slack",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "Zoom",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "1Password",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "Bob (HiBob)",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "SAP Concur",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "Culture Amp",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "DocuSign",
+    "departments": [
+      "Everyone"
+    ]
+  },
+  {
+    "product": "Crunchbase",
+    "departments": [
+      "Operations",
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Salesforce",
+    "departments": [
+      "Sales",
+      "Marketing",
+      "Operations",
+      "Finance"
+    ]
+  },
+  {
+    "product": "Gong",
+    "departments": [
+      "Sales",
+      "Product"
+    ]
+  },
+  {
+    "product": "Klue",
+    "departments": [
+      "Sales",
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Outreach",
+    "departments": [
+      "Sales"
+    ]
+  },
+  {
+    "product": "LeadIQ",
+    "departments": [
+      "Sales"
+    ]
+  },
+  {
+    "product": "ZoomInfo",
+    "departments": [
+      "Sales",
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Loopio",
+    "departments": [
+      "Sales"
+    ]
+  },
+  {
+    "product": "Coda",
+    "departments": [
+      "Product"
+    ]
+  },
+  {
+    "product": "Dovetail",
+    "departments": [
+      "Product"
+    ]
+  },
+  {
+    "product": "Figma",
+    "departments": [
+      "Product"
+    ]
+  },
+  {
+    "product": "Mixpanel",
+    "departments": [
+      "Product"
+    ]
+  },
+  {
+    "product": "Asana",
+    "departments": [
+      "Product",
+      "Operations",
+      "Customer Solutions"
+    ]
+  },
+  {
+    "product": "Miro",
+    "departments": [
+      "Product"
+    ]
+  },
+  {
+    "product": "UserTesting",
+    "departments": [
+      "Product"
+    ]
+  },
+  {
+    "product": "GitHub",
+    "departments": [
+      "Technology"
+    ]
+  },
+  {
+    "product": "GitLab",
+    "departments": [
+      "Technology"
+    ]
+  },
+  {
+    "product": "Bitbucket",
+    "departments": [
+      "Technology"
+    ]
+  },
+  {
+    "product": "Jira",
+    "departments": [
+      "Technology",
+      "Product"
+    ]
+  },
+  {
+    "product": "Confluence",
+    "departments": [
+      "Technology",
+      "Product"
+    ]
+  },
+  {
+    "product": "AWS",
+    "departments": [
+      "Technology"
+    ]
+  },
+  {
+    "product": "Google Cloud Platform",
+    "departments": [
+      "Technology"
+    ]
+  },
+  {
+    "product": "Datadog",
+    "departments": [
+      "Technology"
+    ]
+  },
+  {
+    "product": "Sentry",
+    "departments": [
+      "Technology"
+    ]
+  },
+  {
+    "product": "PagerDuty",
+    "departments": [
+      "Technology"
+    ]
+  },
+  {
+    "product": "New Relic",
+    "departments": [
+      "Technology"
+    ]
+  },
+  {
+    "product": "Grafana",
+    "departments": [
+      "Technology"
+    ]
+  },
+  {
+    "product": "Pardot (Salesforce Marketing)",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Google Analytics",
+    "departments": [
+      "Marketing",
+      "Product"
+    ]
+  },
+  {
+    "product": "Mailchimp",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Hootsuite",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Sprout Social",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Qualtrics",
+    "departments": [
+      "Marketing",
+      "Product"
+    ]
+  },
+  {
+    "product": "Meltwater",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Muck Rack",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Ahrefs",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Google Ads",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "LinkedIn Ads",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "G2",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Eventbrite",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "Canva",
+    "departments": [
+      "Marketing",
+      "Product"
+    ]
+  },
+  {
+    "product": "Supermetrics",
+    "departments": [
+      "Marketing"
+    ]
+  },
+  {
+    "product": "NetSuite",
+    "departments": [
+      "Finance"
+    ]
+  },
+  {
+    "product": "Anaplan",
+    "departments": [
+      "Finance"
+    ]
+  },
+  {
+    "product": "Tipalti",
+    "departments": [
+      "Finance"
+    ]
+  },
+  {
+    "product": "Recurly",
+    "departments": [
+      "Finance",
+      "Product"
+    ]
+  },
+  {
+    "product": "Stripe",
+    "departments": [
+      "Finance",
+      "Product"
+    ]
+  },
+  {
+    "product": "Greenhouse",
+    "departments": [
+      "People"
+    ]
+  },
+  {
+    "product": "Pinpoint",
+    "departments": [
+      "People"
+    ]
+  },
+  {
+    "product": "15Five",
+    "departments": [
+      "People"
+    ]
+  },
+  {
+    "product": "Payscale",
+    "departments": [
+      "People"
+    ]
+  },
+  {
+    "product": "Float",
+    "departments": [
+      "People",
+      "Operations"
+    ]
+  },
+  {
+    "product": "Front",
+    "departments": [
+      "Customer Success",
+      "Customer Solutions"
+    ]
+  },
+  {
+    "product": "Freshdesk",
+    "departments": [
+      "Customer Solutions"
+    ]
+  },
+  {
+    "product": "Help Scout",
+    "departments": [
+      "Customer Solutions"
+    ]
+  },
+  {
+    "product": "Zendesk",
+    "departments": [
+      "Customer Solutions"
+    ]
+  },
+  {
+    "product": "Airtable",
+    "departments": [
+      "Customer Solutions"
+    ]
+  },
+  {
+    "product": "Loom",
+    "departments": [
+      "Customer Success"
+    ]
+  },
+  {
+    "product": "Ironclad",
+    "departments": [
+      "Legal"
+    ]
+  },
+  {
+    "product": "Linksquares",
+    "departments": [
+      "Legal",
+      "Operations"
+    ]
+  },
+  {
+    "product": "OneTrust",
+    "departments": [
+      "Legal"
+    ]
+  },
+  {
+    "product": "Looker",
+    "departments": [
+      "Operations"
+    ]
+  },
+  {
+    "product": "BigQuery",
+    "departments": [
+      "Technology",
+      "Operations"
+    ]
+  },
+  {
+    "product": "Fivetran",
+    "departments": [
+      "Operations"
+    ]
+  },
+  {
+    "product": "Snowflake",
+    "departments": [
+      "Technology"
+    ]
+  }
+]

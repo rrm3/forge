@@ -35,9 +35,11 @@ class TestSessionTypePrompts:
         """Unknown session types should return None."""
         assert load_skill("nonexistent_type") is None
 
-    def test_chat_type_has_no_prompt(self):
-        """The 'chat' session type has no dedicated prompt file."""
-        assert load_skill("chat") is None
+    def test_chat_type_has_prompt(self):
+        """The 'chat' session type has a lightweight skill prompt."""
+        content = load_skill("chat")
+        assert content is not None
+        assert "save_journal" in content
 
     def test_all_prompts_have_tone_section(self):
         """Every session-type prompt should include a Tone section."""

@@ -461,6 +461,17 @@ export function AdminPanel() {
       {/* Context tab */}
       {activeTab === 'context' && config && (
         <div className="flex flex-col gap-4">
+          <div
+            className="px-3 py-2 rounded-md text-xs"
+            style={{
+              backgroundColor: '#FFFBEB',
+              color: '#92400E',
+              fontFamily: "'Satoshi', system-ui, sans-serif",
+              lineHeight: 1.5,
+            }}
+          >
+            Be careful editing this - changes affect the AI system prompt for all users in this department. Only edit if you know what you're doing.
+          </div>
           <div>
             <label
               className="block text-xs font-medium mb-2"
@@ -480,8 +491,9 @@ export function AdminPanel() {
               style={{
                 borderColor: 'var(--color-border)',
                 color: 'var(--color-text-primary)',
-                fontFamily: "'Satoshi', system-ui, sans-serif",
+                fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
                 lineHeight: 1.6,
+                fontSize: 13,
               }}
               onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
               onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}

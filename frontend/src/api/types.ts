@@ -85,6 +85,10 @@ export interface DepartmentConfig {
   objectives: DepartmentObjective[];
 }
 
+export interface CompanyConfig {
+  prompt: string;
+}
+
 export type TipCategory = 'tip' | 'gem' | 'skill';
 
 export interface Tip {
