@@ -19,7 +19,13 @@ def get_program_week(as_of: date | None = None) -> int:
 def intake_title(week: int | None = None) -> str:
     """Session title for the intake of a given program week."""
     w = week if week is not None else get_program_week()
-    return f"Day {w}"
+    return f"Day {w} Getting Started"
+
+
+def wrapup_title(week: int | None = None) -> str:
+    """Session title for the wrapup of a given program week."""
+    w = week if week is not None else get_program_week()
+    return f"Day {w} Wrap-up"
 
 
 def _now() -> datetime:

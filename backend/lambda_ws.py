@@ -270,15 +270,20 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
     from backend.agent.executor import run_agent_session
     from backend.api.transport import ApiGatewayManagementSender
     from backend.config import settings
-    from backend.models import Session, intake_title
+    from backend.models import Session, intake_title, wrapup_title
     import uuid
 
     session_type = msg.get("type", "chat")
     mode = msg.get("mode", "text")
 
     session_id = str(uuid.uuid4())
-    HARDCODED_TITLES = {"wrapup": "End of Day Wrap Up", "stuck": "Get Help", "tip": "New Tip"}
-    title = intake_title() if session_type == "intake" else HARDCODED_TITLES.get(session_type, "")
+    HARDCODED_TITLES = {"stuck": "Get Help", "tip": "New Tip"}
+    if session_type == "intake":
+        title = intake_title()
+    elif session_type == "wrapup":
+        title = wrapup_title()
+    else:
+        title = HARDCODED_TITLES.get(session_type, "")
     session = Session(session_id=session_id, user_id=user_data["user_id"], title=title, type=session_type)
     await _deps.sessions_repo.create(session)
 

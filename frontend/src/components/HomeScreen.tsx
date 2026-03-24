@@ -4,6 +4,7 @@ import { Lightbulb, Compass, Star, Sunrise, Trophy, ArrowRight } from 'lucide-re
 import { useSession } from '../state/SessionContext';
 import { useAuth } from '../auth/useAuth';
 import { getProfile, listUserIdeas } from '../api/client';
+import { wrapupTitle } from '../program';
 import type { SessionType, UserProfile, UserIdea } from '../api/types';
 
 const ACTION_BUTTONS: { type: SessionType; label: string; Icon: typeof Lightbulb }[] = [
@@ -93,7 +94,17 @@ export function HomeScreen() {
               {ACTION_BUTTONS.map((btn) => (
                 <button
                   key={btn.type}
-                  onClick={() => startTypedSession(btn.type)}
+                  onClick={() => {
+                    if (btn.type === 'wrapup') {
+                      // Singleton: reuse existing wrapup for this week instead of creating a duplicate
+                      const existing = state.sessions.find(s => s.type === 'wrapup' && s.title === wrapupTitle());
+                      if (existing) {
+                        navigate(`/chat/${existing.session_id}`);
+                        return;
+                      }
+                    }
+                    startTypedSession(btn.type);
+                  }}
                   className="group flex items-center gap-3 px-5 py-4 rounded-xl border bg-white hover:bg-[var(--color-primary-subtle)] hover:border-[var(--color-primary)] text-left transition-all duration-200 cursor-pointer"
                   style={{ borderColor: 'var(--color-border)' }}
                 >
@@ -111,7 +122,7 @@ export function HomeScreen() {
                     className="text-sm font-medium transition-colors duration-200 group-hover:text-[var(--color-primary)]"
                     style={{ color: 'var(--color-text-secondary)' }}
                   >
-                    {btn.label}
+                    {btn.type === 'wrapup' ? wrapupTitle() : btn.label}
                   </span>
                 </button>
               ))}

@@ -18,7 +18,7 @@ from backend.api.transport import WebSocketSender
 from backend.auth import CurrentUser, _masquerade_user, _verify_oidc_token
 from backend.config import settings
 from backend.deps import AgentDeps
-from backend.models import Session, intake_title
+from backend.models import Session, intake_title, wrapup_title
 
 logger = logging.getLogger(__name__)
 
@@ -142,8 +142,13 @@ async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: d
     session_type = msg.get("type", "chat")
     idea_id = msg.get("idea_id")
     session_id = str(uuid.uuid4())
-    INITIAL_TITLES = {"wrapup": "End of Day Wrap Up", "stuck": "Get Help", "tip": "New Tip"}
-    title = intake_title() if session_type == "intake" else INITIAL_TITLES.get(session_type, "")
+    INITIAL_TITLES = {"stuck": "Get Help", "tip": "New Tip"}
+    if session_type == "intake":
+        title = intake_title()
+    elif session_type == "wrapup":
+        title = wrapup_title()
+    else:
+        title = INITIAL_TITLES.get(session_type, "")
     session = Session(session_id=session_id, user_id=user.user_id, title=title, type=session_type)
     await _deps.sessions_repo.create(session)
 

@@ -57,11 +57,11 @@ export function ConfirmResetModal({ open, onCancel, onConfirm, loading }: Confir
 
         <div className="space-y-2 mb-6">
           <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-            This will reset your {dayLabel} intake. Your conversation, profile
+            This will reset your {dayLabel} session. Your conversation, profile
             data, and ideas captured during this session will be cleared.
           </p>
           <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-            You'll need to redo the {dayLabel} intake before continuing.
+            You'll need to redo {dayLabel} before continuing.
           </p>
           <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
             Your other conversations and tips will not be affected.
