@@ -107,9 +107,11 @@ def build_tool_registry():
     from backend.tools.software import register_software_tools
     from backend.tools.tips import register_tips_tools
     from backend.tools.user_ideas import register_user_ideas_tools
+    from backend.tools.web_search import register_web_search_tools
 
     registry = ToolRegistry()
     register_search_tools(registry)
+    register_web_search_tools(registry)
     register_ideas_tools(registry)
     register_journal_tools(registry)
     # TODO: search_profiles disabled pre-launch - needs access control review

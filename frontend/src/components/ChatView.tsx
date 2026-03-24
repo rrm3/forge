@@ -12,6 +12,9 @@ import { IdeaPreviewCard } from './IdeaPreviewCard';
 
 const TOOL_ROLES = new Set(['tool_call', 'tool_result']);
 
+// Tools whose call indicators are shown to all users (not just admins)
+const USER_VISIBLE_TOOLS = new Set(['search_internal', 'search_web', 'retrieve_document']);
+
 export function ChatView() {
   const navigate = useNavigate();
   const adminMode = useAdminStore((s) => s.adminMode);
@@ -174,7 +177,12 @@ export function ChatView() {
                 </div>
               </div>
             )}
-            {messages.filter((msg) => adminMode || !TOOL_ROLES.has(msg.role)).map((msg, i) => (
+            {messages.filter((msg) => {
+              if (!TOOL_ROLES.has(msg.role)) return true;
+              if (adminMode) return true;
+              // Show tool call pills for user-visible tools
+              return msg.role === 'tool_call' && USER_VISIBLE_TOOLS.has(msg.tool_name || '');
+            }).map((msg, i) => (
               <MessageBubble key={i} message={msg} />
             ))}
 

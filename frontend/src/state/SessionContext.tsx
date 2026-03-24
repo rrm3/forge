@@ -256,6 +256,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
         case 'tool_call':
           if (msg.session_id === activeSessionIdRef.current) {
+            // Commit any accumulated streaming text as an assistant message
+            // BEFORE adding the tool call, so text appears above the tool indicator
+            if (accumulatedTextRef.current) {
+              dispatch({
+                type: 'ADD_MESSAGE',
+                message: {
+                  role: 'assistant',
+                  content: accumulatedTextRef.current,
+                  timestamp: new Date().toISOString(),
+                },
+              });
+              dispatch({ type: 'CLEAR_STREAMING_TEXT' });
+              accumulatedTextRef.current = '';
+            }
             const toolCallMsg: Message = {
               role: 'tool_call',
               content: JSON.stringify(msg.args),

@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 _TOKEN_BATCH_INTERVAL = 0.05  # 50ms
 
 # Tools whose calls/results are shown to the client (others hidden unless dev_mode)
-_USER_VISIBLE_TOOLS = {"search", "retrieve_document", "search_profiles"}
+_USER_VISIBLE_TOOLS = {"search_internal", "search_web", "retrieve_document"}
 
 
 async def run_agent_session(
@@ -263,6 +263,9 @@ async def run_agent_session(
 
     # Run the loop
     first_assistant_text: list[str] = []
+    # Defer the 'done' message until after all cleanup so the session lock/mutex
+    # is released before the frontend allows sending the next message.
+    deferred_done_payload: dict | None = None
 
     try:
         async for event in react_loop(
@@ -331,11 +334,14 @@ async def run_agent_session(
                     except Exception:
                         pass
 
-                await sender.send({
+                # Defer sending 'done' until after cleanup (transcript save, title
+                # generation, etc.) so the session lock is released first.  Without
+                # this, a fast follow-up message hits "Session is already processing".
+                deferred_done_payload = {
                     "type": "done",
                     "session_id": session_id,
                     "usage": usage_data,
-                })
+                }
                 posthog_track(user_id, "agent_completed", {
                     "session_id": session_id,
                     "session_type": session_type,
@@ -357,76 +363,88 @@ async def run_agent_session(
         if cancel_task:
             cancel_task.cancel()
 
-    # Final flush
-    await flush_tokens()
+    # Post-loop cleanup: save transcript, generate title, detect tips/ideas.
+    # Wrapped in try/finally to guarantee the deferred 'done' message is sent
+    # even if cleanup fails — otherwise the frontend hangs in isStreaming.
+    try:
+        # Final flush
+        await flush_tokens()
 
-    # Append messages to transcript
-    now = datetime.now(UTC)
-    if not is_silent_start:
-        transcript.append(Message(
-            role="user",
-            content=user_message.strip(),
-            timestamp=now,
-        ))
-    assistant_text = "".join(first_assistant_text)
-    if assistant_text:
-        transcript.append(Message(
-            role="assistant",
-            content=assistant_text,
-            timestamp=now,
-        ))
+        # Append messages to transcript
+        now = datetime.now(UTC)
+        if not is_silent_start:
+            transcript.append(Message(
+                role="user",
+                content=user_message.strip(),
+                timestamp=now,
+            ))
+        assistant_text = "".join(first_assistant_text)
+        if assistant_text:
+            transcript.append(Message(
+                role="assistant",
+                content=assistant_text,
+                timestamp=now,
+            ))
 
-    # Save transcript and update session
-    await save_transcript(deps.storage, user_id, session_id, transcript)
-    session = await deps.sessions_repo.get(user_id, session_id)
-    if session:
-        session.message_count = len(transcript)
-        session.updated_at = datetime.now(UTC)
-        await deps.sessions_repo.update(session)
+        # Save transcript and update session
+        await save_transcript(deps.storage, user_id, session_id, transcript)
+        session = await deps.sessions_repo.get(user_id, session_id)
+        if session:
+            session.message_count = len(transcript)
+            session.updated_at = datetime.now(UTC)
+            await deps.sessions_repo.update(session)
 
-    # Detect prepared tips and send preview data to frontend
-    if session_type == "tip":
-        await _check_tip_prepared(transcript, sender, session_id)
+        # Detect prepared tips and send preview data to frontend
+        if session_type == "tip":
+            await _check_tip_prepared(transcript, sender, session_id)
 
-    # Detect prepared ideas and send preview data to frontend
-    if session_type in ("brainstorm", "chat", "tip", "stuck", "intake"):
-        await _check_idea_prepared(transcript, sender, session_id)
+        # Detect prepared ideas and send preview data to frontend
+        if session_type in ("brainstorm", "chat", "tip", "stuck", "intake"):
+            await _check_idea_prepared(transcript, sender, session_id)
 
-    # Intake state machine: check required fields and mark complete when done
-    if session_type == "intake" and not intake_is_complete:
-        await _check_intake_completion(deps, user_id, transcript, sender, session_id, department_config, intake_responses)
+        # Intake state machine: check required fields and mark complete when done
+        if session_type == "intake" and not intake_is_complete:
+            await _check_intake_completion(deps, user_id, transcript, sender, session_id, department_config, intake_responses)
 
-    # Generate title for sessions
-    # - intake/wrapup: hardcoded titles, never overwritten
-    # - brainstorm/stuck: defer until user's first real message (opening prompt is generic)
-    # - chat/tip: generate immediately on first turn
-    SESSION_TITLE_PREFIXES = {"brainstorm": "Brainstorm", "stuck": "Help", "tip": "New Tip"}
-    DEFERRED_TITLE_TYPES = {"brainstorm", "stuck"}
-    needs_title = False
-    if session_type not in ("intake", "wrapup"):
-        if session_type in DEFERRED_TITLE_TYPES:
-            # Deferred: wait for user's first real message
-            if not is_new_session and user_message.strip() and assistant_text and session:
-                needs_title = len(transcript) <= 3  # opening + first user msg + response
-        elif is_new_session and assistant_text:
-            needs_title = True
+        # Generate title for sessions
+        # - intake/wrapup: hardcoded titles, never overwritten
+        # - brainstorm/stuck: defer until user's first real message (opening prompt is generic)
+        # - chat/tip: generate immediately on first turn
+        SESSION_TITLE_PREFIXES = {"brainstorm": "Brainstorm", "stuck": "Help", "tip": "New Tip"}
+        DEFERRED_TITLE_TYPES = {"brainstorm", "stuck"}
+        needs_title = False
+        if session_type not in ("intake", "wrapup"):
+            if session_type in DEFERRED_TITLE_TYPES:
+                # Deferred: wait for user's first real message
+                if not is_new_session and user_message.strip() and assistant_text and session:
+                    needs_title = len(transcript) <= 3  # opening + first user msg + response
+            elif is_new_session and assistant_text:
+                needs_title = True
 
-    if needs_title:
-        try:
-            title = await _generate_title(user_message or "New conversation", assistant_text, metadata=posthog_metadata)
-            prefix = SESSION_TITLE_PREFIXES.get(session_type)
-            if prefix:
-                title = f"{prefix}: {title}"
-            if session:
-                session.title = title
-                await deps.sessions_repo.update(session)
-            await sender.send({
-                "type": "session_update",
-                "session_id": session_id,
-                "title": title,
-            })
-        except Exception:
-            logger.warning("Failed to generate session title", exc_info=True)
+        if needs_title:
+            try:
+                title = await _generate_title(user_message or "New conversation", assistant_text, metadata=posthog_metadata)
+                prefix = SESSION_TITLE_PREFIXES.get(session_type)
+                if prefix:
+                    title = f"{prefix}: {title}"
+                if session:
+                    session.title = title
+                    await deps.sessions_repo.update(session)
+                await sender.send({
+                    "type": "session_update",
+                    "session_id": session_id,
+                    "title": title,
+                })
+            except Exception:
+                logger.warning("Failed to generate session title", exc_info=True)
+    except Exception:
+        logger.exception("Post-loop cleanup failed for session=%s", session_id)
+    finally:
+        # Send the deferred 'done' message AFTER cleanup completes (or fails).
+        # This ensures the session lock/mutex is released before the frontend
+        # allows the user to send the next message.
+        if deferred_done_payload:
+            await sender.send(deferred_done_payload)
 
 
 async def _poll_cancel(cancel_check: Callable[[], bool], cancel_event: asyncio.Event):

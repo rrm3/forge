@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Globe, Search, FileText, Wrench } from 'lucide-react';
 import type { Message } from '../api/types';
 
 const LANG_NAMES: Record<string, string> = {
@@ -133,6 +134,18 @@ export const streamingMarkdownComponents = {
   ),
 };
 
+const TOOL_LABELS: Record<string, string> = {
+  search_internal: 'Searching knowledge base',
+  search_web: 'Searching the web',
+  retrieve_document: 'Reading document',
+};
+
+const TOOL_ICONS: Record<string, typeof Globe> = {
+  search_internal: Search,
+  search_web: Globe,
+  retrieve_document: FileText,
+};
+
 interface MessageBubbleProps {
   message: Message;
 }
@@ -141,14 +154,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const [expanded, setExpanded] = useState(false);
 
   if (message.role === 'tool_call') {
-    const name = message.tool_name || message.content;
+    const rawName = message.tool_name || message.content;
+    const label = TOOL_LABELS[rawName] || rawName;
+    const Icon = TOOL_ICONS[rawName] || Wrench;
     return (
       <div className="flex justify-start py-0.5">
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--color-bg-light)] text-[var(--color-text-muted)] text-xs">
-          <svg className="w-3 h-3 text-[var(--color-text-placeholder)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.049.58.025 1.192-.14 1.743" />
-          </svg>
-          {name}
+          <Icon className="w-3 h-3 text-[var(--color-text-placeholder)]" strokeWidth={1.5} />
+          {label}
         </div>
       </div>
     );

@@ -7,7 +7,7 @@ from backend.tools.registry import ToolContext
 logger = logging.getLogger(__name__)
 
 SEARCH_SCHEMA = {
-    "name": "search",
+    "name": "search_internal",
     "description": (
         "Search across Digital Science's knowledge base including department resources, "
         "Gong call transcripts, Dovetail user research, product roadmap, and Klue competitive intelligence. "

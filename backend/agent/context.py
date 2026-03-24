@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from backend.models import UserIdea, UserProfile
 
 _BASE_PROMPT = (
     "You are an AI assistant for Digital Science's AI Tuesdays program. "
     "You help employees learn to use AI in their daily work.\n\n"
-    "You have access to tools that let you search the knowledge base "
-    "(department resources, Gong calls, Dovetail research, roadmap, competitive intelligence), "
-    "manage journal entries, track ideas, and update user profiles. "
+    "You have access to tools that let you search internal knowledge bases "
+    "(department resources, Gong calls, Dovetail research, roadmap, competitive intelligence) "
+    "and the public web, manage journal entries, track ideas, and update user profiles. "
     "Use them when appropriate to help users effectively.\n\n"
-    "When searching, choose tables relevant to the user's question. "
-    "For department-specific guidance, search 'department_resources'. "
-    "For customer conversations, search 'gong_turns' or 'gong_calls'. "
-    "For user research, search 'dovetail_highlights'. "
-    "For competitive intelligence, search 'klue_battlecards'."
+    "For internal Digital Science information, use 'search_internal' and choose tables "
+    "relevant to the user's question: 'department_resources' for department guidance, "
+    "'gong_turns' or 'gong_calls' for customer conversations, 'dovetail_highlights' "
+    "for user research, 'klue_battlecards' for competitive intelligence. "
+    "For current events, public information, or anything external, use 'search_web'."
 )
 
 
@@ -45,6 +47,9 @@ def build_system_prompt(
         The assembled system prompt string.
     """
     parts = [_BASE_PROMPT]
+
+    # Current date
+    parts.append(f"Today's date is {datetime.now(UTC).strftime('%A, %B %d, %Y').replace(' 0', ' ')}.")
 
     # Company context - shared across all sessions
     if company_prompt and company_prompt.strip():

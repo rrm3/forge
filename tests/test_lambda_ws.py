@@ -60,7 +60,8 @@ class TestAgentDeps:
         registry = build_tool_registry()
         schemas = registry.get_schemas()
         names = [s["name"] for s in schemas]
-        assert "search" in names
+        assert "search_internal" in names
+        assert "search_web" in names
         assert "read_profile" in names
         assert "update_profile" in names
         # analyze_and_advise removed pre-launch

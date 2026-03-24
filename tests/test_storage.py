@@ -124,12 +124,12 @@ async def test_transcript_stored_at_correct_key(store, tmp_path):
 @pytest.mark.asyncio
 async def test_transcript_roundtrip_preserves_tool_fields(store):
     messages = [
-        Message(role="tool_call", content='{"name":"search"}', tool_name="search", tool_call_id="tc1"),
+        Message(role="tool_call", content='{"name":"search_internal"}', tool_name="search_internal", tool_call_id="tc1"),
         Message(role="tool_result", content="results here", tool_call_id="tc1"),
     ]
     await save_transcript(store, "u2", "s2", messages)
     loaded = await load_transcript(store, "u2", "s2")
-    assert loaded[0].tool_name == "search"
+    assert loaded[0].tool_name == "search_internal"
     assert loaded[0].tool_call_id == "tc1"
     assert loaded[1].tool_call_id == "tc1"
 
