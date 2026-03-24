@@ -524,11 +524,11 @@ export class ForgeStack extends cdk.Stack {
     // Security response headers (CSP, HSTS, clickjacking, MIME sniffing)
     const cspValue = [
       "default-src 'self'",
-      "script-src 'self'",
+      "script-src 'self' https://us-assets.i.posthog.com",
       "style-src 'self' 'unsafe-inline' https://api.fontshare.com https://fonts.googleapis.com",
       "font-src 'self' https://cdn.fontshare.com https://fonts.gstatic.com",
       "img-src 'self' data: https://media-process.hibob.com",
-      `connect-src 'self'${oidcProviderUrl ? ` ${oidcProviderUrl}` : ''} wss:`,
+      `connect-src 'self'${oidcProviderUrl ? ` ${oidcProviderUrl}` : ''} https://us.i.posthog.com https://us-assets.i.posthog.com wss:`,
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
