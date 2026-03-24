@@ -47,7 +47,7 @@ def identify(
 ) -> None:
     if _client is None:
         return
-    _client.identify(distinct_id=distinct_id, properties=properties or {})
+    _client.set(distinct_id=distinct_id, properties=properties or {})
 
 
 def group_identify(
