@@ -45,6 +45,8 @@ do_start() {
 
     echo "Starting backend on :8000..."
     cd "$REPO_ROOT"
+    # --reload: uvicorn watches all files under $REPO_ROOT via WatchFiles.
+    # Python changes are picked up automatically - no manual restart needed.
     uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload > /tmp/forge-backend.log 2>&1 &
     echo $! > "$PIDFILE_BACKEND"
 
