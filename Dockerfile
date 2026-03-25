@@ -14,6 +14,8 @@ WORKDIR /var/task
 COPY --from=ghcr.io/astral-sh/uv:0.10.0 /uv /usr/local/bin/uv
 
 # Install dependencies from lockfile (copy these first for Docker layer caching)
+# Point uv's venv at the system Python so installed binaries are on PATH
+ENV UV_PROJECT_ENVIRONMENT="/usr/local"
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-editable
 
