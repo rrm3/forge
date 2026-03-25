@@ -14,6 +14,8 @@ import logging
 import os
 import time
 
+from fastapi import HTTPException
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -91,6 +93,9 @@ def _handle_connect(event, connection_id: str) -> dict:
     try:
         from backend.auth import _verify_oidc_token
         user = _verify_oidc_token(token)
+    except HTTPException as e:
+        logger.info("Connect rejected: %s (status=%s)", e.detail, e.status_code)
+        return {"statusCode": e.status_code}
     except Exception as e:
         logger.info("Connect rejected: invalid token: %s", e)
         return {"statusCode": 401}

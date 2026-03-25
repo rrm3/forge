@@ -26,7 +26,25 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   return fetch(url, { ...options, headers });
 }
 
+export class AccessDeniedError extends Error {
+  constructor(detail: string) {
+    super(detail);
+    this.name = 'AccessDeniedError';
+  }
+}
+
 async function checkResponse(res: Response): Promise<Response> {
+  if (res.status === 403) {
+    const text = await res.text().catch(() => 'Access denied');
+    let detail = 'Access denied';
+    try {
+      const body = JSON.parse(text);
+      detail = body.detail || detail;
+    } catch {
+      detail = text || detail;
+    }
+    throw new AccessDeniedError(detail);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw new Error(`API error ${res.status}: ${text}`);
