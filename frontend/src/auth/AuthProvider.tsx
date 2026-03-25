@@ -1,6 +1,6 @@
 import { createContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import posthog from '../posthog';
-import { startLogin, handleCallback, parseJwtPayload, refreshWithToken, oidcConfig, type OidcTokens } from './oidc';
+import { startLogin, startLoginForcePrompt, handleCallback, parseJwtPayload, refreshWithToken, oidcConfig, type OidcTokens } from './oidc';
 import { setTokenGetter } from '../api/client';
 import { setWsTokenGetter, forgeWs } from '../api/websocket';
 
@@ -17,6 +17,7 @@ interface AuthContextType {
   user: AuthUser | null;
   signIn: () => void;
   signOut: () => void;
+  switchAccount: () => void;
   getToken: () => Promise<string | null>;
 }
 
@@ -327,6 +328,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = logoutUrl;
   }, []);
 
+  const switchAccount = useCallback(() => {
+    signingOutRef.current = true;
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_LOCK_KEY);
+    forgeWs.disconnect();
+    posthog.reset();
+    startLoginForcePrompt();
+  }, []);
+
   // Wire token getters
   useEffect(() => {
     setTokenGetter(getToken);
@@ -347,6 +361,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     signIn,
     signOut,
+    switchAccount,
     getToken,
   };
 

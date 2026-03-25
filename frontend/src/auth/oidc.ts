@@ -51,6 +51,32 @@ export async function startLogin(): Promise<void> {
   window.location.href = `${oidcConfig.providerUrl}/authorize?${params}`;
 }
 
+/**
+ * Start OIDC login with prompt=login, forcing the IdP to show the login
+ * screen even if there's an existing session. Used for "Switch account".
+ */
+export async function startLoginForcePrompt(): Promise<void> {
+  const codeVerifier = generateRandomString(64);
+  const codeChallenge = base64urlEncode(await sha256(codeVerifier));
+  const state = generateRandomString(32);
+
+  sessionStorage.setItem('oidc_code_verifier', codeVerifier);
+  sessionStorage.setItem('oidc_state', state);
+
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: oidcConfig.clientId,
+    redirect_uri: oidcConfig.redirectUri,
+    scope: oidcConfig.scopes,
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+    prompt: 'login',
+  });
+
+  window.location.href = `${oidcConfig.providerUrl}/authorize?${params}`;
+}
+
 export interface OidcTokens {
   idToken: string;
   accessToken: string;

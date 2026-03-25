@@ -352,7 +352,7 @@ function AccessDeniedPage({ user, onSwitchAccount }: {
 
 function AppContent() {
   const { loadSessions, state } = useSession();
-  const { user, signOut } = useAuth();
+  const { user, switchAccount } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [accessDenied, setAccessDenied] = useState<string | null>(null);
@@ -432,7 +432,7 @@ function AppContent() {
   }, [user, profileLoaded, accessDenied, setAdminAccess]);
 
   if (accessDenied) {
-    return <AccessDeniedPage user={user} onSwitchAccount={signOut} />;
+    return <AccessDeniedPage user={user} onSwitchAccount={switchAccount} />;
   }
 
   if (!profileLoaded) {
