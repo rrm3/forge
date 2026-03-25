@@ -378,8 +378,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadSessions = useCallback(async () => {
-    const sessions = await listSessions();
-    dispatch({ type: 'SET_SESSIONS', sessions });
+    try {
+      const sessions = await listSessions();
+      dispatch({ type: 'SET_SESSIONS', sessions });
+    } catch {
+      // 403 (access denied) or other errors - don't crash, let AppContent handle it
+    }
   }, []);
 
   const selectSession = useCallback(async (id: string) => {

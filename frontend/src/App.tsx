@@ -321,8 +321,7 @@ function AccessDeniedPage({ detail, onSignOut }: { detail: string; onSignOut: ()
 
 function AppContent() {
   const { loadSessions, state } = useSession();
-  const { user } = useAuth();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [accessDenied, setAccessDenied] = useState<string | null>(null);
