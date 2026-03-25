@@ -10,9 +10,12 @@ ENV AWS_LWA_INVOKE_MODE=response_stream
 
 WORKDIR /var/task
 
-# Install dependencies (includes awslambdaric for WS Lambda)
-COPY pyproject.toml .
-RUN pip install --no-cache-dir ".[dev]" 2>/dev/null || pip install --no-cache-dir .
+# Install uv (pinned version for reproducibility)
+COPY --from=ghcr.io/astral-sh/uv:0.10.0 /uv /usr/local/bin/uv
+
+# Install dependencies from lockfile (copy these first for Docker layer caching)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-editable
 
 # Copy application code
 COPY backend/ backend/
