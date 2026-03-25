@@ -49,6 +49,9 @@ cdk.out/
 # Dependencies
 uv.lock
 
+# Analytics data (synced from production)
+data/
+
 # Misc
 *.log
 .coverage

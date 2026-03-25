@@ -11,7 +11,7 @@ import json
 import logging
 import uuid
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from backend.agent.executor import run_agent_session
 from backend.api.transport import WebSocketSender
@@ -63,6 +63,8 @@ async def _authenticate_ws(ws: WebSocket) -> CurrentUser | None:
         return None
     try:
         user = _verify_oidc_token(token)
+    except HTTPException:
+        return None
     except Exception:
         return None
 

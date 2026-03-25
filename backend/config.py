@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     posthog_api_key: str = ""
     posthog_host: str = "https://us.i.posthog.com"
 
+    # Allowed email domains config (JSON file on S3 or local)
+    allowed_domains_s3_key: str = "config/allowed-domains.json"
+    allowed_domains_local_path: str = ""
+
     # Dev
     dev_mode: bool = False
 

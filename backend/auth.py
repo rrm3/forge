@@ -10,6 +10,7 @@ import jwt
 from fastapi import Depends, Header, HTTPException, Request, status
 from jwt import PyJWKClient
 
+from backend.allowed_domains import is_domain_allowed
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -70,9 +71,20 @@ def _verify_oidc_token(token: str) -> CurrentUser:
             detail=f"Invalid token: {e}",
         ) from e
 
+    email = payload.get("email", "")
+
+    # Enforce email domain allowlist
+    if not is_domain_allowed(email):
+        domain = email.rsplit("@", 1)[-1] if "@" in email else "(none)"
+        logger.warning("Login rejected: email domain '%s' not allowed (email: %s)", domain, email)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Email domain '{domain}' is not authorized to access this application",
+        )
+
     return CurrentUser(
         user_id=payload["sub"],
-        email=payload.get("email", ""),
+        email=email,
         name=payload.get("name", ""),
     )
 

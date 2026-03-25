@@ -175,6 +175,7 @@ class TestVerifyOidcToken:
             patch("backend.auth._jwks_url", return_value="https://example.com/jwks"),
             patch("backend.auth.jwt.decode", return_value=mock_payload),
             patch("backend.auth.settings") as mock_settings,
+            patch("backend.auth.is_domain_allowed", return_value=True),
         ):
             mock_settings.oidc_provider_url = "https://id.digitalscience.ai"
             mock_settings.oidc_client_id = "client123"
@@ -200,6 +201,7 @@ class TestVerifyOidcToken:
             patch("backend.auth._jwks_url", return_value="https://example.com/jwks"),
             patch("backend.auth.jwt.decode", return_value=mock_payload),
             patch("backend.auth.settings") as mock_settings,
+            patch("backend.auth.is_domain_allowed", return_value=True),
         ):
             mock_settings.oidc_provider_url = "https://id.digitalscience.ai"
             mock_settings.oidc_client_id = "client123"
@@ -207,3 +209,30 @@ class TestVerifyOidcToken:
             user = _verify_oidc_token("fake.jwt.token")
 
         assert user.name == ""
+
+    def test_disallowed_domain_raises_403(self):
+        mock_payload = {
+            "sub": "user-sub-999",
+            "email": "hacker@evil.com",
+            "name": "Bad Actor",
+        }
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "fake-rsa-key"
+        mock_client = MagicMock()
+        mock_client.get_signing_key_from_jwt.return_value = mock_signing_key
+
+        with (
+            patch("backend.auth._get_jwks_client", return_value=mock_client),
+            patch("backend.auth._jwks_url", return_value="https://example.com/jwks"),
+            patch("backend.auth.jwt.decode", return_value=mock_payload),
+            patch("backend.auth.settings") as mock_settings,
+            patch("backend.auth.is_domain_allowed", return_value=False),
+        ):
+            mock_settings.oidc_provider_url = "https://id.digitalscience.ai"
+            mock_settings.oidc_client_id = "client123"
+
+            with pytest.raises(HTTPException) as exc_info:
+                _verify_oidc_token("fake.jwt.token")
+
+        assert exc_info.value.status_code == 403
+        assert "evil.com" in exc_info.value.detail

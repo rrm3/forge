@@ -141,7 +141,7 @@ import { AdminLayout } from './components/AdminLayout';
 import { CompanyContextPanel } from './components/CompanyContextPanel';
 import { AdminUsers } from './components/AdminUsers';
 import posthog from './posthog';
-import { getProfile, getAdminAccess, listUserIdeas, getTip } from './api/client';
+import { getProfile, getAdminAccess, listUserIdeas, getTip, AccessDeniedError } from './api/client';
 import { useProfileCache } from './state/profileCache';
 import type { UserProfile } from './api/types';
 
@@ -246,11 +246,86 @@ function MainLayout({ profile, ideaCount }: { profile: UserProfile | null; ideaC
   );
 }
 
+function AccessDeniedPage({ detail, onSignOut }: { detail: string; onSignOut: () => void }) {
+  return (
+    <div className="min-h-screen flex items-start justify-center px-5 pt-20" style={{
+      background: [
+        'radial-gradient(circle at 85% 10%, rgba(235, 211, 244, 0.5), transparent 30%)',
+        'radial-gradient(circle at 90% 15%, rgba(212, 240, 255, 0.5), transparent 30%)',
+        'radial-gradient(circle at 10% 60%, rgba(212, 240, 255, 0.5), transparent 30%)',
+        'radial-gradient(circle at 20% 80%, rgba(231, 244, 217, 0.5), transparent 30%)',
+        'radial-gradient(circle at 90% 90%, rgba(212, 240, 255, 0.5), transparent 30%)',
+        '#f8f9fb',
+      ].join(', '),
+    }}>
+      <div style={{
+        width: '100%',
+        maxWidth: 476,
+        background: '#fff',
+        borderRadius: 16,
+        boxShadow: '0px 4px 6px -4px rgba(0, 0, 0, 0.1), 0px 1px 29px -3px rgba(0, 0, 0, 0.16)',
+        padding: '40px 52px',
+        textAlign: 'center',
+        fontFamily: 'Satoshi, sans-serif',
+      }}>
+        <div style={{
+          width: 48,
+          height: 48,
+          margin: '0 auto 20px',
+          borderRadius: '50%',
+          background: '#FEF2F2',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 24,
+        }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+          </svg>
+        </div>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1A1F25', margin: '0 0 8px' }}>
+          Access Restricted
+        </h1>
+        <p style={{ fontSize: 14, color: '#4A5568', margin: '0 0 24px', lineHeight: 1.6 }}>
+          {detail}
+        </p>
+        <p style={{ fontSize: 14, color: '#4A5568', margin: '0 0 32px', lineHeight: 1.6 }}>
+          If you believe you should have access, please contact us at{' '}
+          <a
+            href="mailto:aituesdayscompanion@digital-science.com"
+            style={{ color: '#159AC9', textDecoration: 'none', fontWeight: 500 }}
+          >
+            aituesdayscompanion@digital-science.com
+          </a>
+        </p>
+        <button
+          onClick={onSignOut}
+          style={{
+            padding: '10px 24px',
+            fontSize: 14,
+            fontWeight: 500,
+            color: '#fff',
+            background: '#1A1F25',
+            border: 'none',
+            borderRadius: 8,
+            cursor: 'pointer',
+          }}
+        >
+          Sign out
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AppContent() {
   const { loadSessions, state } = useSession();
   const { user } = useAuth();
+  const { signOut } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [accessDenied, setAccessDenied] = useState<string | null>(null);
   const [ideaCount, setIdeaCount] = useState(0);
   const setAdminAccess = useAdminStore((s) => s.setAdminAccess);
   const isAdmin = useAdminStore((s) => s.isAdmin);
@@ -293,6 +368,11 @@ function AppContent() {
           }
         })
         .catch((err) => {
+          if (err instanceof AccessDeniedError) {
+            setAccessDenied(err.message);
+            setProfileLoaded(true);
+            return;
+          }
           if (err?.message?.includes('401')) return;
           setProfileLoaded(true);
         });
@@ -314,6 +394,10 @@ function AppContent() {
         .catch(() => setAdminChecked(true));
     }
   }, [user, setAdminAccess]);
+
+  if (accessDenied) {
+    return <AccessDeniedPage detail={accessDenied} onSignOut={signOut} />;
+  }
 
   if (!profileLoaded) {
     return <LoadingScreen />;
