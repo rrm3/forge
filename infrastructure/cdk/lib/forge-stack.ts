@@ -555,6 +555,26 @@ export class ForgeStack extends cdk.Stack {
       },
     });
 
+    // SPA routing: rewrite S3 403/404 to /index.html so client-side routes work.
+    // This is a CloudFront Function on the default (S3) behavior only, NOT on
+    // /api/* — so backend 403 responses pass through to the browser untouched.
+    const spaRewriteFn = new cloudfront.Function(this, 'SpaRewriteFunction', {
+      code: cloudfront.FunctionCode.fromInline(`
+        function handler(event) {
+          var request = event.request;
+          var uri = request.uri;
+          // If the URI has an extension (file request), pass through as-is.
+          // Otherwise it's a client-side route — rewrite to /index.html.
+          if (!uri.includes('.')) {
+            request.uri = '/index.html';
+          }
+          return request;
+        }
+      `),
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      comment: `${prefix} SPA client-side route rewrite`,
+    });
+
     const distribution = new cloudfront.Distribution(this, 'Distribution', {
       enabled: true,
       defaultRootObject: 'index.html',
@@ -573,6 +593,10 @@ export class ForgeStack extends cdk.Stack {
         compress: true,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
         responseHeadersPolicy: securityHeaders,
+        functionAssociations: [{
+          function: spaRewriteFn,
+          eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+        }],
       },
 
       additionalBehaviors: {
@@ -586,22 +610,6 @@ export class ForgeStack extends cdk.Stack {
           originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
         },
       },
-
-      // SPA routing: return index.html for 403/404 from S3
-      errorResponses: [
-        {
-          httpStatus: 403,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html',
-          ttl: cdk.Duration.seconds(0),
-        },
-        {
-          httpStatus: 404,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html',
-          ttl: cdk.Duration.seconds(0),
-        },
-      ],
     });
 
     // ---------------------------------------------------------------
