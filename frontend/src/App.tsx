@@ -392,14 +392,14 @@ function AppContent() {
     }
   }, [user, profileLoaded, accessDenied]);
 
-  // Check admin access on mount
+  // Check admin access after domain check passes
   useEffect(() => {
-    if (user && !accessDenied) {
+    if (user && profileLoaded && !accessDenied) {
       getAdminAccess()
         .then(({ is_admin, is_department_admin }) => { setAdminAccess(is_admin, is_department_admin); setAdminChecked(true); })
         .catch(() => setAdminChecked(true));
     }
-  }, [user, setAdminAccess]);
+  }, [user, profileLoaded, accessDenied, setAdminAccess]);
 
   if (accessDenied) {
     return <AccessDeniedPage detail={accessDenied} onSignOut={signOut} />;
