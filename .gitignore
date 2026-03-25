@@ -46,8 +46,7 @@ cdk.out/
 # Claude Code
 .claude/
 
-# Dependencies
-uv.lock
+# Dependencies (uv.lock is NOT gitignored - it must be committed for supply chain security)
 
 # Analytics data (synced from production)
 data/
