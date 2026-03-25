@@ -142,6 +142,7 @@ import { CompanyContextPanel } from './components/CompanyContextPanel';
 import { AdminUsers } from './components/AdminUsers';
 import posthog from './posthog';
 import { getProfile, getAdminAccess, listUserIdeas, getTip, AccessDeniedError } from './api/client';
+import { forgeWs } from './api/websocket';
 import { useProfileCache } from './state/profileCache';
 import type { UserProfile } from './api/types';
 
@@ -331,11 +332,7 @@ function AppContent() {
   const isDepartmentAdmin = useAdminStore((s) => s.isDepartmentAdmin);
   const [adminChecked, setAdminChecked] = useState(false);
 
-  useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
-
-  // Load profile to check intake status
+  // Load profile first to verify domain access before loading anything else
   useEffect(() => {
     if (user) {
       getProfile()
@@ -378,16 +375,26 @@ function AppContent() {
     }
   }, [user]);
 
+  // Once profile loads successfully (domain check passed), connect WS and load data
+  const wsConnected = useRef(false);
+  useEffect(() => {
+    if (profileLoaded && !accessDenied && !wsConnected.current) {
+      wsConnected.current = true;
+      forgeWs.connect();
+      loadSessions();
+    }
+  }, [profileLoaded, accessDenied, loadSessions]);
+
   // Load idea count
   useEffect(() => {
-    if (user && profileLoaded) {
+    if (user && profileLoaded && !accessDenied) {
       listUserIdeas().then((ideas) => setIdeaCount(ideas.length)).catch(() => {});
     }
-  }, [user, profileLoaded]);
+  }, [user, profileLoaded, accessDenied]);
 
   // Check admin access on mount
   useEffect(() => {
-    if (user) {
+    if (user && !accessDenied) {
       getAdminAccess()
         .then(({ is_admin, is_department_admin }) => { setAdminAccess(is_admin, is_department_admin); setAdminChecked(true); })
         .catch(() => setAdminChecked(true));

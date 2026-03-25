@@ -114,7 +114,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(initialState.isLoading);
   const [authError, setAuthError] = useState<string | null>(null);
   const callbackProcessed = useRef(false);
-  const wsConnected = useRef(false);
   const signingOutRef = useRef(false);
   const redirectingRef = useRef(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -335,11 +334,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setWsTokenGetter(getToken);
   }, [getToken]);
 
-  // Connect WebSocket and identify to PostHog when authenticated
+  // Identify to PostHog when authenticated (lightweight, no backend call)
   useEffect(() => {
-    if (user && !wsConnected.current) {
-      wsConnected.current = true;
-      forgeWs.connect();
+    if (user) {
       posthog.identify(user.userId, { email: user.email, name: user.name });
     }
   }, [user]);
