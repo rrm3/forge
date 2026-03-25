@@ -247,7 +247,10 @@ function MainLayout({ profile, ideaCount }: { profile: UserProfile | null; ideaC
   );
 }
 
-function AccessDeniedPage({ detail, onSignOut }: { detail: string; onSignOut: () => void }) {
+function AccessDeniedPage({ user, onSwitchAccount }: {
+  user: { email: string; name: string } | null;
+  onSwitchAccount: () => void;
+}) {
   return (
     <div className="min-h-screen flex items-start justify-center px-5 pt-20" style={{
       background: [
@@ -278,7 +281,6 @@ function AccessDeniedPage({ detail, onSignOut }: { detail: string; onSignOut: ()
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 24,
         }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
@@ -288,11 +290,39 @@ function AccessDeniedPage({ detail, onSignOut }: { detail: string; onSignOut: ()
         <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1A1F25', margin: '0 0 8px' }}>
           Access Restricted
         </h1>
-        <p style={{ fontSize: 14, color: '#4A5568', margin: '0 0 24px', lineHeight: 1.6 }}>
-          {detail}
+        <p style={{ fontSize: 14, color: '#4A5568', margin: '0 0 20px', lineHeight: 1.6 }}>
+          Your email domain is not authorized to use AI Tuesdays.
         </p>
-        <p style={{ fontSize: 14, color: '#4A5568', margin: '0 0 32px', lineHeight: 1.6 }}>
-          If you believe you should have access, please contact us at{' '}
+        {user && (
+          <div style={{
+            background: '#F8FAFC',
+            border: '1px solid #E2E8F0',
+            borderRadius: 10,
+            padding: '14px 20px',
+            margin: '0 0 24px',
+            textAlign: 'left',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2" />
+              <path d="M22 7l-10 6L2 7" />
+            </svg>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: '#1A1F25', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user.email}
+              </div>
+              {user.name && (
+                <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                  {user.name}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        <p style={{ fontSize: 14, color: '#4A5568', margin: '0 0 28px', lineHeight: 1.6 }}>
+          If you have a Digital Science company email, sign in with that account instead. Otherwise, contact{' '}
           <a
             href="mailto:aituesdayscompanion@digital-science.com"
             style={{ color: '#159AC9', textDecoration: 'none', fontWeight: 500 }}
@@ -301,7 +331,7 @@ function AccessDeniedPage({ detail, onSignOut }: { detail: string; onSignOut: ()
           </a>
         </p>
         <button
-          onClick={onSignOut}
+          onClick={onSwitchAccount}
           style={{
             padding: '10px 24px',
             fontSize: 14,
@@ -313,7 +343,7 @@ function AccessDeniedPage({ detail, onSignOut }: { detail: string; onSignOut: ()
             cursor: 'pointer',
           }}
         >
-          Sign out
+          Switch account
         </button>
       </div>
     </div>
@@ -402,7 +432,7 @@ function AppContent() {
   }, [user, profileLoaded, accessDenied, setAdminAccess]);
 
   if (accessDenied) {
-    return <AccessDeniedPage detail={accessDenied} onSignOut={signOut} />;
+    return <AccessDeniedPage user={user} onSwitchAccount={signOut} />;
   }
 
   if (!profileLoaded) {
