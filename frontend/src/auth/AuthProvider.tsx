@@ -322,7 +322,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(REFRESH_LOCK_KEY);
     forgeWs.disconnect();
-    wsConnected.current = false;
     posthog.reset();
     const logoutUrl = `${oidcConfig.providerUrl}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
     window.location.href = logoutUrl;
