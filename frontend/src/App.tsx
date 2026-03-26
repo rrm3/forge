@@ -291,7 +291,7 @@ function AccessDeniedPage({ user, onSwitchAccount }: {
           Access Restricted
         </h1>
         <p style={{ fontSize: 14, color: '#4A5568', margin: '0 0 20px', lineHeight: 1.6 }}>
-          Your email domain is not authorized to use AI Tuesdays.
+          You need to be part of an authorized organization to access AI Tuesdays. If you believe this is an error, contact your administrator.
         </p>
         {user && (
           <div style={{

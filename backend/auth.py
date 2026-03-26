@@ -10,7 +10,7 @@ import jwt
 from fastapi import Depends, Header, HTTPException, Request, status
 from jwt import PyJWKClient
 
-from backend.allowed_domains import is_domain_allowed
+from backend.allowed_orgs import is_org_allowed
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -72,14 +72,18 @@ def _verify_oidc_token(token: str) -> CurrentUser:
         ) from e
 
     email = payload.get("email", "")
+    org_id = payload.get("org_id")
 
-    # Enforce email domain allowlist
-    if not is_domain_allowed(email):
-        domain = email.rsplit("@", 1)[-1] if "@" in email else "(none)"
-        logger.warning("Login rejected: email domain '%s' not allowed (email: %s)", domain, email)
+    # Enforce organization allowlist
+    if not is_org_allowed(org_id):
+        org_name = payload.get("org_name", "")
+        logger.warning(
+            "Login rejected: org not allowed (org_id=%s, org_name=%s, email=%s)",
+            org_id, org_name, email,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Email domain '{domain}' is not authorized to access this application",
+            detail="You need to be part of an authorized organization to access AI Tuesdays.",
         )
 
     return CurrentUser(
