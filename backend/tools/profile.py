@@ -50,8 +50,6 @@ UPDATE_PROFILE_SCHEMA = {
                         },
                     },
                     "intake_summary": {"type": "string"},
-                    "intake_completed_at": {"type": "string", "description": "ISO 8601 datetime when intake was completed"},
-                    "onboarding_complete": {"type": "boolean"},
                 },
             },
         },
@@ -134,7 +132,7 @@ async def update_profile(context: ToolContext, fields: dict | None = None, **kwa
     }
     filtered = {k: v for k, v in fields.items() if k in allowed}
     if not filtered:
-        return "Profile updated successfully."
+        return "No updatable fields provided."
 
     # Coerce list→string for fields that expect strings (LLMs sometimes send lists)
     _string_fields = {

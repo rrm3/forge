@@ -17,7 +17,10 @@ _BASE_PROMPT = (
     "relevant to the user's question: 'department_resources' for department guidance, "
     "'gong_turns' or 'gong_calls' for customer conversations, 'dovetail_highlights' "
     "for user research, 'klue_battlecards' for competitive intelligence. "
-    "For current events, public information, or anything external, use 'search_web'."
+    "For current events, public information, or anything external, use 'search_web'.\n\n"
+    "Tools work behind the scenes. Don't mention tool names, describe tool calls, "
+    "or share technical details about how you found information. If a tool call "
+    "fails, continue the conversation naturally without drawing attention to it."
 )
 
 

@@ -64,6 +64,7 @@ UPDATE_IDEA_SCHEMA = {
 async def prepare_idea(
     title: str,
     description: str,
+    *,
     context: ToolContext,
     tags: list[str] | None = None,
 ) -> str:

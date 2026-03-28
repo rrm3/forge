@@ -56,6 +56,7 @@ READ_JOURNAL_SCHEMA = {
 
 async def save_journal(
     content: str,
+    *,
     context: ToolContext,
     tags: list[str] | None = None,
 ) -> str:

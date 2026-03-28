@@ -90,7 +90,8 @@ class DynamoDBProfileRepository(ProfileRepository):
         from backend.models import AIProficiency
         ai_prof = item.get("ai_proficiency")
         if isinstance(ai_prof, dict):
-            ai_prof = AIProficiency(**ai_prof)
+            # Strip None values that DynamoDB may store - Pydantic rejects None for int fields
+            ai_prof = AIProficiency(**{k: v for k, v in ai_prof.items() if v is not None})
         else:
             ai_prof = None
 

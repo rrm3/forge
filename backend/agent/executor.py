@@ -377,6 +377,7 @@ async def run_agent_session(
     # Post-loop cleanup: save transcript, generate title, detect tips/ideas.
     # Wrapped in try/finally to guarantee the deferred 'done' message is sent
     # even if cleanup fails — otherwise the frontend hangs in isStreaming.
+    enrichment_args = None
     try:
         # Final flush
         await flush_tokens()
@@ -415,7 +416,7 @@ async def run_agent_session(
 
         # Intake state machine: check required fields and mark complete when done
         if session_type == "intake" and not intake_is_complete:
-            await _check_intake_completion(deps, user_id, transcript, sender, session_id, department_config, intake_responses)
+            enrichment_args = await _check_intake_completion(deps, user_id, transcript, sender, session_id, department_config, intake_responses)
 
         # Generate title for sessions
         # - intake/wrapup: hardcoded titles, never overwritten
@@ -426,9 +427,10 @@ async def run_agent_session(
         needs_title = False
         if session_type not in ("intake", "wrapup"):
             if session_type in DEFERRED_TITLE_TYPES:
-                # Deferred: wait for user's first real message
+                # Deferred: skip the silent start (no user content to name).
+                # Generate on any subsequent turn where the session still has no title.
                 if not is_new_session and user_message.strip() and assistant_text and session:
-                    needs_title = len(transcript) <= 3  # opening + first user msg + response
+                    needs_title = not session.title
             elif is_new_session and assistant_text:
                 needs_title = True
 
@@ -456,6 +458,12 @@ async def run_agent_session(
         # allows the user to send the next message.
         if deferred_done_payload:
             await sender.send(deferred_done_payload)
+
+    # Opus enrichment runs AFTER the done message so the user is unblocked.
+    # Awaited (not fire-and-forget) because Lambda's asyncio.run() tears down
+    # the event loop when the outer coroutine returns, killing pending tasks.
+    if enrichment_args:
+        await _enrich_profile_async(**enrichment_args)
 
 
 async def _poll_cancel(cancel_check: Callable[[], bool], cancel_event: asyncio.Event):
@@ -501,11 +509,14 @@ async def _check_intake_completion(
     session_id: str | None = None,
     department_config: dict | None = None,
     intake_responses: dict | None = None,
-):
+) -> dict | None:
     """Mark intake complete when all required objectives/fields have been captured.
 
     When department_config is available, completion is based on objective coverage.
     Falls back to legacy field-based checking when no department config exists.
+
+    Returns enrichment args dict if intake just completed (caller should await
+    _enrich_profile_async after sending the 'done' message), or None otherwise.
     """
     try:
         profile = await deps.profiles_repo.get(user_id)
@@ -599,11 +610,12 @@ async def _check_intake_completion(
                     "suggestions": [s.get("title", "") for s in suggestions],
                 })
 
-            # Fire-and-forget: Opus enrichment of profile + objective summaries
+            # Return enrichment args so caller can await after sending 'done'.
+            # Running enrichment here as fire-and-forget doesn't work on Lambda
+            # because asyncio.run() tears down the event loop (and all pending
+            # tasks) as soon as the outer coroutine returns.
             objectives = department_config.get("objectives", []) if department_config else []
-            asyncio.create_task(
-                _enrich_profile_async(deps, user_id, transcript, objectives)
-            )
+            return {"deps": deps, "user_id": user_id, "transcript": transcript, "objectives": objectives}
     except Exception:
         logger.warning("Failed to check intake completion", exc_info=True)
 
