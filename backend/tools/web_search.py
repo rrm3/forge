@@ -12,8 +12,7 @@ WEB_SEARCH_SCHEMA = {
     "description": (
         "Search the public internet using Google Search. Use this for questions about "
         "current events, public company information, industry trends, competitor news, "
-        "technology documentation, or anything that requires up-to-date web information. "
-        "Do NOT use this for internal Digital Science information - use the 'search_internal' tool instead."
+        "technology documentation, or anything that requires up-to-date web information."
     ),
     "input_schema": {
         "type": "object",

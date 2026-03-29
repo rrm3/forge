@@ -42,14 +42,6 @@ UPDATE_PROFILE_SCHEMA = {
                     "learning_goals": {"type": "array", "items": {"type": "string"}},
                     "ai_tools_used": {"type": "array", "items": {"type": "string"}},
                     "ai_superpower": {"type": "string"},
-                    "ai_proficiency": {
-                        "type": "object",
-                        "properties": {
-                            "level": {"type": "integer", "minimum": 1, "maximum": 5, "description": "AI proficiency level 1-5"},
-                            "rationale": {"type": "string", "description": "Brief explanation of why this level was assigned"},
-                        },
-                    },
-                    "intake_summary": {"type": "string"},
                 },
             },
         },

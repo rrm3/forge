@@ -110,7 +110,10 @@ def build_tool_registry():
     from backend.tools.web_search import register_web_search_tools
 
     registry = ToolRegistry()
-    register_search_tools(registry)
+    # TODO: search_internal disabled - LanceDB tables are empty, every call
+    # returns no results and wastes tokens. Re-enable after populating the
+    # knowledge base (department_resources, gong, dovetail, klue, roadmap).
+    # register_search_tools(registry)
     register_web_search_tools(registry)
     register_ideas_tools(registry)
     register_journal_tools(registry)
