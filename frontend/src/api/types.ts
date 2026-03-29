@@ -79,6 +79,7 @@ export interface DepartmentObjective {
   label: string;
   description: string;
   extraction_key: string;
+  week_introduced?: number;  // Week this objective becomes active (default: 1)
 }
 
 export interface DepartmentConfig {

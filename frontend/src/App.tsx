@@ -452,9 +452,9 @@ function AppContent() {
 
   return (
     <Routes>
-      {/* Intake / Day 1 - redirects home only if already completed before this session */}
+      {/* Intake - dynamic route matches /day1, /day2, etc. */}
       <Route
-        path="/day1"
+        path={`/day${currentWeek}`}
         element={
           intakeAlreadyComplete
             ? <Navigate to="/" replace />
@@ -463,6 +463,10 @@ function AppContent() {
               }} />
         }
       />
+      {/* Redirect old /day1 to current week's route */}
+      {currentWeek > 1 && (
+        <Route path="/day1" element={<Navigate to={`/day${currentWeek}`} replace />} />
+      )}
 
       {/* Admin - accessible by full admins and department admins */}
       <Route
@@ -491,7 +495,7 @@ function AppContent() {
         path="/*"
         element={
           !intakeComplete
-            ? <Navigate to="/day1" replace />
+            ? <Navigate to={`/day${currentWeek}`} replace />
             : <MainLayout profile={profile} ideaCount={ideaCount} />
         }
       >

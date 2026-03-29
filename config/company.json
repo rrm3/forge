@@ -5,49 +5,50 @@
       "id": "c0-work-summary",
       "label": "What they work on day-to-day",
       "description": "Understand their actual daily work, not just their job title. Need 2-3 specific details about what they do.",
-      "extraction_key": "work_summary"
+      "extraction_key": "work_summary",
+      "week_introduced": 1
     },
     {
       "id": "c0-daily-tasks",
       "label": "Their daily tasks and responsibilities",
       "description": "Specific tasks they do regularly - meetings, reports, tools they use daily.",
-      "extraction_key": "daily_tasks"
+      "extraction_key": "daily_tasks",
+      "week_introduced": 1
     },
     {
       "id": "c0-ai-tools",
       "label": "AI tools they've tried",
       "description": "Which AI tools they've personally used and for what. ChatGPT, Claude, Copilot, etc.",
-      "extraction_key": "ai_tools_used"
+      "extraction_key": "ai_tools_used",
+      "week_introduced": 1
     },
     {
       "id": "c0-core-skills",
       "label": "Their core skills",
       "description": "Skills they consider their strengths - technical, interpersonal, domain expertise.",
-      "extraction_key": "core_skills"
+      "extraction_key": "core_skills",
+      "week_introduced": 1
     },
     {
       "id": "c0-learning-goals",
       "label": "What they want to learn",
       "description": "What they're curious about or want to get better at with AI.",
-      "extraction_key": "learning_goals"
+      "extraction_key": "learning_goals",
+      "week_introduced": 1
     },
     {
       "id": "c0-goals",
       "label": "Goals for the 12 weeks",
       "description": "What they want to achieve during the AI Tuesdays program.",
-      "extraction_key": "goals"
+      "extraction_key": "goals",
+      "week_introduced": 1
     },
     {
       "id": "c0-week1-experiments",
       "label": "What they tried in Week 1",
       "description": "Did they experiment with anything since the program started? What worked, what didn't? Ground truth vs stated goals.",
-      "extraction_key": ""
-    },
-    {
-      "id": "c0-learning-style",
-      "label": "How they prefer to learn",
-      "description": "Do they learn by reading docs, watching videos, pair-working with someone, trial and error? Helps tailor future suggestions.",
-      "extraction_key": ""
+      "extraction_key": "",
+      "week_introduced": 2
     }
   ]
 }

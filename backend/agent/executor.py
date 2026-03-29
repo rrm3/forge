@@ -146,7 +146,7 @@ async def run_agent_session(
         dept_slug = profile.department.lower().replace(" ", "-")
         department_config = await dept_config_repo.get_department_config(dept_slug)
         if session_type == "intake" and not intake_is_complete:
-            merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug)
+            merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug, program_week=current_week)
     # Load intake responses only for incomplete intake sessions
     if session_type == "intake" and not intake_is_complete:
         intake_responses = await load_intake_responses(deps.storage, user_id)

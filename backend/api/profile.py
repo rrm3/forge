@@ -212,7 +212,9 @@ async def reevaluate_intake(user: AuthUser):
     merged_objectives: list[dict] = []
     if profile.department:
         dept_slug = profile.department.lower().replace(" ", "-")
-        merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug)
+        from backend.models import effective_program_week
+        week = effective_program_week(profile)
+        merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug, program_week=week)
 
     if not merged_objectives:
         return {"completed": False, "newly_completed": 0}

@@ -69,10 +69,12 @@ class DepartmentConfigRepository:
         data = json.dumps(config, indent=2).encode()
         await self.storage.write(COMPANY_CONFIG_KEY, data, content_type="application/json")
 
-    async def get_merged_objectives(self, department: str) -> list[dict]:
+    async def get_merged_objectives(self, department: str, program_week: int | None = None) -> list[dict]:
         """Return company-wide objectives + department-specific objectives merged.
 
         Company objectives come first, then any department extras.
+        If program_week is provided, only objectives with week_introduced <= program_week
+        are included. Objectives without week_introduced are always included (default: week 1).
         Returns an empty list if neither config exists.
         """
         company_config = await self.get_company_config()
@@ -81,7 +83,15 @@ class DepartmentConfigRepository:
         dept_config = await self.get_department_config(department)
         dept_objectives = (dept_config or {}).get("objectives", [])
 
-        return company_objectives + dept_objectives
+        all_objectives = company_objectives + dept_objectives
+
+        if program_week is not None:
+            all_objectives = [
+                o for o in all_objectives
+                if o.get("week_introduced", 1) <= program_week
+            ]
+
+        return all_objectives
 
     async def list_departments(self) -> list[str]:
         """List all departments that have config files.
