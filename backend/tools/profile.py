@@ -120,7 +120,6 @@ async def update_profile(context: ToolContext, fields: dict | None = None, **kwa
         "title", "department", "team", "ai_experience_level", "interests",
         "tools_used", "goals", "products", "daily_tasks", "work_summary",
         "core_skills", "learning_goals", "ai_tools_used", "ai_superpower",
-        "ai_proficiency", "intake_summary", "intake_fields_captured",
     }
     filtered = {k: v for k, v in fields.items() if k in allowed}
     if not filtered:
@@ -129,7 +128,7 @@ async def update_profile(context: ToolContext, fields: dict | None = None, **kwa
     # Coerce list→string for fields that expect strings (LLMs sometimes send lists)
     _string_fields = {
         "title", "department", "team", "ai_experience_level", "daily_tasks",
-        "work_summary", "ai_superpower", "intake_summary", "intake_completed_at",
+        "work_summary", "ai_superpower",
     }
     for key in _string_fields:
         if key in filtered and isinstance(filtered[key], list):

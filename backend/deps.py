@@ -103,7 +103,6 @@ def build_tool_registry():
     from backend.tools.journal import register_journal_tools
     from backend.tools.profile import register_profile_tools
     from backend.tools.registry import ToolRegistry
-    from backend.tools.search import register_search_tools
     from backend.tools.software import register_software_tools
     from backend.tools.tips import register_tips_tools
     from backend.tools.user_ideas import register_user_ideas_tools
