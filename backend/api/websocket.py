@@ -144,11 +144,15 @@ async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: d
     session_type = msg.get("type", "chat")
     idea_id = msg.get("idea_id")
     session_id = str(uuid.uuid4())
+    # Use effective_program_week for session titles so overrides apply
+    from backend.models import effective_program_week
+    profile = await _deps.profiles_repo.get(user.user_id) if _deps.profiles_repo else None
+    week = effective_program_week(profile) if profile else None
     INITIAL_TITLES = {"stuck": "Get Help", "tip": "New Tip"}
     if session_type == "intake":
-        title = intake_title()
+        title = intake_title(week)
     elif session_type == "wrapup":
-        title = wrapup_title()
+        title = wrapup_title(week)
     else:
         title = INITIAL_TITLES.get(session_type, "")
     session = Session(session_id=session_id, user_id=user.user_id, title=title, type=session_type)

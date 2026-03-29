@@ -18,7 +18,6 @@ import { TopBar } from './TopBar';
 import { IntakeDebugPanel } from './IntakeDebugPanel';
 import { useAdminStore } from '../state/adminStore';
 import { reevaluateIntake, skipIntake } from '../api/client';
-import { getProgramWeek } from '../program';
 
 interface IntakeViewProps {
   onComplete?: () => void;
@@ -37,7 +36,7 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
   // Week 2+ users skip cards entirely (they already know the app).
   // An intake session with message_count > 0 means the user is past the cards.
   const sessionsLoaded = state.sessionsLoaded;
-  const currentWeek = getProgramWeek();
+  const currentWeek = profile?.program_week ?? 1;
   const isReturningUser = currentWeek > 1;
   const intakeSessionHasMessages = state.sessions.some(
     (s) => s.type === 'intake' && (s.message_count ?? 0) > 0

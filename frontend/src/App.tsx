@@ -145,7 +145,7 @@ import { getProfile, getAdminAccess, listUserIdeas, getTip, AccessDeniedError } 
 import { forgeWs } from './api/websocket';
 import { useProfileCache } from './state/profileCache';
 import type { UserProfile } from './api/types';
-import { getProgramWeek } from './program';
+import { setProgramWeekOverride } from './program';
 
 /** Syncs the :sessionId URL param to the session context. */
 function ChatRoute() {
@@ -370,6 +370,10 @@ function AppContent() {
         .then((p) => {
           setProfile(p);
           setProfileLoaded(true);
+          // Sync frontend program week with backend (respects per-user override)
+          if (p.program_week) {
+            setProgramWeekOverride(p.program_week);
+          }
           // Seed the profile cache so ProfileChip doesn't re-fetch for the current user
           useProfileCache.getState().set(p.user_id, {
             user_id: p.user_id,
@@ -441,8 +445,8 @@ function AppContent() {
   }
 
   // For routing: only redirect away from /day1 if the profile's intake is complete
-  // for the current week. intake_weeks tracks completion per week as {"1": "datetime", ...}.
-  const currentWeek = getProgramWeek();
+  // for the current week. program_week is computed by the backend (clock or override).
+  const currentWeek = profile?.program_week ?? 1;
   const intakeAlreadyComplete = String(currentWeek) in (profile?.intake_weeks ?? {});
   const intakeComplete = intakeAlreadyComplete || state.intakeComplete;
 

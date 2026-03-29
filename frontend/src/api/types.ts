@@ -42,6 +42,7 @@ export interface UserProfile {
   intake_objectives_done: number;
   intake_objectives_total: number;
   intake_weeks: Record<string, string>;  // {"1": "ISO datetime", "2": "ISO datetime"}
+  program_week: number;  // Computed by backend: clock-based or per-user override
   products: string[];
   daily_tasks: string;
   core_skills: string[];

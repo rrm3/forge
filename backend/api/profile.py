@@ -67,9 +67,15 @@ async def _get_or_create_profile(user: AuthUser) -> UserProfile:
 
 @router.get("")
 async def get_profile(user: AuthUser):
-    """Get the current user's profile, creating it on first access."""
+    """Get the current user's profile, creating it on first access.
+
+    Includes computed `program_week` field (clock-based, or per-user override).
+    """
+    from backend.models import effective_program_week
     profile = await _get_or_create_profile(user)
-    return profile.model_dump(mode="json")
+    data = profile.model_dump(mode="json")
+    data["program_week"] = effective_program_week(profile)
+    return data
 
 
 PUBLIC_FIELDS = {"user_id", "name", "title", "department", "avatar_url", "team"}
@@ -238,8 +244,8 @@ async def reevaluate_intake(user: AuthUser):
         "intake_objectives_total": len(objective_ids),
     }
     if all_complete:
-        from backend.models import get_program_week
-        week_str = str(get_program_week())
+        from backend.models import effective_program_week
+        week_str = str(effective_program_week(profile))
         now_iso = datetime.now(UTC).isoformat()
         current_weeks = dict(profile.intake_weeks or {}) if profile else {}
         current_weeks[week_str] = now_iso
@@ -265,8 +271,8 @@ async def skip_intake(user: AuthUser):
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
 
-    from backend.models import get_program_week
-    week_str = str(get_program_week())
+    from backend.models import effective_program_week
+    week_str = str(effective_program_week(profile))
 
     # Check if this week's intake is already done (not just any past week)
     if week_str in (profile.intake_weeks or {}):

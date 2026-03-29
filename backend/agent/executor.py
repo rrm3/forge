@@ -29,7 +29,7 @@ from backend.api.transport import MessageSender
 from backend.config import settings
 from backend.deps import AgentDeps
 from backend.llm import call_llm
-from backend.models import Message, UserIdea, get_program_week
+from backend.models import Message, UserIdea, effective_program_week, get_program_week
 from backend.repository.department_config import DepartmentConfigRepository
 from backend.storage import load_intake_responses, load_memory, load_transcript, load_weekly_briefing, save_intake_responses, save_transcript
 from backend.tools.registry import ToolContext
@@ -124,7 +124,7 @@ async def run_agent_session(
     # Completed intake sessions behave like normal chats.
     # Skipped intakes stay in intake mode so objectives continue evaluating.
     # Week-aware: check if the current week is in intake_weeks.
-    current_week = get_program_week()
+    current_week = effective_program_week(profile) if profile else get_program_week()
     intake_is_complete = (
         session_type == "intake"
         and profile
@@ -590,7 +590,7 @@ async def _check_intake_completion(
             all_complete = required_fields.issubset(captured)
 
         if all_complete:
-            week_str = str(get_program_week())
+            week_str = str(effective_program_week(profile))
             now_iso = datetime.now(UTC).isoformat()
             current_weeks = dict(profile.intake_weeks or {}) if profile else {}
             current_weeks[week_str] = now_iso

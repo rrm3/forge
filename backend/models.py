@@ -16,6 +16,13 @@ def get_program_week(as_of: date | None = None) -> int:
     return min(week, PROGRAM_WEEKS)
 
 
+def effective_program_week(profile: "UserProfile") -> int:
+    """Return the program week for a user, respecting per-user override for testing."""
+    if profile.program_week_override and profile.program_week_override > 0:
+        return min(profile.program_week_override, PROGRAM_WEEKS)
+    return get_program_week()
+
+
 def intake_title(week: int | None = None) -> str:
     """Session title for the intake of a given program week."""
     w = week if week is not None else get_program_week()
@@ -90,6 +97,7 @@ class UserProfile(BaseModel):
     intake_objectives_done: int = 0
     intake_objectives_total: int = 0
     intake_weeks: dict = Field(default_factory=dict)  # {"1": "ISO datetime", "2": "ISO datetime", ...}
+    program_week_override: int = 0  # If set (>0), overrides clock-based week for testing
     is_department_admin: bool = False
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
