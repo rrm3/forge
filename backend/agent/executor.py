@@ -156,6 +156,12 @@ async def run_agent_session(
     if merged_objectives:
         merged_config["objectives"] = merged_objectives
 
+    # Debug: log intake state for troubleshooting
+    if session_type == "intake":
+        logger.info("INTAKE DEBUG: user=%s week=%d objectives=%d responses=%d response_keys=%s",
+                     user_id, current_week, len(merged_objectives), len(intake_responses),
+                     list(intake_responses.keys())[:5])
+
     # Load weekly briefing for intake sessions (Week 2+)
     weekly_briefing = None
     if session_type == "intake" and not intake_is_complete and current_week > 1:

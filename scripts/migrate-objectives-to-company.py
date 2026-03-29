@@ -28,7 +28,7 @@ import boto3
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-# The S3 bucket used by Forge (production)
+# Default S3 bucket (overridden with --bucket)
 BUCKET = "forge-production-data"
 
 # New company objectives with stable IDs (from config/company.json)
@@ -243,7 +243,13 @@ def backfill_intake_weeks(dynamo, dry_run: bool = False) -> int:
 def main():
     parser = argparse.ArgumentParser(description="Migrate objectives to company-wide config")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without writing")
+    parser.add_argument("--bucket", default="forge-production-data", help="S3 bucket (default: forge-production-data)")
+    parser.add_argument("--dynamo-table", default="forge-profiles", help="DynamoDB table (default: forge-profiles)")
     args = parser.parse_args()
+
+    global BUCKET, DYNAMO_TABLE
+    BUCKET = args.bucket
+    DYNAMO_TABLE = args.dynamo_table
 
     if args.dry_run:
         logger.info("=== DRY RUN MODE ===\n")

@@ -137,6 +137,7 @@ export interface AdminUserSummary {
   intake_skipped: boolean;
   intake_objectives_done: number;
   intake_objectives_total: number;
+  intake_weeks: Record<string, string>;
   is_department_admin: boolean;
   is_admin: boolean;
   session_count: number;

@@ -195,8 +195,10 @@ export function AdminUsers() {
 
   // Stats
   const totalUsers = users.length;
-  const intakeComplete = users.filter((u) => u.intake_completed_at).length;
-  const intakePct = totalUsers > 0 ? Math.round((intakeComplete / totalUsers) * 100) : 0;
+  const day1Complete = users.filter((u) => '1' in (u.intake_weeks ?? {})).length;
+  const day1Pct = totalUsers > 0 ? Math.round((day1Complete / totalUsers) * 100) : 0;
+  const day2Complete = users.filter((u) => '2' in (u.intake_weeks ?? {})).length;
+  const day2Pct = totalUsers > 0 ? Math.round((day2Complete / totalUsers) * 100) : 0;
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -254,10 +256,11 @@ export function AdminUsers() {
   return (
     <div className="relative">
       {/* Stats bar */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Total Users', value: totalUsers },
-          { label: 'Day 1 Complete', value: `${intakeComplete}/${totalUsers} (${intakePct}%)` },
+          { label: 'Day 1 Complete', value: `${day1Complete}/${totalUsers} (${day1Pct}%)` },
+          { label: 'Day 2 Complete', value: `${day2Complete}/${totalUsers} (${day2Pct}%)` },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -350,6 +353,9 @@ export function AdminUsers() {
               <th style={{ ...thStyle, textAlign: 'center' }} onClick={() => handleSort('intake')}>
                 Day 1 <SortIcon col="intake" />
               </th>
+              <th style={{ ...thStyle, textAlign: 'center' }}>
+                Day 2
+              </th>
               <th style={thStyle} onClick={() => handleSort('last_active')}>
                 Last Active <SortIcon col="last_active" />
               </th>
@@ -359,7 +365,7 @@ export function AdminUsers() {
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="text-center py-8 text-sm"
                   style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
                 >
@@ -441,8 +447,15 @@ export function AdminUsers() {
                   <td style={{ ...monoTd, textAlign: 'center' }}>
                     {u.tip_count}
                   </td>
-                  <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    <ProgressRing done={u.intake_objectives_done} total={u.intake_objectives_total} />
+                  <td style={{ ...monoTd, textAlign: 'center' }}>
+                    {'1' in (u.intake_weeks ?? {})
+                      ? <span style={{ color: 'var(--color-text-primary)' }}>{u.intake_objectives_done}</span>
+                      : <span style={{ color: 'var(--color-text-placeholder)' }}>--</span>}
+                  </td>
+                  <td style={{ ...monoTd, textAlign: 'center' }}>
+                    {'2' in (u.intake_weeks ?? {})
+                      ? <span style={{ color: 'var(--color-text-primary)' }}>{u.intake_objectives_done}</span>
+                      : <span style={{ color: 'var(--color-text-placeholder)' }}>--</span>}
                   </td>
                   <td style={{ ...tdStyle, fontSize: 13, color: 'var(--color-text-muted)' }}>
                     {relativeTime(u.last_active)}
@@ -716,17 +729,21 @@ function DetailPanel({
       {/* Intake status */}
       <Section title="Status">
         <div className="flex flex-col gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-          <div className="flex justify-between">
-            <span>Day 1</span>
-            <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 13 }}>
-              {p.intake_completed_at
-                ? new Date(p.intake_completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                : p.intake_objectives_total > 0
-                  ? `${p.intake_objectives_done}/${p.intake_objectives_total} objectives`
-                  : 'Not started'
-              }
-            </span>
-          </div>
+          {[1, 2].map((week) => {
+            const weekStr = String(week);
+            const completed = weekStr in (p.intake_weeks ?? {});
+            const completedAt = completed ? (p.intake_weeks ?? {})[weekStr] : null;
+            return (
+              <div key={week} className="flex justify-between">
+                <span>Day {week}</span>
+                <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 13 }}>
+                  {completedAt
+                    ? new Date(completedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : 'Not started'}
+                </span>
+              </div>
+            );
+          })}
           <div className="flex justify-between">
             <span>Account created</span>
             <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 13 }}>

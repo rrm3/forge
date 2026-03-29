@@ -18,6 +18,7 @@ import { TopBar } from './TopBar';
 import { IntakeDebugPanel } from './IntakeDebugPanel';
 import { useAdminStore } from '../state/adminStore';
 import { reevaluateIntake, skipIntake } from '../api/client';
+import { intakeTitle } from '../program';
 
 interface IntakeViewProps {
   onComplete?: () => void;
@@ -38,8 +39,10 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
   const sessionsLoaded = state.sessionsLoaded;
   const currentWeek = profile?.program_week ?? 1;
   const isReturningUser = currentWeek > 1;
+  const currentWeekTitle = intakeTitle(currentWeek);
+  // Only match intake sessions for the CURRENT week (by title), not old weeks
   const intakeSessionHasMessages = state.sessions.some(
-    (s) => s.type === 'intake' && (s.message_count ?? 0) > 0
+    (s) => s.type === 'intake' && s.title === currentWeekTitle && (s.message_count ?? 0) > 0
   );
   const [cardsDismissed, setCardsDismissed] = useState(false);
 
@@ -106,8 +109,8 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
     if (!showCards && !intakeStarted.current) {
       intakeStarted.current = true;
       if (intakeSessionHasMessages) {
-        // Resume existing intake session
-        const existing = state.sessions.find((s) => s.type === 'intake');
+        // Resume existing intake session for the current week
+        const existing = state.sessions.find((s) => s.type === 'intake' && s.title === currentWeekTitle);
         if (existing) {
           selectSession(existing.session_id);
         }

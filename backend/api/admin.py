@@ -217,6 +217,7 @@ async def list_users(user: AuthUser):
             "intake_skipped": p.intake_skipped,
             "intake_objectives_done": p.intake_objectives_done,
             "intake_objectives_total": p.intake_objectives_total,
+            "intake_weeks": p.intake_weeks or {},
             "is_department_admin": p.is_department_admin,
             "is_admin": p.email.lower() in admin_emails,
             "session_count": session_counts.get(p.user_id, 0),

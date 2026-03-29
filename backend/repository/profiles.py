@@ -107,6 +107,12 @@ class DynamoDBProfileRepository(ProfileRepository):
                 return "; ".join(str(v) for v in val)
             return val if val is not None else default
 
+        def _to_str_list(val) -> list[str]:
+            """Coerce a list to list[str]. Handles dicts (from LLM structured output) gracefully."""
+            if not isinstance(val, list):
+                return []
+            return [str(v) if isinstance(v, str) else json.dumps(v) if isinstance(v, dict) else str(v) for v in val]
+
         return UserProfile(
             user_id=item["user_id"],
             email=item.get("email", ""),
@@ -117,19 +123,19 @@ class DynamoDBProfileRepository(ProfileRepository):
             direct_reports=list(item.get("direct_reports", [])),
             team=item.get("team", ""),
             ai_experience_level=item.get("ai_experience_level", ""),
-            interests=list(item.get("interests", [])),
-            tools_used=list(item.get("tools_used", [])),
-            goals=list(item.get("goals", [])),
+            interests=_to_str_list(item.get("interests", [])),
+            tools_used=_to_str_list(item.get("tools_used", [])),
+            goals=_to_str_list(item.get("goals", [])),
             avatar_url=item.get("avatar_url", ""),
             location=item.get("location", ""),
             start_date=item.get("start_date", ""),
             work_summary=_to_str(item.get("work_summary", "")),
             onboarding_complete=bool(item.get("onboarding_complete", False)),
-            products=list(item.get("products", [])),
+            products=_to_str_list(item.get("products", [])),
             daily_tasks=_to_str(item.get("daily_tasks", "")),
-            core_skills=list(item.get("core_skills", [])),
-            learning_goals=list(item.get("learning_goals", [])),
-            ai_tools_used=list(item.get("ai_tools_used", [])),
+            core_skills=_to_str_list(item.get("core_skills", [])),
+            learning_goals=_to_str_list(item.get("learning_goals", [])),
+            ai_tools_used=_to_str_list(item.get("ai_tools_used", [])),
             ai_superpower=_to_str(item.get("ai_superpower", "")),
             ai_proficiency=ai_prof,
             intake_summary=item.get("intake_summary", ""),
