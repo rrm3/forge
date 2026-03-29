@@ -29,6 +29,7 @@ export function CompanyContextPanel() {
   const [editDescription, setEditDescription] = useState('');
   const [editExtractionKey, setEditExtractionKey] = useState('');
   const [extractionKeyLocked, setExtractionKeyLocked] = useState(false);
+  const [editWeekIntroduced, setEditWeekIntroduced] = useState(1);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
@@ -54,6 +55,7 @@ export function CompanyContextPanel() {
     setEditDescription(obj.description);
     setEditExtractionKey(obj.extraction_key);
     setExtractionKeyLocked(!!obj.extraction_key);
+    setEditWeekIntroduced(obj.week_introduced ?? 1);
     setTimeout(() => labelInputRef.current?.focus(), 50);
   }
 
@@ -63,6 +65,7 @@ export function CompanyContextPanel() {
     setEditDescription('');
     setEditExtractionKey('');
     setExtractionKeyLocked(false);
+    setEditWeekIntroduced(1);
   }
 
   async function saveObjective(id: string) {
@@ -72,7 +75,7 @@ export function CompanyContextPanel() {
       ...config,
       objectives: config.objectives.map((o) =>
         o.id === id
-          ? { ...o, label: editLabel, description: editDescription, extraction_key: editExtractionKey }
+          ? { ...o, label: editLabel, description: editDescription, extraction_key: editExtractionKey, week_introduced: editWeekIntroduced }
           : o
       ),
     };
@@ -114,6 +117,7 @@ export function CompanyContextPanel() {
       label: 'New Objective',
       description: '',
       extraction_key: '',
+      week_introduced: 1,
     };
     const updated: CompanyConfig = {
       ...config,
@@ -234,16 +238,30 @@ export function CompanyContextPanel() {
                     e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  <span
-                    className="text-sm"
-                    style={{
-                      color: 'var(--color-text-primary)',
-                      fontFamily: "'Satoshi', system-ui, sans-serif",
-                      fontWeight: 450,
-                    }}
-                  >
-                    {obj.label}
-                  </span>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span
+                      className="text-sm truncate"
+                      style={{
+                        color: 'var(--color-text-primary)',
+                        fontFamily: "'Satoshi', system-ui, sans-serif",
+                        fontWeight: 450,
+                      }}
+                    >
+                      {obj.label}
+                    </span>
+                    {(obj.week_introduced ?? 1) > 1 && (
+                      <span
+                        className="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{
+                          backgroundColor: 'var(--color-surface-raised, #F1F5F9)',
+                          color: 'var(--color-text-muted)',
+                          fontFamily: "'Satoshi', system-ui, sans-serif",
+                        }}
+                      >
+                        Wk {obj.week_introduced}
+                      </span>
+                    )}
+                  </div>
                   {isExpanded ? (
                     <ChevronUp className="w-4 h-4 shrink-0 ml-3" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
                   ) : (
@@ -298,30 +316,56 @@ export function CompanyContextPanel() {
                       />
                     </div>
 
-                    <div>
-                      <label
-                        className="block text-xs font-medium mb-1"
-                        style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
-                      >
-                        Extraction key
-                      </label>
-                      <input
-                        type="text"
-                        value={editExtractionKey}
-                        onChange={(e) => setEditExtractionKey(e.target.value)}
-                        disabled={extractionKeyLocked}
-                        placeholder="e.g. ai_tools_used"
-                        className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors"
-                        style={{
-                          borderColor: 'var(--color-border)',
-                          color: extractionKeyLocked ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
-                          backgroundColor: extractionKeyLocked ? 'var(--color-surface-raised)' : undefined,
-                          fontFamily: "'Satoshi', system-ui, sans-serif",
-                          cursor: extractionKeyLocked ? 'not-allowed' : undefined,
-                        }}
-                        onFocus={(e) => { if (!extractionKeyLocked) e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-                        onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
-                      />
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <label
+                          className="block text-xs font-medium mb-1"
+                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                        >
+                          Extraction key
+                        </label>
+                        <input
+                          type="text"
+                          value={editExtractionKey}
+                          onChange={(e) => setEditExtractionKey(e.target.value)}
+                          disabled={extractionKeyLocked}
+                          placeholder="e.g. ai_tools_used"
+                          className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors"
+                          style={{
+                            borderColor: 'var(--color-border)',
+                            color: extractionKeyLocked ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+                            backgroundColor: extractionKeyLocked ? 'var(--color-surface-raised)' : undefined,
+                            fontFamily: "'Satoshi', system-ui, sans-serif",
+                            cursor: extractionKeyLocked ? 'not-allowed' : undefined,
+                          }}
+                          onFocus={(e) => { if (!extractionKeyLocked) e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                          onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+                        />
+                      </div>
+                      <div style={{ width: 120 }}>
+                        <label
+                          className="block text-xs font-medium mb-1"
+                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+                        >
+                          Week introduced
+                        </label>
+                        <select
+                          value={editWeekIntroduced}
+                          onChange={(e) => setEditWeekIntroduced(Number(e.target.value))}
+                          className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors appearance-none"
+                          style={{
+                            borderColor: 'var(--color-border)',
+                            color: 'var(--color-text-primary)',
+                            backgroundColor: '#FFFFFF',
+                            fontFamily: "'Satoshi', system-ui, sans-serif",
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map((w) => (
+                            <option key={w} value={w}>Week {w}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2 pt-1">
