@@ -101,21 +101,23 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
     setCardsDismissed(true);
   }
 
-  // If cards are skipped (returning user with existing intake that has messages),
-  // select the existing session to resume the conversation.
+  // If cards are skipped (returning user or Week 2+), start or resume intake.
   useEffect(() => {
     if (!showCards && !intakeStarted.current) {
       intakeStarted.current = true;
       if (intakeSessionHasMessages) {
+        // Resume existing intake session
         const existing = state.sessions.find((s) => s.type === 'intake');
         if (existing) {
           selectSession(existing.session_id);
         }
-      } else {
-        // No messages yet - cards will show, session pre-loads on card 1
+      } else if (isReturningUser) {
+        // Week 2+: no cards, start a new intake session immediately
+        startTypedSession('intake');
       }
+      // else: Week 1 first-time user, cards will show and pre-load on card 1
     }
-  }, [showCards, intakeSessionHasMessages, state.sessions, selectSession]);
+  }, [showCards, intakeSessionHasMessages, isReturningUser, state.sessions, selectSession, startTypedSession]);
 
   function handleInputChange(v: string) {
     inputValueRef.current = v;
