@@ -180,7 +180,7 @@ class TestUpdateProfile:
     async def test_update_no_valid_fields(self, ctx, profile_repo, alice_profile):
         await profile_repo.create(alice_profile)
         result = await update_profile(fields={"nonsense": "value"}, context=ctx)
-        assert "Profile updated successfully" in result
+        assert "No updatable fields provided" in result
 
     @pytest.mark.asyncio
     async def test_update_empty_fields(self, ctx, profile_repo, alice_profile):
