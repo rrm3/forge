@@ -188,15 +188,23 @@ async def reevaluate_intake(user: AuthUser):
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
 
-    if profile.intake_completed_at:
+    from backend.models import effective_program_week
+    current_week_str = str(effective_program_week(profile))
+    if current_week_str in (profile.intake_weeks or {}):
         return {"completed": True, "newly_completed": 0}
 
     # Find the intake session
     if not _sessions_repo or not _storage:
         raise HTTPException(status_code=500, detail="Dependencies not configured")
 
+    from backend.models import effective_program_week, intake_title
+    week = effective_program_week(profile)
+    expected_title = intake_title(week)
     sessions = await _sessions_repo.list(user.user_id)
-    intake_session = next((s for s in sessions if s.type == "intake"), None)
+    # Find the current week's intake session by title, fall back to any intake
+    intake_session = next((s for s in sessions if s.type == "intake" and s.title == expected_title), None)
+    if not intake_session:
+        intake_session = next((s for s in sessions if s.type == "intake"), None)
     if not intake_session:
         return {"completed": False, "newly_completed": 0}
 

@@ -449,12 +449,14 @@ export function AdminUsers() {
                   </td>
                   <td style={{ ...monoTd, textAlign: 'center' }}>
                     {'1' in (u.intake_weeks ?? {})
-                      ? <span style={{ color: 'var(--color-text-primary)' }}>{u.intake_objectives_done}</span>
-                      : <span style={{ color: 'var(--color-text-placeholder)' }}>--</span>}
+                      ? <span style={{ color: 'var(--color-success, #16A34A)' }}>&#10003;</span>
+                      : u.intake_objectives_total > 0
+                        ? <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>{u.intake_objectives_done}/{u.intake_objectives_total}</span>
+                        : <span style={{ color: 'var(--color-text-placeholder)' }}>--</span>}
                   </td>
                   <td style={{ ...monoTd, textAlign: 'center' }}>
                     {'2' in (u.intake_weeks ?? {})
-                      ? <span style={{ color: 'var(--color-text-primary)' }}>{u.intake_objectives_done}</span>
+                      ? <span style={{ color: 'var(--color-success, #16A34A)' }}>&#10003;</span>
                       : <span style={{ color: 'var(--color-text-placeholder)' }}>--</span>}
                   </td>
                   <td style={{ ...tdStyle, fontSize: 13, color: 'var(--color-text-muted)' }}>

@@ -75,7 +75,7 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
   // This lets the updated evaluation logic retroactively detect completed objectives.
   useEffect(() => {
     if (reevaluateAttempted.current || !sessionsLoaded) return;
-    const intake = state.sessions.find((s) => s.type === 'intake');
+    const intake = state.sessions.find((s) => s.type === 'intake' && s.title === currentWeekTitle);
     if (!intake || (intake.message_count ?? 0) < 5) return;
     reevaluateAttempted.current = true;
     reevaluateIntake().catch(() => {});
