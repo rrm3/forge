@@ -452,7 +452,7 @@ function AppContent() {
 
   return (
     <Routes>
-      {/* Intake - dynamic route matches /day1, /day2, etc. */}
+      {/* Intake - canonical route for current week */}
       <Route
         path={`/day${currentWeek}`}
         element={
@@ -463,10 +463,12 @@ function AppContent() {
               }} />
         }
       />
-      {/* Redirect old /day1 to current week's route */}
-      {currentWeek > 1 && (
-        <Route path="/day1" element={<Navigate to={`/day${currentWeek}`} replace />} />
-      )}
+      {/* Redirect any /dayN to the correct week's route */}
+      {Array.from({ length: 12 }, (_, i) => i + 1)
+        .filter((w) => w !== currentWeek)
+        .map((w) => (
+          <Route key={w} path={`/day${w}`} element={<Navigate to={`/day${currentWeek}`} replace />} />
+        ))}
 
       {/* Admin - accessible by full admins and department admins */}
       <Route
