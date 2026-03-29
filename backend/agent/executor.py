@@ -543,8 +543,9 @@ async def _check_intake_completion(
         if not profile:
             return
 
-        # Already completed in a previous turn - ensure ideas exist and notify frontend
-        if profile.intake_completed_at:
+        # Already completed in a previous turn (for the CURRENT week) - notify frontend
+        current_wk = str(effective_program_week(profile))
+        if current_wk in (profile.intake_weeks or {}):
             suggestions = await _extract_suggestions(transcript)
             if suggestions and deps.user_ideas_repo and session_id:
                 existing = await deps.user_ideas_repo.list(user_id)
