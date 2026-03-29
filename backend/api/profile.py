@@ -125,6 +125,7 @@ async def reset_intake(user: AuthUser):
         "intake_fields_captured": [],
         "intake_objectives_done": 0,
         "intake_objectives_total": 0,
+        "intake_weeks": {},
     })
 
     # Find and delete intake sessions
