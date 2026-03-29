@@ -138,14 +138,15 @@ async def run_agent_session(
     company_prompt = (company_config or {}).get("prompt", "") or None
 
     # Load department config for all sessions when user has a department.
-    # For intake sessions, merge company-wide + department-specific objectives.
+    # Merged objectives (company + dept) only needed for intake sessions.
     department_config = None
     merged_objectives: list[dict] = []
     intake_responses = {}
     if profile and profile.department:
         dept_slug = profile.department.lower().replace(" ", "-")
         department_config = await dept_config_repo.get_department_config(dept_slug)
-        merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug)
+        if session_type == "intake" and not intake_is_complete:
+            merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug)
     # Load intake responses only for incomplete intake sessions
     if session_type == "intake" and not intake_is_complete:
         intake_responses = await load_intake_responses(deps.storage, user_id)
@@ -158,7 +159,10 @@ async def run_agent_session(
     # Load weekly briefing for intake sessions (Week 2+)
     weekly_briefing = None
     if session_type == "intake" and not intake_is_complete and current_week > 1:
-        weekly_briefing = await load_weekly_briefing(deps.storage, user_id)
+        try:
+            weekly_briefing = await load_weekly_briefing(deps.storage, user_id)
+        except Exception:
+            logger.warning("Failed to load weekly briefing for user=%s, continuing without it", user_id)
 
     # Load session-type prompt
     skill_instructions = None

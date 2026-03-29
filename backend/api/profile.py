@@ -265,11 +265,13 @@ async def skip_intake(user: AuthUser):
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
 
-    if profile.intake_completed_at:
-        return {"status": "already_complete"}
-
     from backend.models import get_program_week
     week_str = str(get_program_week())
+
+    # Check if this week's intake is already done (not just any past week)
+    if week_str in (profile.intake_weeks or {}):
+        return {"status": "already_complete"}
+
     now_iso = datetime.now(UTC).isoformat()
     current_weeks = dict(profile.intake_weeks or {})
     current_weeks[week_str] = now_iso
