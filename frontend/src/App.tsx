@@ -145,6 +145,7 @@ import { getProfile, getAdminAccess, listUserIdeas, getTip, AccessDeniedError } 
 import { forgeWs } from './api/websocket';
 import { useProfileCache } from './state/profileCache';
 import type { UserProfile } from './api/types';
+import { getProgramWeek } from './program';
 
 /** Syncs the :sessionId URL param to the session context. */
 function ChatRoute() {
@@ -439,10 +440,10 @@ function AppContent() {
     return <LoadingScreen />;
   }
 
-  // For routing: only redirect away from /day1 if the profile was already complete
-  // on page load. During the session, IntakeView handles showing the completion card
-  // and the user clicks "Let's get started" to navigate away.
-  const intakeAlreadyComplete = profile?.intake_completed_at != null;
+  // For routing: only redirect away from /day1 if the profile's intake is complete
+  // for the current week. intake_weeks tracks completion per week as {"1": "datetime", ...}.
+  const currentWeek = getProgramWeek();
+  const intakeAlreadyComplete = String(currentWeek) in (profile?.intake_weeks ?? {});
   const intakeComplete = intakeAlreadyComplete || state.intakeComplete;
 
   return (

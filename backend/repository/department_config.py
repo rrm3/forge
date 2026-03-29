@@ -69,6 +69,20 @@ class DepartmentConfigRepository:
         data = json.dumps(config, indent=2).encode()
         await self.storage.write(COMPANY_CONFIG_KEY, data, content_type="application/json")
 
+    async def get_merged_objectives(self, department: str) -> list[dict]:
+        """Return company-wide objectives + department-specific objectives merged.
+
+        Company objectives come first, then any department extras.
+        Returns an empty list if neither config exists.
+        """
+        company_config = await self.get_company_config()
+        company_objectives = (company_config or {}).get("objectives", [])
+
+        dept_config = await self.get_department_config(department)
+        dept_objectives = (dept_config or {}).get("objectives", [])
+
+        return company_objectives + dept_objectives
+
     async def list_departments(self) -> list[str]:
         """List all departments that have config files.
 

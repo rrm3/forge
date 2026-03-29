@@ -199,3 +199,12 @@ async def save_intake_responses(storage: StorageBackend, user_id: str, responses
     key = _intake_responses_key(user_id)
     data = json.dumps(responses, default=str).encode()
     await storage.write(key, data, content_type="application/json")
+
+
+async def load_weekly_briefing(storage: StorageBackend, user_id: str) -> dict | None:
+    """Load the weekly briefing for a user, or None if not available."""
+    key = f"profiles/{user_id}/weekly-briefing.json"
+    data = await storage.read(key)
+    if data is None:
+        return None
+    return json.loads(data.decode())

@@ -29,9 +29,9 @@ from backend.api.transport import MessageSender
 from backend.config import settings
 from backend.deps import AgentDeps
 from backend.llm import call_llm
-from backend.models import Message, UserIdea
+from backend.models import Message, UserIdea, get_program_week
 from backend.repository.department_config import DepartmentConfigRepository
-from backend.storage import load_intake_responses, load_memory, load_transcript, save_intake_responses, save_transcript
+from backend.storage import load_intake_responses, load_memory, load_transcript, load_weekly_briefing, save_intake_responses, save_transcript
 from backend.tools.registry import ToolContext
 
 logger = logging.getLogger(__name__)
@@ -123,10 +123,12 @@ async def run_agent_session(
 
     # Completed intake sessions behave like normal chats.
     # Skipped intakes stay in intake mode so objectives continue evaluating.
+    # Week-aware: check if the current week is in intake_weeks.
+    current_week = get_program_week()
     intake_is_complete = (
         session_type == "intake"
         and profile
-        and profile.intake_completed_at
+        and str(current_week) in (profile.intake_weeks or {})
         and not profile.intake_skipped
     )
 
@@ -135,16 +137,28 @@ async def run_agent_session(
     company_config = await dept_config_repo.get_company_config()
     company_prompt = (company_config or {}).get("prompt", "") or None
 
-    # Load department config for all sessions when user has a department
+    # Load department config for all sessions when user has a department.
+    # For intake sessions, merge company-wide + department-specific objectives.
     department_config = None
+    merged_objectives: list[dict] = []
     intake_responses = {}
     if profile and profile.department:
-        department_config = await dept_config_repo.get_department_config(
-            profile.department.lower().replace(" ", "-")
-        )
+        dept_slug = profile.department.lower().replace(" ", "-")
+        department_config = await dept_config_repo.get_department_config(dept_slug)
+        merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug)
     # Load intake responses only for incomplete intake sessions
     if session_type == "intake" and not intake_is_complete:
         intake_responses = await load_intake_responses(deps.storage, user_id)
+
+    # Build a merged config dict for context/evaluation (company + dept objectives)
+    merged_config = dict(department_config or {})
+    if merged_objectives:
+        merged_config["objectives"] = merged_objectives
+
+    # Load weekly briefing for intake sessions (Week 2+)
+    weekly_briefing = None
+    if session_type == "intake" and not intake_is_complete and current_week > 1:
+        weekly_briefing = await load_weekly_briefing(deps.storage, user_id)
 
     # Load session-type prompt
     skill_instructions = None
@@ -153,7 +167,9 @@ async def run_agent_session(
     else:
         skill_instructions = load_skill(session_type)
 
-    # Build system prompt
+    # Build system prompt.
+    # Pass merged_config (company + dept objectives) for intake objective tracking,
+    # but department_config for department context prompt.
     system_prompt = build_system_prompt(
         profile=profile,
         memory=memory,
@@ -163,6 +179,8 @@ async def run_agent_session(
         intake_responses=intake_responses,
         idea=idea,
         company_prompt=company_prompt,
+        merged_objectives=merged_objectives if session_type == "intake" else None,
+        weekly_briefing=weekly_briefing,
     )
 
     # Build tool context
@@ -184,15 +202,14 @@ async def run_agent_session(
     # For intake: evaluate objectives from the user's message BEFORE the agent responds.
     # This updates intake responses so the system prompt checklist is current.
     # Skip the silent start turn (session auto-created with no user message).
-    if session_type == "intake" and not intake_is_complete and user_message.strip() and department_config:
+    if session_type == "intake" and not intake_is_complete and user_message.strip() and merged_objectives:
         try:
             from backend.agent.extraction import evaluate_objectives
 
             extraction_messages = _transcript_to_llm_messages(transcript)
             extraction_messages.append({"role": "user", "content": user_message.strip()})
 
-            objectives = department_config.get("objectives", [])
-            newly_completed = await evaluate_objectives(extraction_messages, objectives, intake_responses)
+            newly_completed = await evaluate_objectives(extraction_messages, merged_objectives, intake_responses)
 
             if newly_completed:
                 intake_responses.update(newly_completed)
@@ -200,7 +217,7 @@ async def run_agent_session(
                 # Update progress counts on profile for dashboard
                 await deps.profiles_repo.update(user_id, {
                     "intake_objectives_done": len(intake_responses),
-                    "intake_objectives_total": len(objectives),
+                    "intake_objectives_total": len(merged_objectives),
                 })
                 # Rebuild system prompt with updated progress
                 system_prompt = build_system_prompt(
@@ -211,6 +228,8 @@ async def run_agent_session(
                     department_config=department_config,
                     intake_responses=intake_responses,
                     company_prompt=company_prompt,
+                    merged_objectives=merged_objectives,
+                    weekly_briefing=weekly_briefing,
                 )
                 logger.info("Objective evaluation completed %d objectives for user=%s", len(newly_completed), user_id)
         except Exception:
@@ -340,7 +359,7 @@ async def run_agent_session(
                         await sender.send({
                             "type": "intake_progress",
                             "session_id": session_id,
-                            "checklist": get_intake_checklist(department_config, intake_responses, profile),
+                            "checklist": get_intake_checklist(merged_config if merged_objectives else department_config, intake_responses, profile),
                         })
                     except Exception:
                         pass
@@ -416,7 +435,11 @@ async def run_agent_session(
 
         # Intake state machine: check required fields and mark complete when done
         if session_type == "intake" and not intake_is_complete:
-            enrichment_args = await _check_intake_completion(deps, user_id, transcript, sender, session_id, department_config, intake_responses)
+            enrichment_args = await _check_intake_completion(
+                deps, user_id, transcript, sender, session_id,
+                merged_config if merged_objectives else department_config,
+                intake_responses,
+            )
 
         # Generate title for sessions
         # - intake/wrapup: hardcoded titles, never overwritten
@@ -563,10 +586,15 @@ async def _check_intake_completion(
             all_complete = required_fields.issubset(captured)
 
         if all_complete:
+            week_str = str(get_program_week())
+            now_iso = datetime.now(UTC).isoformat()
+            current_weeks = dict(profile.intake_weeks or {}) if profile else {}
+            current_weeks[week_str] = now_iso
             await deps.profiles_repo.update(user_id, {
-                "intake_completed_at": datetime.now(UTC).isoformat(),
+                "intake_completed_at": now_iso,
                 "onboarding_complete": True,
                 "intake_skipped": False,
+                "intake_weeks": current_weeks,
             })
             if department_config:
                 logger.info("Intake complete: user=%s objectives_completed=%s", user_id, completed_ids)

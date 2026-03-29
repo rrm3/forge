@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Square, Send, X, ArrowRight, Lightbulb, Compass, Star, Sunrise } from 'lucide-react';
+import { Square, Send, X, ArrowRight, Lightbulb, Compass, Star, Sunrise, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSession } from '../state/SessionContext';
@@ -18,6 +18,7 @@ import { TopBar } from './TopBar';
 import { IntakeDebugPanel } from './IntakeDebugPanel';
 import { useAdminStore } from '../state/adminStore';
 import { reevaluateIntake, skipIntake } from '../api/client';
+import { getProgramWeek } from '../program';
 
 interface IntakeViewProps {
   onComplete?: () => void;
@@ -32,10 +33,12 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
 
   const [inputValue, setInputValue] = useState('');
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  // Show cards unless the user has already been through them and started chatting.
+  // Show onboarding cards only for Week 1 first-time users.
+  // Week 2+ users skip cards entirely (they already know the app).
   // An intake session with message_count > 0 means the user is past the cards.
-  // A session with 0 messages was just pre-loaded during cards - show cards again.
   const sessionsLoaded = state.sessionsLoaded;
+  const currentWeek = getProgramWeek();
+  const isReturningUser = currentWeek > 1;
   const intakeSessionHasMessages = state.sessions.some(
     (s) => s.type === 'intake' && (s.message_count ?? 0) > 0
   );
@@ -50,7 +53,8 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
     initialIntakeHasMessages.current = intakeSessionHasMessages;
   }
 
-  const showCards = !cardsDismissed && !(initialIntakeHasMessages.current ?? false);
+  // Skip onboarding cards for Week 2+ or returning users with existing messages
+  const showCards = !isReturningUser && !cardsDismissed && !(initialIntakeHasMessages.current ?? false);
   const [showCapsHint, setShowCapsHint] = useState(false);
   const capsHintDismissed = useRef(false);
   const inputValueRef = useRef(inputValue);
@@ -336,56 +340,9 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
                 </div>
               )}
 
-              {/* Completion card */}
+              {/* Completion card - week-aware */}
               {intakeComplete && !isStreaming && (
-                <div
-                  className="my-4 mx-auto w-full rounded-xl border p-6"
-                  style={{
-                    backgroundColor: 'var(--color-surface-white)',
-                    borderColor: 'var(--color-border)',
-                  }}
-                >
-                  <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
-                    You're all set!
-                  </h3>
-
-                  <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
-                    Here are some of the resources available in this app:
-                  </p>
-
-                  <div className="space-y-2 mb-4">
-                    {[
-                      { Icon: Lightbulb, text: 'Share a tip or trick with your colleagues' },
-                      { Icon: Compass, text: 'Get help when you\'re stuck on something' },
-                      { Icon: Star, text: 'Brainstorm an AI opportunity for your work' },
-                      { Icon: Sunrise, text: 'Reflect on your day with a wrap-up' },
-                    ].map(({ Icon, text }) => (
-                      <div key={text} className="flex items-center gap-3">
-                        <Icon
-                          className="w-4 h-4 shrink-0"
-                          strokeWidth={1.5}
-                          style={{ color: 'var(--color-text-muted)' }}
-                        />
-                        <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                          {text}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div>
-                    <button
-                      onClick={handleContinue}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors"
-                      style={{ backgroundColor: 'var(--color-primary)' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-primary-hover)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-primary)')}
-                    >
-                      Let's get started
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+                <CompletionCard week={currentWeek} onContinue={handleContinue} />
               )}
 
               <div ref={bottomRef} />
@@ -498,6 +455,120 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
           </div>}
         </div>
       )}
+    </div>
+  );
+}
+
+
+/* Week-aware completion card */
+
+interface CompletionCardProps {
+  week: number;
+  onContinue: () => void;
+}
+
+// Weekly feature nudges - each week highlights a different app feature
+const WEEKLY_NUDGES: Record<number, { Icon: typeof Lightbulb; text: string }> = {
+  2: { Icon: Sparkles, text: 'Did you know you can share tips and tricks with your colleagues? When you discover something useful, tap "Share a tip" to help others learn from your experience.' },
+  3: { Icon: Compass, text: 'Have a problem you keep running into? Try "I\'m stuck" to brainstorm AI solutions with your companion.' },
+  4: { Icon: Sunrise, text: 'End your AI Tuesday with a quick wrap-up to reflect on what you learned and plan your next steps.' },
+  5: { Icon: Star, text: 'Ready to go deeper? Use "Brainstorm" to explore a bigger AI opportunity for your team.' },
+};
+
+function CompletionCard({ week, onContinue }: CompletionCardProps) {
+  if (week <= 1) {
+    // Week 1: original full resource list
+    return (
+      <div
+        className="my-4 mx-auto w-full rounded-xl border p-6"
+        style={{
+          backgroundColor: 'var(--color-surface-white)',
+          borderColor: 'var(--color-border)',
+        }}
+      >
+        <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+          You're all set!
+        </h3>
+
+        <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
+          Here are some of the resources available in this app:
+        </p>
+
+        <div className="space-y-2 mb-4">
+          {[
+            { Icon: Lightbulb, text: 'Share a tip or trick with your colleagues' },
+            { Icon: Compass, text: 'Get help when you\'re stuck on something' },
+            { Icon: Star, text: 'Brainstorm an AI opportunity for your work' },
+            { Icon: Sunrise, text: 'Reflect on your day with a wrap-up' },
+          ].map(({ Icon, text }) => (
+            <div key={text} className="flex items-center gap-3">
+              <Icon
+                className="w-4 h-4 shrink-0"
+                strokeWidth={1.5}
+                style={{ color: 'var(--color-text-muted)' }}
+              />
+              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                {text}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div>
+          <button
+            onClick={onContinue}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors"
+            style={{ backgroundColor: 'var(--color-primary)' }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-primary-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-primary)')}
+          >
+            Let's get started
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Week 2+: lighter card with weekly feature nudge
+  const nudge = WEEKLY_NUDGES[week] ?? WEEKLY_NUDGES[2]!;
+  const NudgeIcon = nudge.Icon;
+
+  return (
+    <div
+      className="my-4 mx-auto w-full rounded-xl border p-6"
+      style={{
+        backgroundColor: 'var(--color-surface-white)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
+      <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+        Ready for Day {week}
+      </h3>
+
+      <div className="flex items-start gap-3 mb-4">
+        <NudgeIcon
+          className="w-4 h-4 shrink-0 mt-0.5"
+          strokeWidth={1.5}
+          style={{ color: 'var(--color-primary)' }}
+        />
+        <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+          {nudge.text}
+        </p>
+      </div>
+
+      <div>
+        <button
+          onClick={onContinue}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors"
+          style={{ backgroundColor: 'var(--color-primary)' }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-primary-hover)')}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-primary)')}
+        >
+          Let's go
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }

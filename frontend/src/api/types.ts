@@ -41,6 +41,7 @@ export interface UserProfile {
   intake_skipped: boolean;
   intake_objectives_done: number;
   intake_objectives_total: number;
+  intake_weeks: Record<string, string>;  // {"1": "ISO datetime", "2": "ISO datetime"}
   products: string[];
   daily_tasks: string;
   core_skills: string[];
@@ -86,6 +87,7 @@ export interface DepartmentConfig {
 
 export interface CompanyConfig {
   prompt: string;
+  objectives: DepartmentObjective[];
 }
 
 export type TipCategory = 'tip' | 'gem' | 'skill';

@@ -32,6 +32,8 @@ def build_system_prompt(
     intake_responses: dict | None = None,
     idea: UserIdea | None = None,
     company_prompt: str | None = None,
+    merged_objectives: list[dict] | None = None,
+    weekly_briefing: dict | None = None,
 ) -> str:
     """Build a system prompt with optional profile, memory, and skill content.
 
@@ -44,6 +46,10 @@ def build_system_prompt(
         intake_responses: Current intake responses (objective_id -> {value, captured_at}).
         idea: Optional idea for idea-focused coaching chats.
         company_prompt: Company-wide context injected into all sessions.
+        merged_objectives: Company + department objectives merged list (for intake).
+            When provided, overrides department_config objectives for intake tracking.
+        weekly_briefing: Pre-generated briefing from previous week's sessions.
+            Included in intake prompts so the AI can reference specific context.
 
     Returns:
         The assembled system prompt string.
@@ -105,14 +111,26 @@ def build_system_prompt(
         if dept_ctx:
             parts.append(dept_ctx)
 
-    # Intake-specific: objectives and progress tracking
+    # Weekly briefing for intake check-ins (Week 2+)
+    if session_type == "intake" and weekly_briefing:
+        parts.append(_build_weekly_briefing(weekly_briefing))
+
+    # Intake-specific: objectives and progress tracking.
+    # Use merged_objectives (company + dept) when available for tracking.
     if session_type == "intake":
-        if department_config is not None:
-            objectives_section = _build_intake_objectives(department_config)
+        # Build a virtual config with merged objectives for tracking
+        intake_config = None
+        if merged_objectives:
+            intake_config = {"objectives": merged_objectives}
+        elif department_config is not None:
+            intake_config = department_config
+
+        if intake_config is not None:
+            objectives_section = _build_intake_objectives(intake_config)
             if objectives_section:
                 parts.append(objectives_section)
 
-            progress_section = _build_intake_progress(department_config, intake_responses)
+            progress_section = _build_intake_progress(intake_config, intake_responses)
             if progress_section:
                 parts.append(progress_section)
         elif profile:
@@ -155,6 +173,38 @@ def _build_idea_context(idea: UserIdea) -> str:
         "above to update the description, status, or tags. This keeps the idea record "
         "in sync with what you discuss."
     )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Weekly briefing (pre-generated context for Week 2+ check-ins)
+# ---------------------------------------------------------------------------
+
+def _build_weekly_briefing(briefing: dict) -> str:
+    """Format the weekly briefing as a system prompt section."""
+    lines = [
+        "## Weekly Briefing",
+        "The following was prepared from this user's previous sessions. Use it to",
+        "make the check-in specific and warm. Reference details naturally.",
+        "",
+    ]
+    if briefing.get("last_session_summary"):
+        lines.append(f"**Last session:** {briefing['last_session_summary']}")
+    if briefing.get("ideas"):
+        lines.append("**Ideas:**")
+        for idea in briefing["ideas"]:
+            status = idea.get("status", "active")
+            lines.append(f"  - {idea.get('title', '?')} ({status})")
+    if briefing.get("wrapup_highlights"):
+        lines.append(f"**Wrapup highlights:** {briefing['wrapup_highlights']}")
+    if briefing.get("suggested_followups"):
+        lines.append("**Suggested follow-ups:**")
+        for q in briefing["suggested_followups"]:
+            lines.append(f"  - {q}")
+    if briefing.get("nudges"):
+        lines.append("**Nudges:**")
+        for n in briefing["nudges"]:
+            lines.append(f"  - {n}")
     return "\n".join(lines)
 
 

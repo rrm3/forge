@@ -89,6 +89,7 @@ class UserProfile(BaseModel):
     intake_skipped: bool = False
     intake_objectives_done: int = 0
     intake_objectives_total: int = 0
+    intake_weeks: dict = Field(default_factory=dict)  # {"1": "ISO datetime", "2": "ISO datetime", ...}
     is_department_admin: bool = False
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)

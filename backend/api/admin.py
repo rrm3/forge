@@ -117,7 +117,7 @@ async def get_company_config(user: AuthUser):
     """Get company-wide context config. Full admin only."""
     await _require_admin(user.email)
     config = await _dept_config_repo.get_company_config()
-    return config or {"prompt": ""}
+    return config or {"prompt": "", "objectives": []}
 
 
 @router.put("/company")
@@ -328,15 +328,14 @@ async def get_user_intake(user_id: str, user: AuthUser):
     from backend.storage import load_intake_responses
     intake_responses = await load_intake_responses(_storage, user_id) if _storage else {}
 
-    # Resolve objective UUIDs to human-readable labels
+    # Resolve objective UUIDs to human-readable labels using merged objectives
     if intake_responses and profile.department:
         from backend.repository.department_config import DepartmentConfigRepository
         dept_repo = DepartmentConfigRepository(_storage)
-        dept_config = await dept_repo.get_department_config(
-            profile.department.lower().replace(" ", "-")
-        )
-        if dept_config:
-            label_map = {o["id"]: o["label"] for o in dept_config.get("objectives", [])}
+        dept_slug = profile.department.lower().replace(" ", "-")
+        merged = await dept_repo.get_merged_objectives(dept_slug)
+        if merged:
+            label_map = {o["id"]: o["label"] for o in merged}
             intake_responses = {
                 label_map.get(k, k): v
                 for k, v in intake_responses.items()

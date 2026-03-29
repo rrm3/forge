@@ -199,16 +199,15 @@ async def reevaluate_intake(user: AuthUser):
     if not transcript or len(transcript) < 5:
         return {"completed": False, "newly_completed": 0}
 
-    # Load department config
+    # Load merged objectives (company + department)
     from backend.repository.department_config import DepartmentConfigRepository
     dept_config_repo = DepartmentConfigRepository(_storage)
-    department_config = None
+    merged_objectives: list[dict] = []
     if profile.department:
-        department_config = await dept_config_repo.get_department_config(
-            profile.department.lower().replace(" ", "-")
-        )
+        dept_slug = profile.department.lower().replace(" ", "-")
+        merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug)
 
-    if not department_config:
+    if not merged_objectives:
         return {"completed": False, "newly_completed": 0}
 
     # Convert transcript to LLM messages
@@ -218,8 +217,7 @@ async def reevaluate_intake(user: AuthUser):
     # Load current responses and evaluate
     intake_responses = await load_intake_responses(_storage, user.user_id)
     from backend.agent.extraction import evaluate_objectives
-    objectives = department_config.get("objectives", [])
-    newly_completed = await evaluate_objectives(llm_messages, objectives, intake_responses)
+    newly_completed = await evaluate_objectives(llm_messages, merged_objectives, intake_responses)
 
     if newly_completed:
         intake_responses.update(newly_completed)
@@ -230,7 +228,7 @@ async def reevaluate_intake(user: AuthUser):
         )
 
     # Update progress counts on profile for dashboard
-    objective_ids = {obj["id"] for obj in objectives}
+    objective_ids = {obj["id"] for obj in merged_objectives}
     completed_ids = set(intake_responses.keys())
     all_complete = objective_ids.issubset(completed_ids)
 
@@ -239,9 +237,15 @@ async def reevaluate_intake(user: AuthUser):
         "intake_objectives_total": len(objective_ids),
     }
     if all_complete:
-        progress_update["intake_completed_at"] = datetime.now(UTC).isoformat()
+        from backend.models import get_program_week
+        week_str = str(get_program_week())
+        now_iso = datetime.now(UTC).isoformat()
+        current_weeks = dict(profile.intake_weeks or {}) if profile else {}
+        current_weeks[week_str] = now_iso
+        progress_update["intake_completed_at"] = now_iso
         progress_update["onboarding_complete"] = True
         progress_update["intake_skipped"] = False
+        progress_update["intake_weeks"] = current_weeks
         logger.info("Reevaluation marked intake complete for user=%s", user.user_id)
 
     await _profiles_repo.update(user.user_id, progress_update)
@@ -263,10 +267,16 @@ async def skip_intake(user: AuthUser):
     if profile.intake_completed_at:
         return {"status": "already_complete"}
 
+    from backend.models import get_program_week
+    week_str = str(get_program_week())
+    now_iso = datetime.now(UTC).isoformat()
+    current_weeks = dict(profile.intake_weeks or {})
+    current_weeks[week_str] = now_iso
     await _profiles_repo.update(user.user_id, {
-        "intake_completed_at": datetime.now(UTC).isoformat(),
+        "intake_completed_at": now_iso,
         "onboarding_complete": True,
         "intake_skipped": True,
+        "intake_weeks": current_weeks,
     })
     logger.info("Intake skipped for user=%s (%s)", user.user_id, user.email)
     return {"status": "skipped"}

@@ -196,7 +196,7 @@ export async function getCompanyConfig(): Promise<CompanyConfig> {
   return res.json();
 }
 
-export async function saveCompanyConfig(config: CompanyConfig): Promise<void> {
+export async function saveCompanyConfig(config: Partial<CompanyConfig>): Promise<void> {
   const res = await fetchWithAuth(`${API_BASE}/api/admin/company`, {
     method: 'PUT',
     body: JSON.stringify(config),
