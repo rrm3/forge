@@ -231,6 +231,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             user_id: '',
             title: '',
             type: msg.session_type as Session['type'],
+            program_week: 0,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             message_count: 0,

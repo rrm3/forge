@@ -26,30 +26,6 @@ function relativeTime(iso: string | null): string {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-function ProgressRing({ done, total }: { done: number; total: number }) {
-  if (total === 0) return <span style={{ color: 'var(--color-text-placeholder)', fontSize: 11 }}>--</span>;
-  const pct = done / total;
-  const r = 10;
-  const stroke = 2.5;
-  const circumference = 2 * Math.PI * r;
-  const offset = circumference * (1 - pct);
-  const color = pct >= 1 ? 'var(--color-success, #059669)' : pct > 0 ? 'var(--color-primary)' : 'var(--color-text-placeholder)';
-  return (
-    <span title={`${done}/${total} objectives`} className="inline-flex items-center justify-center">
-      <svg width={26} height={26} className="block">
-        <circle cx={13} cy={13} r={r} fill="none" stroke="var(--color-border, #E2E8F0)" strokeWidth={stroke} />
-        <circle
-          cx={13} cy={13} r={r} fill="none"
-          stroke={color} strokeWidth={stroke}
-          strokeDasharray={circumference} strokeDashoffset={offset}
-          strokeLinecap="round"
-          transform="rotate(-90 13 13)"
-        />
-      </svg>
-    </span>
-  );
-}
-
 // Intake response display labels
 const INTAKE_LABELS: Record<string, string> = {
   products: 'Products Used',
