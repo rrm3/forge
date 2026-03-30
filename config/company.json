@@ -44,9 +44,30 @@
       "week_introduced": 1
     },
     {
-      "id": "c0-week1-experiments",
-      "label": "What they tried in Week 1",
-      "description": "Did they experiment with anything since the program started? What worked, what didn't? Ground truth vs stated goals.",
+      "id": "c0-applied-last-week",
+      "label": "Whether they put anything from last week into practice",
+      "description": "Ask this directly: 'Were you able to put anything from last week's AI Tuesday into practice in your work this past week?' Do NOT rephrase as 'experiment' or 'try out' - the question is specifically about applying what they learned to real work, not experimenting. Reference their specific goals and ideas from the digest. Looking for concrete examples: I used AI to draft a report, I automated a workflow, I applied a technique to a real task. 'No, I didn't get to it' is a valid answer.",
+      "extraction_key": "",
+      "week_introduced": 2
+    },
+    {
+      "id": "c0-blockers",
+      "label": "What's blocking them from using AI more",
+      "description": "Is there something they wanted to try with AI but couldn't? Could be access issues (don't have the right tool), knowledge gaps (didn't know how to prompt it), or organizational friction (policies, approvals, data sensitivity). Specific blockers are more useful than vague ones.",
+      "extraction_key": "",
+      "week_introduced": 2
+    },
+    {
+      "id": "c0-sharing",
+      "label": "Whether they shared what they learned with others",
+      "description": "Did they show or tell anyone about what they learned or tried? A colleague, their team, in a meeting? 'No' is a perfectly fine answer. If they did share something worth sharing more broadly, offer to help them draft a Tip & Trick post right now using the prepare_tip tool. Keep it light - offer, don't push.",
+      "extraction_key": "",
+      "week_introduced": 2
+    },
+    {
+      "id": "c0-collabs",
+      "label": "Whether they want to collaborate with others",
+      "description": "Are there any projects or problems where they'd like to work with others in the program? Maybe they need a skill they don't have, or they've spotted an opportunity that crosses teams. 'No' is a perfectly fine answer. If they do have something, offer to help them create a Collab post using the prepare_collab tool. Keep it light - offer, don't push.",
       "extraction_key": "",
       "week_introduced": 2
     }
