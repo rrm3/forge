@@ -256,8 +256,6 @@ async def reevaluate_intake(user: AuthUser):
     # Find the current week's intake session by title, fall back to any intake
     intake_session = next((s for s in sessions if s.type == "intake" and s.title == expected_title), None)
     if not intake_session:
-        intake_session = next((s for s in sessions if s.type == "intake"), None)
-    if not intake_session:
         return {"completed": False, "newly_completed": 0}
 
     # Load transcript

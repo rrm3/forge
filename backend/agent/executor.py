@@ -122,14 +122,12 @@ async def run_agent_session(
     memory = await load_memory(deps.storage, user_id)
 
     # Completed intake sessions behave like normal chats.
-    # Skipped intakes stay in intake mode so objectives continue evaluating.
-    # Week-aware: check if the current week is in intake_weeks.
+    # Week-aware: if the current week is in intake_weeks, intake is done.
     current_week = effective_program_week(profile) if profile else get_program_week()
     intake_is_complete = (
         session_type == "intake"
         and profile
         and str(current_week) in (profile.intake_weeks or {})
-        and not profile.intake_skipped
     )
 
     # Load company config (shared across all sessions)
