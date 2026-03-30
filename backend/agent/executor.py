@@ -435,11 +435,11 @@ async def run_agent_session(
             await deps.sessions_repo.update(session)
 
         # Detect prepared tips and send preview data to frontend
-        if session_type == "tip":
+        if session_type in ("tip", "intake"):
             await _check_tip_prepared(transcript, sender, session_id)
 
         # Detect prepared collabs and send preview data to frontend
-        if session_type == "collab":
+        if session_type in ("collab", "intake"):
             await _check_collab_prepared(transcript, sender, session_id)
 
         # Detect prepared ideas and send preview data to frontend

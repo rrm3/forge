@@ -67,7 +67,7 @@
     {
       "id": "c0-collabs",
       "label": "Whether they want to collaborate with others",
-      "description": "Are there any projects or problems where they'd like to work with others in the program? Maybe they need a skill they don't have, or they've spotted an opportunity that crosses teams. 'No' is a perfectly fine answer. If they do have something, offer to help them create a Collab post using the prepare_collab tool. Keep it light - offer, don't push.",
+      "description": "Are there any projects or problems where they'd like to work with others in the program? Maybe they need a skill they don't have, or they've spotted an opportunity that crosses teams. 'No' is a perfectly fine answer. If they say yes, you need to gather enough detail BEFORE calling prepare_collab: (1) What problem are they solving? Get 3-5 sentences of context. (2) What skills does a collaborator need? e.g., 'Python', 'Salesforce', 'data analysis'. (3) How much time would it take? e.g., 'A few hours', 'Half a day'. Then call prepare_collab with all required args: title (short descriptive name), problem (the 3-5 sentence description), needed_skills (array of skill strings). Do NOT call prepare_collab until you have all three pieces of information from the user.",
       "extraction_key": "",
       "week_introduced": 2
     }
