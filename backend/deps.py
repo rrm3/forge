@@ -123,6 +123,10 @@ def build_tool_registry():
     register_software_tools(registry)
     register_tips_tools(registry)
     register_user_ideas_tools(registry)
+
+    from backend.tools.digest import register_digest_tools
+    register_digest_tools(registry)
+
     return registry
 
 

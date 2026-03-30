@@ -276,12 +276,17 @@ def _build_intake_progress(
     if not remaining:
         # All objectives complete
         lines.append("")
-        lines.append("**ALL OBJECTIVES COMPLETE. THE INTAKE IS DONE.**")
-        lines.append("This is your FINAL message. The conversation ends immediately after it and the user CANNOT reply.")
-        lines.append("Do NOT ask any questions or end any sentence with a question mark - they will go unanswered.")
-        lines.append("Give a brief, warm wrap-up acknowledging what you learned about them,")
-        lines.append("then give 2-3 personalized suggestions for their first AI Tuesday.")
-        lines.append("Ideas are automatically saved from your suggestions.")
+        lines.append("═══════════════════════════════════════════════════")
+        lines.append("ALL OBJECTIVES COMPLETE. THE INTAKE IS DONE.")
+        lines.append("═══════════════════════════════════════════════════")
+        lines.append("")
+        lines.append("MANDATORY RULES FOR THIS MESSAGE (VIOLATION = BROKEN USER EXPERIENCE):")
+        lines.append("1. Do NOT ask ANY questions. Not one. No question marks. The user CANNOT reply.")
+        lines.append("2. Do NOT end with a question. Do NOT say 'what do you think?' or 'how does that sound?'")
+        lines.append("3. Do NOT invite further discussion. The conversation is OVER after this message.")
+        lines.append("4. DO confirm their plan back to them: 'Your plan for today: [X].'")
+        lines.append("5. DO offer one practical suggestion or tip related to their plan.")
+        lines.append("6. DO end with a brief, warm, forward-looking statement. No questions.")
         return "\n".join(lines)
 
     if done:

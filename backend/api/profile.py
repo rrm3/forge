@@ -105,12 +105,56 @@ async def update_profile(body: dict, user: AuthUser):
 
 @router.post("/reset-intake")
 async def reset_intake(user: AuthUser):
-    """Reset intake state: clear profile intake fields, delete intake session + transcript.
+    """Reset intake state for the current week.
+
+    Week 1: full reset (clear all profile fields, delete all intake sessions).
+    Week 2+: only remove the current week from intake_weeks and delete
+    the current week's intake session. Previous weeks' data is preserved.
 
     Available to any authenticated user (resets their own data only).
     Also used by the admin TopBar reset button.
     """
-    # Clear ALL fields that the intake conversation can populate
+    profile = await _get_or_create_profile(user)
+    from backend.models import effective_program_week, intake_title
+    current_week = effective_program_week(profile)
+    current_week_str = str(current_week)
+
+    if current_week > 1:
+        # Week 2+: only reset the current week
+        current_weeks = dict(profile.intake_weeks or {})
+        current_weeks.pop(current_week_str, None)
+        await _profiles_repo.update(user.user_id, {
+            "intake_weeks": current_weeks,
+        })
+
+        # Delete only the current week's intake session
+        if _sessions_repo:
+            expected_title = intake_title(current_week)
+            sessions = await _sessions_repo.list(user.user_id)
+            for s in sessions:
+                if s.type == "intake" and s.title == expected_title:
+                    if _storage:
+                        key = f"sessions/{user.user_id}/{s.session_id}.json"
+                        try:
+                            await _storage.delete(key)
+                        except Exception:
+                            logger.warning("Failed to delete intake transcript %s", key)
+                    await _sessions_repo.delete(user.user_id, s.session_id)
+                    logger.info("Deleted intake session %s (Week %d) for user %s", s.session_id, current_week, user.user_id)
+
+        # Remove the plan-dayN response but keep all other intake responses
+        if _storage:
+            from backend.storage import load_intake_responses, save_intake_responses
+            responses = await load_intake_responses(_storage, user.user_id)
+            plan_key = f"plan-day{current_week}"
+            if plan_key in responses:
+                del responses[plan_key]
+                await save_intake_responses(_storage, user.user_id, responses)
+
+        logger.info("Reset Week %d intake for user %s (%s)", current_week, user.user_id, user.email)
+        return {"status": "reset", "week": current_week}
+
+    # Week 1: full reset (original behavior)
     await _profiles_repo.update(user.user_id, {
         "intake_completed_at": None,
         "onboarding_complete": False,
@@ -134,26 +178,23 @@ async def reset_intake(user: AuthUser):
         "intake_weeks": {},
     })
 
-    # Find and delete intake sessions
+    # Find and delete all intake sessions
     if _sessions_repo:
         sessions = await _sessions_repo.list(user.user_id)
         for s in sessions:
             if s.type == "intake":
-                # Delete transcript
                 if _storage:
                     key = f"sessions/{user.user_id}/{s.session_id}.json"
                     try:
                         await _storage.delete(key)
                     except Exception:
                         logger.warning("Failed to delete intake transcript %s", key)
-                # Delete intake responses
                 if _storage:
                     responses_key = f"profiles/{user.user_id}/intake-responses.json"
                     try:
                         await _storage.delete(responses_key)
                     except Exception:
                         logger.warning("Failed to delete intake responses %s", responses_key)
-                # Delete session metadata
                 await _sessions_repo.delete(user.user_id, s.session_id)
                 logger.info("Deleted intake session %s for user %s", s.session_id, user.user_id)
 

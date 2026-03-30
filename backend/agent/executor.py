@@ -31,7 +31,7 @@ from backend.deps import AgentDeps
 from backend.llm import call_llm
 from backend.models import Message, UserIdea, effective_program_week, get_program_week
 from backend.repository.department_config import DepartmentConfigRepository
-from backend.storage import load_intake_responses, load_memory, load_transcript, load_weekly_briefing, save_intake_responses, save_transcript
+from backend.storage import load_intake_responses, load_memory, load_transcript, save_intake_responses, save_transcript
 from backend.tools.registry import ToolContext
 
 logger = logging.getLogger(__name__)
@@ -151,19 +151,27 @@ async def run_agent_session(
     if session_type == "intake" and not intake_is_complete:
         intake_responses = await load_intake_responses(deps.storage, user_id)
 
+    # For Week 2+, inject a synthetic "plan for today" objective into the list.
+    # This is hardcoded behavior, not a config objective, so it doesn't accumulate.
+    if merged_objectives and current_week > 1:
+        plan_key = f"plan-day{current_week}"
+        merged_objectives = list(merged_objectives) + [{
+            "id": plan_key,
+            "label": f"Plan for Day {current_week}",
+            "description": (
+                "The user must state what they plan to work on in today's AI Tuesday session. "
+                "A vague acknowledgment of last week is not enough. You need a concrete answer to: "
+                "what are you going to do today? This could be continuing a project, trying a new tool, "
+                "brainstorming an idea, or exploring something specific. NOT complete until the user "
+                "has given a specific plan."
+            ),
+        }]
+
     # Build a merged config dict for context/evaluation (company + dept objectives)
     merged_config = dict(department_config or {})
     if merged_objectives:
         merged_config["objectives"] = merged_objectives
 
-
-    # Load weekly briefing for intake sessions (Week 2+)
-    weekly_briefing = None
-    if session_type == "intake" and not intake_is_complete and current_week > 1:
-        try:
-            weekly_briefing = await load_weekly_briefing(deps.storage, user_id)
-        except Exception:
-            logger.warning("Failed to load weekly briefing for user=%s, continuing without it", user_id)
 
     # Load session-type prompt
     skill_instructions = None
@@ -185,7 +193,6 @@ async def run_agent_session(
         idea=idea,
         company_prompt=company_prompt,
         merged_objectives=merged_objectives if session_type == "intake" else None,
-        weekly_briefing=weekly_briefing,
     )
 
     # Build tool context
@@ -234,8 +241,7 @@ async def run_agent_session(
                     intake_responses=intake_responses,
                     company_prompt=company_prompt,
                     merged_objectives=merged_objectives,
-                    weekly_briefing=weekly_briefing,
-                )
+                            )
                 logger.info("Objective evaluation completed %d objectives for user=%s", len(newly_completed), user_id)
         except Exception:
             logger.warning("Objective evaluation failed, continuing without it", exc_info=True)
@@ -583,7 +589,12 @@ async def _check_intake_completion(
             objectives = department_config.get("objectives", [])
             objective_ids = {obj["id"] for obj in objectives}
             completed_ids = set(intake_responses.keys()) if intake_responses else set()
-            all_complete = objective_ids.issubset(completed_ids)
+            all_objectives_done = objective_ids.issubset(completed_ids)
+            # Week 2+: also require a daily plan entry (plan-dayN)
+            current_wk = effective_program_week(profile) if profile else 1
+            plan_key = f"plan-day{current_wk}"
+            needs_plan = current_wk > 1
+            all_complete = all_objectives_done and (not needs_plan or plan_key in completed_ids)
         else:
             # Legacy fallback
             from backend.agent.context import _INTAKE_FIELDS
