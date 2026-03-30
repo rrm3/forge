@@ -158,13 +158,15 @@ async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: d
             None,
         )
         if existing:
-            logger.info("Reusing existing %s session %s for user=%s week=%s",
-                        session_type, existing.session_id, user.user_id, week)
+            logger.info("Reusing existing %s session %s for user=%s week=%s (messages=%d)",
+                        session_type, existing.session_id, user.user_id, week, existing.message_count)
             session_id = existing.session_id
             await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
-            # If the existing session has no messages yet, run the agent to generate the greeting
             if existing.message_count == 0:
                 await _run_agent(sender, user, session_id, "", is_new_session=True, session_type=session_type)
+            else:
+                # Session has messages - send done so frontend doesn't hang in streaming state
+                await sender.send({"type": "done", "session_id": session_id})
             return
 
     session_id = str(uuid.uuid4())

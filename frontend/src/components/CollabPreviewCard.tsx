@@ -34,7 +34,11 @@ interface CollabPreviewCardProps {
 export function CollabPreviewCard({ initial, onPublished }: CollabPreviewCardProps) {
   const [title, setTitle] = useState(initial.title);
   const [problem, setProblem] = useState(initial.problem);
-  const [neededSkills, setNeededSkills] = useState<string[]>(initial.needed_skills);
+  const [neededSkills, setNeededSkills] = useState<string[]>(
+    Array.isArray(initial.needed_skills) ? initial.needed_skills
+    : typeof initial.needed_skills === 'string' ? (initial.needed_skills as string).split(',').map(s => s.trim()).filter(Boolean)
+    : []
+  );
   const [timeCommitment, setTimeCommitment] = useState(initial.time_commitment || 'A few hours');
   const [tags, setTags] = useState<string[]>(initial.tags);
   const [department] = useState(initial.department || 'Everyone');

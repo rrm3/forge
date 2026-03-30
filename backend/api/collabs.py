@@ -97,8 +97,10 @@ async def list_collabs(
     department: str | None = Query(None, description="Filter by department"),
     limit: int = Query(50, ge=1, le=200),
 ):
-    """List collaborations, optionally filtered by status and/or department."""
+    """List collaborations, optionally filtered by status and/or department.
+    Archived collabs are always excluded."""
     collabs = await _collabs_repo.list(status=status, department=department, limit=limit)
+    collabs = [c for c in collabs if c.status != "archived"]
     collab_ids = [c.collab_id for c in collabs]
 
     user_interests = await _collabs_repo.get_user_interests(user.user_id, collab_ids)
@@ -174,7 +176,7 @@ async def delete_collab(
     if collab.author_id != user.user_id:
         raise HTTPException(status_code=403, detail="You can only archive your own collaborations")
 
-    await _collabs_repo.update(collab_id, {"status": "archived"})
+    await _collabs_repo.delete(collab_id)
     return {"status": "archived"}
 
 

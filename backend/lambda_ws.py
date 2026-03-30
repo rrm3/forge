@@ -298,10 +298,13 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
             None,
         )
         if existing:
-            logger.info("Reusing existing %s session %s for user=%s week=%s",
-                        session_type, existing.session_id, user_data["user_id"], week)
+            logger.info("Reusing existing %s session %s for user=%s week=%s (messages=%d)",
+                        session_type, existing.session_id, user_data["user_id"], week, existing.message_count)
             session_id = existing.session_id
             await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
+            if existing.message_count > 0:
+                await sender.send({"type": "done", "session_id": session_id})
+                return
             if existing.message_count == 0:
                 if mode == "text":
                     def cancel_check():

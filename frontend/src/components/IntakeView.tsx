@@ -17,6 +17,9 @@ import { OnboardingCards } from './OnboardingCards';
 import { TopBar } from './TopBar';
 import { IntakeDebugPanel } from './IntakeDebugPanel';
 import { useAdminStore } from '../state/adminStore';
+import { TipPreviewCard } from './TipPreviewCard';
+import { CollabPreviewCard } from './CollabPreviewCard';
+import { IdeaPreviewCard } from './IdeaPreviewCard';
 import { reevaluateIntake, skipIntake } from '../api/client';
 
 interface IntakeViewProps {
@@ -27,7 +30,7 @@ interface IntakeViewProps {
 export function IntakeView({ onComplete, profile }: IntakeViewProps) {
   const navigate = useNavigate();
   const adminMode = useAdminStore((s) => s.adminMode);
-  const { state, sendChatMessage, startTypedSession, cancelStreaming, deselectSession, selectSession } = useSession();
+  const { state, dispatch, sendChatMessage, startTypedSession, cancelStreaming, deselectSession, selectSession } = useSession();
   const { messages = [], isStreaming, streamingText, activeSessionId, intakeComplete } = state;
 
   const [inputValue, setInputValue] = useState('');
@@ -104,22 +107,20 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
 
   // If cards are skipped (returning user or Week 2+), start or resume intake.
   useEffect(() => {
-    if (!showCards && !intakeStarted.current) {
+    if (!showCards && !intakeStarted.current && sessionsLoaded) {
       intakeStarted.current = true;
-      if (intakeSessionHasMessages) {
-        // Resume existing intake session for the current week
-        const existing = state.sessions.find((s) => s.type === 'intake' && (s.program_week ?? 0) === currentWeek);
-        if (existing) {
-          selectSession(existing.session_id);
-        }
+      // Always check for an existing intake session for this week first
+      const existing = state.sessions.find((s) => s.type === 'intake' && (s.program_week ?? 0) === currentWeek);
+      if (existing) {
+        selectSession(existing.session_id);
       } else if (isReturningUser) {
-        // Week 2+: no cards, start a new intake session immediately
-        // Server-side dedup ensures only one intake per user per week
+        // Week 2+: no existing session, create one
+        // Server-side dedup is a safety net in case of race conditions
         startTypedSession('intake');
       }
       // else: Week 1 first-time user, cards will show and pre-load on card 1
     }
-  }, [showCards, intakeSessionHasMessages, isReturningUser, state.sessions, selectSession, startTypedSession]);
+  }, [showCards, sessionsLoaded, isReturningUser, state.sessions, selectSession, startTypedSession]);
 
   function handleInputChange(v: string) {
     inputValueRef.current = v;
@@ -343,6 +344,34 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
                 </div>
               )}
 
+              {/* Tip preview card */}
+              {state.tipReady && !isStreaming && !state.tipPublished && (
+                <TipPreviewCard
+                  initial={state.tipReady}
+                  onPublished={() => {
+                    dispatch({ type: 'SET_TIP_PUBLISHED' });
+                  }}
+                />
+              )}
+
+              {/* Collab preview card */}
+              {state.collabReady && !isStreaming && !state.collabPublished && (
+                <CollabPreviewCard
+                  initial={state.collabReady}
+                  onPublished={() => {
+                    dispatch({ type: 'SET_COLLAB_PUBLISHED' });
+                  }}
+                />
+              )}
+
+              {/* Idea preview card */}
+              {state.ideaReady && !isStreaming && (
+                <IdeaPreviewCard
+                  initial={state.ideaReady}
+                  sessionId={state.activeSessionId || ''}
+                />
+              )}
+
               {/* Completion card - week-aware */}
               {intakeComplete && !isStreaming && (
                 <CompletionCard week={currentWeek} onContinue={handleContinue} />
@@ -472,7 +501,7 @@ interface CompletionCardProps {
 
 // Weekly feature nudges - each week highlights a different app feature
 const WEEKLY_NUDGES: Record<number, { Icon: typeof Lightbulb; text: string }> = {
-  2: { Icon: Sparkles, text: 'Did you know you can share tips and tricks with your colleagues? When you discover something useful, tap "Share a tip" to help others learn from your experience.' },
+  2: { Icon: Sparkles, text: 'Two new ways to connect with colleagues: share Tips & Tricks from what you\'ve learned, or post a Collab to find partners for cross-team projects. Both are in the sidebar.\n\nNEW: Create a Collab idea to find others in the organization interested in working on a project with you, a great way to find people from different functions to tackle cross-functional problems.' },
   3: { Icon: Compass, text: 'Have a problem you keep running into? Try "I\'m stuck" to brainstorm AI solutions with your companion.' },
   4: { Icon: Sunrise, text: 'End your AI Tuesday with a quick wrap-up to reflect on what you learned and plan your next steps.' },
   5: { Icon: Star, text: 'Ready to go deeper? Use "Brainstorm" to explore a bigger AI opportunity for your team.' },

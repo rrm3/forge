@@ -256,6 +256,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           break;
         }
 
+
         case 'session_update':
           dispatch({ type: 'RENAME_SESSION', sessionId: msg.session_id, title: msg.title });
           break;

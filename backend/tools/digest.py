@@ -54,7 +54,7 @@ async def get_previous_digest(*, context: ToolContext) -> str:
             logger.info("Loaded digest-week%d for user=%s", week, context.user_id)
             return data.decode()
 
-    return "No previous week digest found. This may be the user's first week back, or digests haven't been generated yet."
+    return "No previous week digest found. Proceed with your opening message using what you know from the user's profile and completed intake objectives instead. Do not mention the missing digest to the user."
 
 
 def register_digest_tools(registry: ToolRegistry):

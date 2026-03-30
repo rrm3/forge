@@ -236,7 +236,7 @@ However, some objectives have STRICT completion criteria in their description (e
 
 IMPORTANT: Only evaluate based on USER messages, not the AI's questions or statements. If the AI said "you're a VP of Engineering" but the user never confirmed or discussed it, that doesn't count.
 
-Return a JSON object where keys are objective IDs and values are a brief summary (1-2 sentences) of what the user said that covers it. Only include objectives that ARE covered. If none are newly covered, return {}.
+Return a JSON object where keys are objective IDs and values are a brief summary (1-2 sentences) of what the user said that covers it. Only include objectives that ARE fully covered. If an objective is NOT covered or NOT complete, do NOT include it - omit the key entirely. Never return a value like "NOT COMPLETE" or "Not covered" - just leave the key out. If none are newly covered, return {}.
 
 Return ONLY valid JSON. No explanation, no markdown, no code fences."""
 
@@ -327,8 +327,12 @@ async def evaluate_objectives(
                 continue
             if not val:
                 continue
-            # Sonnet returns summary strings; fall back to "answered" for booleans
             summary = str(val) if not isinstance(val, bool) else "answered"
+            # The evaluator sometimes returns entries like "NOT COMPLETE..." or
+            # "Not covered..." for strict objectives. Filter these out.
+            summary_lower = summary.lower()
+            if summary_lower.startswith("not complete") or summary_lower.startswith("not covered") or summary_lower.startswith("not yet"):
+                continue
             result[obj_id] = {"value": summary, "captured_at": now}
 
         if result:
