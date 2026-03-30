@@ -23,6 +23,9 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   const masquerade = localStorage.getItem('forge-masquerade');
   if (masquerade) headers.set('X-Masquerade-As', masquerade);
 
+  // Send browser timezone so backend computes program week in user's local time
+  try { headers.set('X-Timezone', Intl.DateTimeFormat().resolvedOptions().timeZone); } catch {};
+
   return fetch(url, { ...options, headers });
 }
 

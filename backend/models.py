@@ -8,19 +8,38 @@ PROGRAM_START_DATE = date(2026, 3, 24)
 PROGRAM_WEEKS = 12
 
 
-def get_program_week(as_of: date | None = None) -> int:
-    """Return the current program week (1-12), clamped to valid range."""
-    d = as_of or date.today()
+def get_program_week(as_of: date | None = None, timezone: str | None = None) -> int:
+    """Return the current program week (1-12), clamped to valid range.
+
+    If timezone is provided (IANA string like 'Pacific/Auckland'), computes
+    today's date in that timezone rather than UTC. This ensures users see
+    the correct week based on their local date.
+    """
+    if as_of:
+        d = as_of
+    elif timezone:
+        from zoneinfo import ZoneInfo
+        try:
+            d = datetime.now(ZoneInfo(timezone)).date()
+        except (KeyError, Exception):
+            d = date.today()
+    else:
+        d = date.today()
     days_elapsed = (d - PROGRAM_START_DATE).days
     week = max(1, (days_elapsed // 7) + 1)
     return min(week, PROGRAM_WEEKS)
 
 
-def effective_program_week(profile: "UserProfile") -> int:
-    """Return the program week for a user, respecting per-user override for testing."""
+def effective_program_week(profile: "UserProfile", timezone: str | None = None) -> int:
+    """Return the program week for a user, respecting per-user override for testing.
+
+    Uses the user's stored timezone (from their browser) to determine today's date,
+    so users in early timezones (e.g., New Zealand) see the correct week.
+    """
     if profile.program_week_override and profile.program_week_override > 0:
         return min(profile.program_week_override, PROGRAM_WEEKS)
-    return get_program_week()
+    tz = timezone or profile.timezone or None
+    return get_program_week(timezone=tz)
 
 
 def intake_title(week: int | None = None) -> str:
@@ -80,6 +99,7 @@ class UserProfile(BaseModel):
     goals: list[str] = Field(default_factory=list)
     avatar_url: str = ""
     location: str = ""
+    timezone: str = ""  # IANA timezone from browser (e.g., "Pacific/Auckland")
     start_date: str = ""
     work_summary: str = ""
     onboarding_complete: bool = False

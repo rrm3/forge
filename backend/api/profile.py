@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from backend.auth import AuthUser
 from backend.models import UserProfile
@@ -66,15 +66,25 @@ async def _get_or_create_profile(user: AuthUser) -> UserProfile:
 
 
 @router.get("")
-async def get_profile(user: AuthUser):
+async def get_profile(user: AuthUser, request: Request = None):
     """Get the current user's profile, creating it on first access.
 
     Includes computed `program_week` field (clock-based, or per-user override).
+    Accepts X-Timezone header (IANA string) to compute week in user's local time.
     """
     from backend.models import effective_program_week
     profile = await _get_or_create_profile(user)
+
+    # Store timezone from client if provided and changed
+    tz = None
+    if request:
+        tz = request.headers.get("X-Timezone")
+        if tz and tz != profile.timezone:
+            await _profiles_repo.update(user.user_id, {"timezone": tz})
+            profile.timezone = tz
+
     data = profile.model_dump(mode="json")
-    data["program_week"] = effective_program_week(profile)
+    data["program_week"] = effective_program_week(profile, timezone=tz or profile.timezone or None)
     return data
 
 
