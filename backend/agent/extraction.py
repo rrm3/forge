@@ -230,7 +230,9 @@ REMAINING_OBJECTIVES_PLACEHOLDER
 Already completed (do not re-evaluate):
 COMPLETED_OBJECTIVES_PLACEHOLDER
 
-Based on what the USER said in the conversation below, determine which remaining objectives the user has addressed. An objective is covered when the user has shared something relevant to that topic. Brief or partial answers count - a single sentence or even a few words is enough if it tells you something about this person. The bar is low: if you learned anything about the topic from what the user said, mark it covered.
+Based on what the USER said in the conversation below, determine which remaining objectives the user has addressed. For most objectives, the bar is low: a single sentence or even a few words is enough if it tells you something about this person.
+
+However, some objectives have STRICT completion criteria in their description (e.g., "NOT complete until..." or "must state..."). For these, honor the description's requirements exactly. A vague or tangential mention is NOT enough for strict objectives - the user must satisfy the specific criteria described.
 
 IMPORTANT: Only evaluate based on USER messages, not the AI's questions or statements. If the AI said "you're a VP of Engineering" but the user never confirmed or discussed it, that doesn't count.
 

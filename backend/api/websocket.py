@@ -143,12 +143,32 @@ async def _heartbeat_loop(ws: WebSocket):
 async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: dict):
     session_type = msg.get("type", "chat")
     idea_id = msg.get("idea_id")
-    session_id = str(uuid.uuid4())
     # Use effective_program_week for session titles so overrides apply
     from backend.models import effective_program_week
     profile = await _deps.profiles_repo.get(user.user_id) if _deps.profiles_repo else None
     week = effective_program_week(profile) if profile else None
-    INITIAL_TITLES = {"stuck": "Get Help", "tip": "New Tip"}
+
+    # Deduplicate intake and wrapup sessions: only one per user per week.
+    # If one already exists for this type+week, resume it instead of creating a new one.
+    if session_type in ("intake", "wrapup") and _deps.sessions_repo:
+        existing_sessions = await _deps.sessions_repo.list(user.user_id)
+        existing = next(
+            (s for s in existing_sessions
+             if s.type == session_type and s.program_week == (week or 0)),
+            None,
+        )
+        if existing:
+            logger.info("Reusing existing %s session %s for user=%s week=%s",
+                        session_type, existing.session_id, user.user_id, week)
+            session_id = existing.session_id
+            await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
+            # If the existing session has no messages yet, run the agent to generate the greeting
+            if existing.message_count == 0:
+                await _run_agent(sender, user, session_id, "", is_new_session=True, session_type=session_type)
+            return
+
+    session_id = str(uuid.uuid4())
+    INITIAL_TITLES = {"stuck": "Get Help", "tip": "New Tip", "collab": "New Collab"}
     if session_type == "intake":
         title = intake_title(week)
     elif session_type == "wrapup":

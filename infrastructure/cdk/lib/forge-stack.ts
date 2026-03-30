@@ -125,6 +125,31 @@ export class ForgeStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
+    // Collabs tables
+    const collabsTable = new dynamodb.Table(this, 'CollabsTable', {
+      tableName: `${prefix}-collabs`,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: 'collab_id', type: dynamodb.AttributeType.STRING },
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    const collabInterestsTable = new dynamodb.Table(this, 'CollabInterestsTable', {
+      tableName: `${prefix}-collab-interests`,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: 'collab_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'user_id', type: dynamodb.AttributeType.STRING },
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    const collabCommentsTable = new dynamodb.Table(this, 'CollabCommentsTable', {
+      tableName: `${prefix}-collab-comments`,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: 'collab_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'comment_id', type: dynamodb.AttributeType.STRING },
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     // User ideas table
     const userIdeasTable = new dynamodb.Table(this, 'UserIdeasTable', {
       tableName: `${prefix}-user-ideas`,

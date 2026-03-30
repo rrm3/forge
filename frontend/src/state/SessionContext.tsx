@@ -37,6 +37,8 @@ interface SessionState {
   intakeSuggestions: string[];
   tipReady: { title: string; content: string; tags: string[]; department: string } | null;
   tipPublished: boolean;
+  collabReady: { title: string; problem: string; needed_skills: string[]; time_commitment: string; tags: string[]; department: string } | null;
+  collabPublished: boolean;
   ideaReady: { title: string; description: string; tags: string[] } | null;
   ideaContext: { idea_id: string; title: string; description: string; tags: string[] } | null;
 }
@@ -57,6 +59,8 @@ type SessionAction =
   | { type: 'SET_INTAKE_COMPLETE'; suggestions: string[] }
   | { type: 'SET_TIP_READY'; tip: { title: string; content: string; tags: string[]; department: string } }
   | { type: 'SET_TIP_PUBLISHED' }
+  | { type: 'SET_COLLAB_READY'; collab: { title: string; problem: string; needed_skills: string[]; time_commitment: string; tags: string[]; department: string } }
+  | { type: 'SET_COLLAB_PUBLISHED' }
   | { type: 'SET_IDEA_READY'; idea: { title: string; description: string; tags: string[] } | null }
   | { type: 'SET_IDEA_CONTEXT'; idea: { idea_id: string; title: string; description: string; tags: string[] } | null }
   | { type: 'DESELECT_SESSION' };
@@ -74,6 +78,8 @@ const initialState: SessionState = {
   intakeSuggestions: [],
   tipReady: null,
   tipPublished: false,
+  collabReady: null,
+  collabPublished: false,
   ideaReady: null,
   ideaContext: null,
 };
@@ -148,6 +154,12 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
     case 'SET_TIP_PUBLISHED':
       return { ...state, tipPublished: true };
 
+    case 'SET_COLLAB_READY':
+      return { ...state, collabReady: action.collab, collabPublished: false };
+
+    case 'SET_COLLAB_PUBLISHED':
+      return { ...state, collabPublished: true, collabReady: null };
+
     case 'SET_IDEA_READY':
       return { ...state, ideaReady: action.idea };
 
@@ -155,7 +167,7 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
       return { ...state, ideaContext: action.idea };
 
     case 'DESELECT_SESSION':
-      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false, tipReady: null, tipPublished: false, ideaReady: null, ideaContext: null };
+      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false, tipReady: null, tipPublished: false, collabReady: null, collabPublished: false, ideaReady: null, ideaContext: null };
 
     default:
       return state;
@@ -338,6 +350,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             tip: {
               title: (msg as any).title || '',
               content: (msg as any).content || '',
+              tags: (msg as any).tags || [],
+              department: (msg as any).department || 'Everyone',
+            },
+          });
+          break;
+
+        case 'collab_ready':
+          dispatch({
+            type: 'SET_COLLAB_READY',
+            collab: {
+              title: (msg as any).title || '',
+              problem: (msg as any).problem || '',
+              needed_skills: (msg as any).needed_skills || [],
+              time_commitment: (msg as any).time_commitment || 'A few hours',
               tags: (msg as any).tags || [],
               department: (msg as any).department || 'Everyone',
             },

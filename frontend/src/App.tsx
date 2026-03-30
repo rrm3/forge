@@ -133,6 +133,8 @@ import { ChatView } from './components/ChatView';
 import { HomeScreen } from './components/HomeScreen';
 import { TipsView } from './components/TipsView';
 import { TipDetail } from './components/TipDetail';
+import { CollabsView } from './components/CollabsView';
+import { CollabDetail } from './components/CollabDetail';
 import { IdeasView } from './components/IdeasView';
 import { IntakeView } from './components/IntakeView';
 import { TopBar } from './components/TopBar';
@@ -141,7 +143,7 @@ import { AdminLayout } from './components/AdminLayout';
 import { CompanyContextPanel } from './components/CompanyContextPanel';
 import { AdminUsers } from './components/AdminUsers';
 import posthog from './posthog';
-import { getProfile, getAdminAccess, listUserIdeas, getTip, AccessDeniedError } from './api/client';
+import { getProfile, getAdminAccess, listUserIdeas, getTip, getCollab, AccessDeniedError } from './api/client';
 import { forgeWs } from './api/websocket';
 import { useProfileCache } from './state/profileCache';
 import type { UserProfile } from './api/types';
@@ -195,6 +197,40 @@ function TipsDetailRoute({ tipId }: { tipId: string }) {
       onVoteChange={(_id, voted, count) => setTip(t => t ? { ...t, user_has_voted: voted, vote_count: count } : t)}
       onTipUpdated={setTip}
       onTipDeleted={() => navigate('/tips')}
+    />
+  );
+}
+
+/** Wraps CollabsView/CollabDetail based on URL. */
+function CollabsRoute() {
+  const { '*': splat } = useParams();
+
+  const collabId = splat || undefined;
+  if (collabId) {
+    return <CollabsDetailRoute collabId={collabId} />;
+  }
+
+  return <CollabsView />;
+}
+
+function CollabsDetailRoute({ collabId }: { collabId: string }) {
+  const navigate = useNavigate();
+  const [collab, setCollab] = useState<import('./api/types').Collaboration | null>(null);
+
+  useEffect(() => {
+    getCollab(collabId)
+      .then(setCollab)
+      .catch(() => navigate('/collabs', { replace: true }));
+  }, [collabId, navigate]);
+
+  if (!collab) return null;
+
+  return (
+    <CollabDetail
+      collab={collab}
+      onBack={() => navigate('/collabs')}
+      onCollabUpdated={setCollab}
+      onCollabDeleted={() => navigate('/collabs')}
     />
   );
 }
@@ -504,6 +540,7 @@ function AppContent() {
         <Route index element={<HomeScreen />} />
         <Route path="chat/:sessionId" element={<ChatRoute />} />
         <Route path="tips/*" element={<TipsRoute />} />
+        <Route path="collabs/*" element={<CollabsRoute />} />
         <Route path="ideas" element={<IdeasView />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

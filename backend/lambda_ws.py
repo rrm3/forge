@@ -282,12 +282,46 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
     mode = msg.get("mode", "text")
     user_message = msg.get("message", "")
 
-    session_id = str(uuid.uuid4())
     # Use effective_program_week for session titles so overrides apply
     from backend.models import effective_program_week
     profile = await _deps.profiles_repo.get(user_data["user_id"]) if _deps.profiles_repo else None
     week = effective_program_week(profile) if profile else None
-    HARDCODED_TITLES = {"stuck": "Get Help", "tip": "New Tip"}
+
+    sender = ApiGatewayManagementSender(connection_id, settings.websocket_api_endpoint, settings.aws_region)
+
+    # Deduplicate intake and wrapup sessions: only one per user per week.
+    if session_type in ("intake", "wrapup") and _deps.sessions_repo:
+        existing_sessions = await _deps.sessions_repo.list(user_data["user_id"])
+        existing = next(
+            (s for s in existing_sessions
+             if s.type == session_type and s.program_week == (week or 0)),
+            None,
+        )
+        if existing:
+            logger.info("Reusing existing %s session %s for user=%s week=%s",
+                        session_type, existing.session_id, user_data["user_id"], week)
+            session_id = existing.session_id
+            await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
+            if existing.message_count == 0:
+                if mode == "text":
+                    def cancel_check():
+                        return _connections_repo.is_cancelled(session_id) if _connections_repo else False
+                    await run_agent_session(
+                        sender=sender,
+                        user_id=user_data["user_id"],
+                        user_email=user_data.get("email", ""),
+                        user_name=user_data.get("name", ""),
+                        session_id=session_id,
+                        user_message="",
+                        deps=_deps,
+                        is_new_session=True,
+                        session_type=session_type,
+                        cancel_check=cancel_check,
+                    )
+            return
+
+    session_id = str(uuid.uuid4())
+    HARDCODED_TITLES = {"stuck": "Get Help", "tip": "New Tip", "collab": "New Collab"}
     if session_type == "intake":
         title = intake_title(week)
     elif session_type == "wrapup":
@@ -298,7 +332,6 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
                       program_week=week or 0)
     await _deps.sessions_repo.create(session)
 
-    sender = ApiGatewayManagementSender(connection_id, settings.websocket_api_endpoint, settings.aws_region)
     await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
 
     if mode == "text":

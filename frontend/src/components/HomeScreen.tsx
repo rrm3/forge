@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lightbulb, Compass, Star, Sunrise, Trophy, ArrowRight } from 'lucide-react';
+import { Lightbulb, Star, Sunrise, Trophy, ArrowRight, Users } from 'lucide-react';
 import { useSession } from '../state/SessionContext';
 import { useAuth } from '../auth/useAuth';
 import { getProfile, listUserIdeas } from '../api/client';
 import { wrapupTitle } from '../program';
 import type { SessionType, UserProfile, UserIdea } from '../api/types';
 
-const ACTION_BUTTONS: { type: SessionType; label: string; Icon: typeof Lightbulb }[] = [
-  { type: 'tip', label: 'Share a Tip or Trick', Icon: Lightbulb },
-  { type: 'stuck', label: "I'm Stuck", Icon: Compass },
-  { type: 'brainstorm', label: 'Brainstorm an Opportunity', Icon: Star },
-  { type: 'wrapup', label: 'End-of-Day Wrap-up', Icon: Sunrise },
+const ACTION_BUTTONS: { type: SessionType; label: string; subtitle: string; Icon: typeof Lightbulb }[] = [
+  { type: 'brainstorm', label: 'Brainstorm an Opportunity', subtitle: 'Explore AI project ideas for your work', Icon: Star },
+  { type: 'collab', label: 'Start a Collab', subtitle: 'Find a partner to build with you', Icon: Users },
+  { type: 'tip', label: 'Share a Tip or Trick', subtitle: 'Share what you learned with colleagues', Icon: Lightbulb },
 ];
 
 function getGreeting(profile: UserProfile | null, sessionCount: number): string {
@@ -89,22 +88,12 @@ export function HomeScreen() {
         <div className={hasIdeas ? 'flex flex-col lg:flex-row gap-6' : ''}>
           {/* Main content */}
           <div className={hasIdeas ? 'flex-1 min-w-0' : 'max-w-lg mx-auto'}>
-            {/* Action buttons */}
+            {/* Action buttons - 2x2 grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {ACTION_BUTTONS.map((btn) => (
                 <button
                   key={btn.type}
-                  onClick={() => {
-                    if (btn.type === 'wrapup') {
-                      // Singleton: reuse existing wrapup for this week instead of creating a duplicate
-                      const existing = state.sessions.find(s => s.type === 'wrapup' && s.title === wrapupTitle());
-                      if (existing) {
-                        navigate(`/chat/${existing.session_id}`);
-                        return;
-                      }
-                    }
-                    startTypedSession(btn.type);
-                  }}
+                  onClick={() => startTypedSession(btn.type)}
                   className="group flex items-center gap-3 px-5 py-4 rounded-xl border bg-white hover:bg-[var(--color-primary-subtle)] hover:border-[var(--color-primary)] text-left transition-all duration-200 cursor-pointer"
                   style={{ borderColor: 'var(--color-border)' }}
                 >
@@ -118,50 +107,82 @@ export function HomeScreen() {
                       strokeWidth={1.5}
                     />
                   </div>
-                  <span
-                    className="text-sm font-medium transition-colors duration-200 group-hover:text-[var(--color-primary)]"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                  >
-                    {btn.type === 'wrapup' ? wrapupTitle() : btn.label}
-                  </span>
+                  <div className="min-w-0">
+                    <span
+                      className="text-sm font-medium block transition-colors duration-200 group-hover:text-[var(--color-primary)]"
+                      style={{ color: 'var(--color-text-secondary)' }}
+                    >
+                      {btn.label}
+                    </span>
+                    <span className="text-xs block mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                      {btn.subtitle}
+                    </span>
+                  </div>
                 </button>
               ))}
 
-              {/* Browse Tips & Tricks */}
+              {/* Browse & Discover */}
               <button
                 onClick={() => navigate('/tips')}
-                className="group flex items-center justify-center gap-2 px-5 py-4 rounded-xl border text-center transition-all duration-200 sm:col-span-2 hover:opacity-90 cursor-pointer"
-                style={{
-                  backgroundColor: '#EEF0FF',
-                  borderColor: '#C7D2FE',
-                  color: '#4F46E5',
-                }}
+                className="group flex items-center gap-3 px-5 py-4 rounded-xl border bg-white hover:bg-[var(--color-primary-subtle)] hover:border-[var(--color-primary)] text-left transition-all duration-200 cursor-pointer"
+                style={{ borderColor: 'var(--color-border)' }}
               >
-                <Trophy className="w-4 h-4" strokeWidth={1.5} />
-                <span className="text-sm font-medium">Browse Tips & Tricks</span>
+                <div
+                  className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors duration-200"
+                  style={{ backgroundColor: 'var(--color-surface-raised)' }}
+                >
+                  <Trophy
+                    className="w-5 h-5 transition-colors duration-200 group-hover:text-[var(--color-primary)]"
+                    style={{ color: 'var(--color-text-muted)' }}
+                    strokeWidth={1.5}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <span
+                    className="text-sm font-medium block transition-colors duration-200 group-hover:text-[var(--color-primary)]"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  >
+                    Browse & Discover
+                  </span>
+                  <span className="text-xs block mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                    Tips, tricks, and collabs from colleagues
+                  </span>
+                </div>
               </button>
+            </div>
 
-              {/* Guru link */}
-              <a
-                href="https://app.getguru.com/page/31fe984d-f863-4487-8080-849d9f3461ef"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group relative flex items-center justify-between px-5 rounded-xl transition-all duration-200 sm:col-span-2 overflow-hidden"
+            {/* Wrap-up button - full width, bold CTA */}
+            <div className="mt-4">
+              <button
+                onClick={() => {
+                  const currentWeek = profile?.program_week ?? 1;
+                  const existing = state.sessions.find(s => s.type === 'wrapup' && (s.program_week ?? 0) === currentWeek);
+                  if (existing) {
+                    navigate(`/chat/${existing.session_id}`);
+                    return;
+                  }
+                  startTypedSession('wrapup');
+                }}
+                className="group flex items-center justify-center gap-3 w-full px-5 py-5 rounded-xl text-left transition-all duration-300 cursor-pointer hover:shadow-lg hover:scale-[1.01]"
                 style={{
-                  backgroundImage: 'url(/ai-tuesdays-bg.jpg)',
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  height: '52px',
+                  background: 'linear-gradient(135deg, #818CF8 0%, #7C3AED 50%, #C084FC 100%)',
+                  color: 'white',
                 }}
               >
-                <img
-                  src="/ai-tuesdays-logo.png"
-                  alt="AI Tuesdays"
-                  className="h-6"
-                  style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))', marginTop: '-2px' }}
+                <Sunrise
+                  className="w-5 h-5 flex-shrink-0"
+                  style={{ color: 'white' }}
+                  strokeWidth={1.5}
                 />
-                <span className="text-sm text-white font-bold">View on Guru &#x2197;</span>
-              </a>
+                <div className="min-w-0 text-center">
+                  <span className="text-sm font-semibold block">
+                    {wrapupTitle()}
+                  </span>
+                  <span className="text-xs block mt-0.5 opacity-80">
+                    Reflect on what you accomplished today
+                  </span>
+                </div>
+              </button>
             </div>
           </div>
 

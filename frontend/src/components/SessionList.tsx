@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck, Home, X, BookOpen } from 'lucide-react';
+import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck, Home, X, BookOpen, Users, ExternalLink } from 'lucide-react';
+import Tooltip from '@mui/material/Tooltip';
 import { useSession } from '../state/SessionContext';
 import { resetIntake } from '../api/client';
 import { ConfirmResetModal } from './ConfirmResetModal';
+import { PROGRAM_START_DATE } from '../program';
 import type { Session } from '../api/types';
 
 const SESSION_ICONS: Record<string, typeof Lightbulb> = {
@@ -14,6 +16,7 @@ const SESSION_ICONS: Record<string, typeof Lightbulb> = {
   wrapup: Sunrise,
   chat: MessageCircle,
   intake: ClipboardCheck,
+  collab: Users,
 };
 
 // Session types that get visual emphasis (accent bar + always-colored icon)
@@ -25,22 +28,22 @@ function getSessionIcon(type: string) {
 
 function getWeekKey(dateStr: string): string {
   const date = new Date(dateStr);
-  const now = new Date();
+  const daysElapsed = Math.floor(
+    (date.getTime() - PROGRAM_START_DATE.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  const week = Math.max(1, Math.floor(daysElapsed / 7) + 1);
+  return `Week ${week}`;
+}
 
-  // Start of this week (Monday)
-  const thisMonday = new Date(now);
-  thisMonday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-  thisMonday.setHours(0, 0, 0, 0);
-
-  const lastMonday = new Date(thisMonday);
-  lastMonday.setDate(thisMonday.getDate() - 7);
-
-  if (date >= thisMonday) return 'This Week';
-  if (date >= lastMonday) return 'Last Week';
-
-  // Calculate week number from program start (approximate)
-  const weeksAgo = Math.floor((thisMonday.getTime() - date.getTime()) / (7 * 24 * 60 * 60 * 1000));
-  return `${weeksAgo + 1} Weeks Ago`;
+/** Get the Tuesday date for a given program week label like "Week 1". */
+function getTuesdayForWeek(weekLabel: string): string {
+  const match = weekLabel.match(/^Week (\d+)$/);
+  if (!match) return '';
+  const weekNum = parseInt(match[1], 10);
+  // PROGRAM_START_DATE is a Monday (2026-03-24). Tuesday is +1 day, then +7 per week after.
+  const tuesday = new Date(PROGRAM_START_DATE);
+  tuesday.setDate(tuesday.getDate() + 1 + (weekNum - 1) * 7);
+  return tuesday.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function groupByWeek(sessions: Session[]): [string, Session[]][] {
@@ -72,9 +75,22 @@ interface SessionRowProps {
   immediateDelete?: boolean;  // skip inline "Delete?" confirm (e.g. intake uses a modal instead)
 }
 
+const SESSION_DEFAULT_TITLES: Record<string, string> = {
+  tip: 'New Tip',
+  collab: 'New Collab',
+  stuck: 'Get Help',
+  brainstorm: 'New Brainstorm',
+  wrapup: 'Wrap-up',
+  chat: 'New Chat',
+};
+
+function getDefaultTitle(session: Session): string {
+  return session.title || SESSION_DEFAULT_TITLES[session.type] || 'New Chat';
+}
+
 function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete = true, immediateDelete }: SessionRowProps) {
   const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState(session.title || 'New Chat');
+  const [editValue, setEditValue] = useState(getDefaultTitle(session));
   const [confirmDelete, setConfirmDelete] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -86,7 +102,7 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete
   }, [editing]);
 
   function startEdit() {
-    setEditValue(session.title || 'New Chat');
+    setEditValue(getDefaultTitle(session));
     setEditing(true);
   }
 
@@ -161,7 +177,7 @@ function SessionRow({ session, isActive, onSelect, onDelete, onRename, canDelete
             style={{ color: isActive ? 'var(--color-primary)' : isFeatured ? '#8B5CF6' : 'var(--color-text-secondary)' }}
             onDoubleClick={(e) => { e.stopPropagation(); startEdit(); }}
           >
-            {session.title || 'New Chat'}
+            {getDefaultTitle(session)}
           </p>
         )}
       </div>
@@ -225,6 +241,7 @@ export function SessionList({ ideaCount }: SessionListProps) {
   const isHome = location.pathname === '/';
   const showIdeas = location.pathname === '/ideas';
   const showTips = location.pathname.startsWith('/tips');
+  const showCollabs = location.pathname.startsWith('/collabs');
 
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--color-surface-white)' }}>
@@ -312,6 +329,55 @@ export function SessionList({ ideaCount }: SessionListProps) {
         </button>
       </div>
 
+      {/* Collabs button */}
+      <div className="px-2">
+        <button
+          onClick={() => navigate('/collabs')}
+          className={[
+            'flex items-center gap-2 w-full pl-2 pr-2 rounded-lg transition-colors',
+            showCollabs
+              ? 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)]'
+              : 'hover:bg-[var(--color-surface-raised)]',
+          ].join(' ')}
+          style={{ height: '36px', minHeight: '36px' }}
+        >
+          <Users
+            className="flex-shrink-0 w-3.5 h-3.5"
+            strokeWidth={1.5}
+            style={{ color: showCollabs ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
+          />
+          <span
+            className="text-sm font-medium"
+            style={{ color: showCollabs ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
+          >
+            Collabs
+          </span>
+        </button>
+      </div>
+
+      {/* AI Tuesdays on Guru - external link */}
+      <div className="px-2">
+        <a
+          href="https://app.getguru.com/page/31fe984d-f863-4487-8080-849d9f3461ef"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 w-full pl-2 pr-2 rounded-lg transition-colors hover:bg-[var(--color-surface-raised)]"
+          style={{ height: '36px', minHeight: '36px', textDecoration: 'none' }}
+        >
+          <ExternalLink
+            className="flex-shrink-0 w-3.5 h-3.5"
+            strokeWidth={1.5}
+            style={{ color: 'var(--color-text-muted)' }}
+          />
+          <span
+            className="text-sm font-medium flex-1"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            AI Tuesdays on Guru
+          </span>
+        </a>
+      </div>
+
       {/* Separator under nav items */}
       <div className="mx-3 mt-1 mb-1 border-b" style={{ borderColor: 'var(--color-border)' }} />
 
@@ -351,24 +417,27 @@ export function SessionList({ ideaCount }: SessionListProps) {
         ) : (
           weekGroups.map(([week, sessions]) => {
             const isCollapsed = collapsedWeeks.has(week);
+            const tuesdayDate = getTuesdayForWeek(week);
             return (
               <div key={week} className="mb-1">
-                <button
-                  onClick={() => toggleWeek(week)}
-                  className="flex items-center gap-1 px-2 py-1.5 w-full text-left rounded-md hover:bg-[var(--color-surface-raised)] transition-colors"
-                >
-                  {isCollapsed ? (
-                    <ChevronRight className="w-3 h-3" style={{ color: 'var(--color-text-muted)' }} strokeWidth={2} />
-                  ) : (
-                    <ChevronDown className="w-3 h-3" style={{ color: 'var(--color-text-muted)' }} strokeWidth={2} />
-                  )}
-                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-                    {week}
-                  </span>
-                  <span className="text-xs ml-auto" style={{ color: 'var(--color-text-placeholder)' }}>
-                    {sessions.length}
-                  </span>
-                </button>
+                <Tooltip title={tuesdayDate || week} placement="right" arrow>
+                  <button
+                    onClick={() => toggleWeek(week)}
+                    className="flex items-center gap-1 px-2 py-1.5 w-full text-left rounded-md hover:bg-[var(--color-surface-raised)] transition-colors"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="w-3 h-3" style={{ color: 'var(--color-text-muted)' }} strokeWidth={2} />
+                    ) : (
+                      <ChevronDown className="w-3 h-3" style={{ color: 'var(--color-text-muted)' }} strokeWidth={2} />
+                    )}
+                    <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+                      {week}
+                    </span>
+                    <span className="text-xs ml-auto" style={{ color: 'var(--color-text-placeholder)' }}>
+                      {sessions.length}
+                    </span>
+                  </button>
+                </Tooltip>
 
                 {!isCollapsed && (
                   <div className="space-y-0.5 mt-0.5">

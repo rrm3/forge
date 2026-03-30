@@ -438,8 +438,12 @@ async def run_agent_session(
         if session_type == "tip":
             await _check_tip_prepared(transcript, sender, session_id)
 
+        # Detect prepared collabs and send preview data to frontend
+        if session_type == "collab":
+            await _check_collab_prepared(transcript, sender, session_id)
+
         # Detect prepared ideas and send preview data to frontend
-        if session_type in ("brainstorm", "chat", "tip", "stuck", "intake"):
+        if session_type in ("brainstorm", "chat", "tip", "stuck", "intake", "collab"):
             await _check_idea_prepared(transcript, sender, session_id)
 
         # Intake state machine: check required fields and mark complete when done
@@ -743,6 +747,30 @@ async def _check_tip_prepared(transcript: list[Message], sender: MessageSender, 
                 return
     except Exception:
         logger.warning("Failed to check tip prepared", exc_info=True)
+
+
+async def _check_collab_prepared(transcript: list[Message], sender: MessageSender, session_id: str):
+    """Check if prepare_collab was called in this turn and send preview data to frontend."""
+    try:
+        for msg in reversed(transcript):
+            if msg.role == "tool_call" and msg.tool_name == "prepare_collab":
+                args = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+                dept = args.get("department", "Everyone")
+                if dept.lower() in ("all", ""):
+                    dept = "Everyone"
+                await sender.send({
+                    "type": "collab_ready",
+                    "session_id": session_id,
+                    "title": args.get("title", ""),
+                    "problem": args.get("problem", ""),
+                    "needed_skills": args.get("needed_skills", []),
+                    "time_commitment": args.get("time_commitment", ""),
+                    "tags": args.get("tags", []),
+                    "department": dept,
+                })
+                return
+    except Exception:
+        logger.warning("Failed to check collab prepared", exc_info=True)
 
 
 async def _check_idea_prepared(transcript: list[Message], sender: MessageSender, session_id: str):

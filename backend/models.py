@@ -173,6 +173,38 @@ class TipComment(BaseModel):
     created_at: datetime = Field(default_factory=_now)
 
 
+class Collaboration(BaseModel):
+    collab_id: str
+    author_id: str
+    department: str = ""
+    title: str
+    problem: str
+    needed_skills: list[str] = Field(default_factory=list)
+    time_commitment: str = ""
+    status: str = "open"  # open | building | done | archived
+    interested_ids: list[str] = Field(default_factory=list)
+    comment_count: int = 0
+    business_value: str = ""
+    tags: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class CollabInterest(BaseModel):
+    collab_id: str
+    user_id: str
+    message: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+class CollabComment(BaseModel):
+    collab_id: str
+    comment_id: str
+    author_id: str
+    content: str
+    created_at: datetime = Field(default_factory=_now)
+
+
 class UserIdea(BaseModel):
     user_id: str
     idea_id: str

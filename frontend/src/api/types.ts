@@ -1,4 +1,4 @@
-export type SessionType = 'chat' | 'tip' | 'stuck' | 'brainstorm' | 'wrapup' | 'intake';
+export type SessionType = 'chat' | 'tip' | 'stuck' | 'brainstorm' | 'wrapup' | 'intake' | 'collab';
 
 export interface Session {
   session_id: string;
@@ -120,6 +120,34 @@ export interface SimilarMatch {
 
 export interface TipComment {
   tip_id: string;
+  comment_id: string;
+  author_id: string;
+  content: string;
+  created_at: string;
+}
+
+export type CollabStatus = 'open' | 'building' | 'done' | 'archived';
+
+export interface Collaboration {
+  collab_id: string;
+  author_id: string;
+  department: string;
+  title: string;
+  problem: string;
+  needed_skills: string[];
+  time_commitment: string;
+  status: CollabStatus;
+  interested_ids: string[];
+  comment_count: number;
+  business_value: string;
+  tags: string[];
+  user_has_interest: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollabComment {
+  collab_id: string;
   comment_id: string;
   author_id: string;
   content: string;

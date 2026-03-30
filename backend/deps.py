@@ -24,6 +24,7 @@ class AgentDeps:
     journal_repo: Any = None
     ideas_repo: Any = None
     tips_repo: Any = None
+    collabs_repo: Any = None
     user_ideas_repo: Any = None
     storage: Any = None
     tool_registry: Any = None
@@ -38,6 +39,7 @@ def build_repos() -> dict:
         from backend.repository.profiles import MemoryProfileRepository
         from backend.repository.sessions import MemorySessionRepository
         from backend.repository.tips import MemoryTipRepository
+        from backend.repository.collabs import MemoryCollabRepository
         from backend.repository.user_ideas import MemoryUserIdeaRepository
         persist_dir = "/tmp/forge-storage/repos"
         return {
@@ -46,6 +48,7 @@ def build_repos() -> dict:
             "journal": MemoryJournalRepository(persist_path=f"{persist_dir}/journal.json"),
             "ideas": MemoryIdeaRepository(persist_path=f"{persist_dir}/ideas.json"),
             "tips": MemoryTipRepository(persist_path=f"{persist_dir}/tips.json"),
+            "collabs": MemoryCollabRepository(persist_path=f"{persist_dir}/collabs.json"),
             "user_ideas": MemoryUserIdeaRepository(persist_path=f"{persist_dir}/user_ideas.json"),
         }
 
@@ -54,6 +57,7 @@ def build_repos() -> dict:
     from backend.repository.profiles import DynamoDBProfileRepository
     from backend.repository.sessions import DynamoDBSessionRepository
     from backend.repository.tips import DynamoDBTipRepository
+    from backend.repository.collabs import DynamoDBCollabRepository
     from backend.repository.user_ideas import DynamoDBUserIdeaRepository
 
     prefix = settings.dynamodb_table_prefix
@@ -64,6 +68,7 @@ def build_repos() -> dict:
         "journal": DynamoDBJournalRepository(f"{prefix}-journal", region),
         "ideas": DynamoDBIdeaRepository(f"{prefix}-ideas", region),
         "tips": DynamoDBTipRepository(f"{prefix}-tips", f"{prefix}-tip-votes", f"{prefix}-tip-comments", region),
+        "collabs": DynamoDBCollabRepository(f"{prefix}-collabs", f"{prefix}-collab-interests", f"{prefix}-collab-comments", region),
         "user_ideas": DynamoDBUserIdeaRepository(f"{prefix}-user-ideas", region),
     }
 
@@ -105,6 +110,7 @@ def build_tool_registry():
     from backend.tools.registry import ToolRegistry
     from backend.tools.software import register_software_tools
     from backend.tools.tips import register_tips_tools
+    from backend.tools.collabs import register_collab_tools
     from backend.tools.user_ideas import register_user_ideas_tools
     from backend.tools.web_search import register_web_search_tools
 
@@ -122,6 +128,7 @@ def build_tool_registry():
     register_profile_tools(registry, include_search=False)
     register_software_tools(registry)
     register_tips_tools(registry)
+    register_collab_tools(registry)
     register_user_ideas_tools(registry)
 
     from backend.tools.digest import register_digest_tools
@@ -138,6 +145,7 @@ def build_agent_deps(repos: dict, storage, tool_registry, orgchart=None) -> Agen
         journal_repo=repos["journal"],
         ideas_repo=repos["ideas"],
         tips_repo=repos.get("tips"),
+        collabs_repo=repos.get("collabs"),
         user_ideas_repo=repos.get("user_ideas"),
         storage=storage,
         tool_registry=tool_registry,

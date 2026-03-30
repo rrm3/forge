@@ -8,6 +8,7 @@ import { useAdminStore } from '../state/adminStore';
 import { MessageBubble, streamingMarkdownComponents } from './MessageBubble';
 import { VoiceButton } from './VoiceButton';
 import { TipPreviewCard } from './TipPreviewCard';
+import { CollabPreviewCard } from './CollabPreviewCard';
 import { IdeaPreviewCard } from './IdeaPreviewCard';
 
 const TOOL_ROLES = new Set(['tool_call', 'tool_result']);
@@ -66,7 +67,7 @@ export function ChatView() {
   // Auto-scroll to bottom
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, streamingText, state.tipReady, state.tipPublished, state.ideaReady]);
+  }, [messages.length, streamingText, state.tipReady, state.tipPublished, state.collabReady, state.collabPublished, state.ideaReady]);
 
   // Focus input when session loads
   useEffect(() => {
@@ -236,6 +237,38 @@ export function ChatView() {
                   style={{ color: 'var(--color-primary)' }}
                 >
                   Browse Tips &rarr;
+                </button>
+              </div>
+            )}
+
+            {/* Collab preview card (editable) or published confirmation */}
+            {state.collabReady && !isStreaming && !state.collabPublished && (
+              <CollabPreviewCard
+                initial={state.collabReady}
+                onPublished={() => {
+                  dispatch({ type: 'SET_COLLAB_PUBLISHED' });
+                }}
+                onShowCollabs={() => navigate('/collabs')}
+              />
+            )}
+
+            {state.collabPublished && (
+              <div
+                className="my-4 mx-auto max-w-[95%] md:max-w-[85%] rounded-xl border p-5"
+                style={{ backgroundColor: 'var(--color-surface-white)', borderColor: 'var(--color-border)' }}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Check className="w-4 h-4" style={{ color: '#059669' }} strokeWidth={2} />
+                  <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                    Collab published!
+                  </span>
+                </div>
+                <button
+                  onClick={() => navigate('/collabs')}
+                  className="text-sm font-medium"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  Browse Collabs &rarr;
                 </button>
               </div>
             )}

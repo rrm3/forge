@@ -114,6 +114,7 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
         }
       } else if (isReturningUser) {
         // Week 2+: no cards, start a new intake session immediately
+        // Server-side dedup ensures only one intake per user per week
         startTypedSession('intake');
       }
       // else: Week 1 first-time user, cards will show and pre-load on card 1
