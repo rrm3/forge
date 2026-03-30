@@ -99,11 +99,11 @@ export function AdminLayout() {
         {/* Tab nav - Company Context and Users tabs only visible to full admins */}
         <div className="flex gap-6 mb-6 mt-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <button onClick={() => navigate('/admin/settings')} style={tabStyle('settings')}>
-            Department Context
+            Questions
           </button>
           {isAdmin && (
             <button onClick={() => navigate('/admin/company')} style={tabStyle('company')}>
-              Company Context
+              System Prompts
             </button>
           )}
           {isAdmin && (

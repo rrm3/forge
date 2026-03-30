@@ -1,160 +1,126 @@
 /**
- * CompanyContextPanel - Company-wide context prompt and objectives management.
+ * CompanyContextPanel - System Prompts management page.
+ * Shows company-wide prompt (full admins only) and department prompt on one page.
  * Rendered as a child of AdminLayout. Full admin only.
- *
- * Two tabs:
- * - Questions: company-wide intake objectives that apply to all departments
- * - Context: company-wide system prompt injected into all sessions
  */
 
-import { useEffect, useState, useRef } from 'react';
-import { Plus, Trash2, Save, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { getCompanyConfig, saveCompanyConfig } from '../api/client';
-import type { CompanyConfig, DepartmentObjective } from '../api/types';
+import { useEffect, useState } from 'react';
+import { Save, ChevronDown } from 'lucide-react';
+import {
+  getAdminAccess,
+  getDepartmentConfig,
+  saveDepartmentConfig,
+  getCompanyConfig,
+  saveCompanyPrompt,
+} from '../api/client';
+import type { DepartmentConfig, CompanyConfig } from '../api/types';
 
-type Tab = 'questions' | 'context';
-
-function generateId(): string {
-  return `c0-${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
+/** Reusable section header styled as small-caps muted label */
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <h2
+      className="text-xs font-medium tracking-wider uppercase mb-4"
+      style={{
+        color: 'var(--color-text-muted)',
+        fontFamily: "'Satoshi', system-ui, sans-serif",
+        letterSpacing: '0.08em',
+      }}
+    >
+      {children}
+    </h2>
+  );
 }
 
 export function CompanyContextPanel() {
-  const [config, setConfig] = useState<CompanyConfig | null>(null);
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [selectedDept, setSelectedDept] = useState<string>('');
+  const [deptConfig, setDeptConfig] = useState<DepartmentConfig | null>(null);
+  const [companyConfig, setCompanyConfig] = useState<CompanyConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('questions');
-  const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
-  // Objective editing state
-  const [editLabel, setEditLabel] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editExtractionKey, setEditExtractionKey] = useState('');
-  const [extractionKeyLocked, setExtractionKeyLocked] = useState(false);
-  const [editWeekIntroduced, setEditWeekIntroduced] = useState(1);
-  const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
+  // Company prompt state
+  const [companyPrompt, setCompanyPrompt] = useState('');
+  const [companyDirty, setCompanyDirty] = useState(false);
+  const [companySaving, setCompanySaving] = useState(false);
+  const [companySaveMessage, setCompanySaveMessage] = useState('');
 
-  // Context tab state
-  const [contextPrompt, setContextPrompt] = useState('');
-  const [contextDirty, setContextDirty] = useState(false);
+  // Department prompt state
+  const [deptPrompt, setDeptPrompt] = useState('');
+  const [deptDirty, setDeptDirty] = useState(false);
+  const [deptSaving, setDeptSaving] = useState(false);
+  const [deptSaveMessage, setDeptSaveMessage] = useState('');
 
-  const labelInputRef = useRef<HTMLInputElement>(null);
-
+  // Load admin access and company config on mount
   useEffect(() => {
-    getCompanyConfig()
-      .then((c) => {
-        setConfig(c);
-        setContextPrompt(c.prompt || '');
-        setLoading(false);
+    getAdminAccess()
+      .then(({ departments: depts }) => {
+        setDepartments(depts);
+        if (depts.length > 0) {
+          setSelectedDept(depts[0]);
+        }
+
+        getCompanyConfig()
+          .then((c) => {
+            setCompanyConfig(c);
+            setCompanyPrompt(c.prompt || '');
+            setLoading(false);
+          })
+          .catch(() => setLoading(false));
       })
       .catch(() => setLoading(false));
   }, []);
 
-  function expandObjective(obj: DepartmentObjective) {
-    setExpandedCard(obj.id);
-    setEditLabel(obj.label);
-    setEditDescription(obj.description);
-    setEditExtractionKey(obj.extraction_key);
-    setExtractionKeyLocked(!!obj.extraction_key);
-    setEditWeekIntroduced(obj.week_introduced ?? 1);
-    setTimeout(() => labelInputRef.current?.focus(), 50);
-  }
+  // Load department config when selection changes
+  useEffect(() => {
+    if (!selectedDept) return;
+    getDepartmentConfig(selectedDept)
+      .then((c) => {
+        setDeptConfig(c);
+        setDeptPrompt(c.prompt);
+        setDeptDirty(false);
+      })
+      .catch(() => {});
+  }, [selectedDept]);
 
-  function collapseCard() {
-    setExpandedCard(null);
-    setEditLabel('');
-    setEditDescription('');
-    setEditExtractionKey('');
-    setExtractionKeyLocked(false);
-    setEditWeekIntroduced(1);
-  }
-
-  async function saveObjective(id: string) {
-    if (!config) return;
-    setSaving(true);
-    const updated: CompanyConfig = {
-      ...config,
-      objectives: config.objectives.map((o) =>
-        o.id === id
-          ? { ...o, label: editLabel, description: editDescription, extraction_key: editExtractionKey, week_introduced: editWeekIntroduced }
-          : o
-      ),
-    };
+  async function saveCompanyContext() {
+    if (!companyConfig) return;
+    setCompanySaving(true);
     try {
-      await saveCompanyConfig(updated);
-      setConfig(updated);
-      collapseCard();
-      flashSave('Objective saved');
+      await saveCompanyPrompt(companyPrompt);
+      setCompanyConfig({ ...companyConfig, prompt: companyPrompt });
+      setCompanyDirty(false);
+      flashCompanySave('Prompt saved');
     } catch {
-      flashSave('Failed to save');
+      flashCompanySave('Failed to save');
     } finally {
-      setSaving(false);
+      setCompanySaving(false);
     }
   }
 
-  async function deleteObjective(id: string) {
-    if (!config) return;
-    setSaving(true);
-    const updated: CompanyConfig = {
-      ...config,
-      objectives: config.objectives.filter((o) => o.id !== id),
-    };
+  async function saveDeptContext() {
+    if (!deptConfig) return;
+    setDeptSaving(true);
+    const updated: DepartmentConfig = { ...deptConfig, prompt: deptPrompt };
     try {
-      await saveCompanyConfig(updated);
-      setConfig(updated);
-      collapseCard();
-      flashSave('Objective deleted');
+      await saveDepartmentConfig(selectedDept, updated);
+      setDeptConfig(updated);
+      setDeptDirty(false);
+      flashDeptSave('Prompt saved');
     } catch {
-      flashSave('Failed to delete');
+      flashDeptSave('Failed to save');
     } finally {
-      setSaving(false);
+      setDeptSaving(false);
     }
   }
 
-  async function addObjective() {
-    if (!config) return;
-    const newObj: DepartmentObjective = {
-      id: generateId(),
-      label: 'New Objective',
-      description: '',
-      extraction_key: '',
-      week_introduced: 1,
-    };
-    const updated: CompanyConfig = {
-      ...config,
-      objectives: [...config.objectives, newObj],
-    };
-    setSaving(true);
-    try {
-      await saveCompanyConfig(updated);
-      setConfig(updated);
-      expandObjective(newObj);
-      flashSave('Objective added');
-    } catch {
-      flashSave('Failed to add');
-    } finally {
-      setSaving(false);
-    }
+  function flashCompanySave(msg: string) {
+    setCompanySaveMessage(msg);
+    setTimeout(() => setCompanySaveMessage(''), 2500);
   }
 
-  async function saveContext() {
-    if (!config) return;
-    setSaving(true);
-    const updated: CompanyConfig = { ...config, prompt: contextPrompt };
-    try {
-      await saveCompanyConfig(updated);
-      setConfig(updated);
-      setContextDirty(false);
-      flashSave('Context saved');
-    } catch {
-      flashSave('Failed to save context');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function flashSave(msg: string) {
-    setSaveMessage(msg);
-    setTimeout(() => setSaveMessage(''), 2500);
+  function flashDeptSave(msg: string) {
+    setDeptSaveMessage(msg);
+    setTimeout(() => setDeptSaveMessage(''), 2500);
   }
 
   if (loading) {
@@ -168,346 +134,210 @@ export function CompanyContextPanel() {
     );
   }
 
-  const objectives = config?.objectives ?? [];
-
-  const tabStyle = (tab: Tab) => ({
-    fontSize: 14,
-    fontWeight: 500 as const,
-    fontFamily: "'Satoshi', system-ui, sans-serif",
-    color: activeTab === tab ? 'var(--color-primary)' : 'var(--color-text-muted)',
-    borderBottom: activeTab === tab ? '2px solid var(--color-primary)' : '2px solid transparent',
-    cursor: 'pointer' as const,
-    paddingBottom: 8,
-  });
-
   return (
     <div className="max-w-2xl">
-      {/* Tabs */}
-      <div className="flex gap-6 mb-6" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <button onClick={() => setActiveTab('questions')} style={tabStyle('questions')}>
-          Questions
-        </button>
-        <button onClick={() => setActiveTab('context')} style={tabStyle('context')}>
-          Context
-        </button>
+      {/* Warning banner */}
+      <div
+        className="px-3 py-2 rounded-md text-xs mb-6"
+        style={{
+          backgroundColor: '#FFFBEB',
+          color: '#92400E',
+          fontFamily: "'Satoshi', system-ui, sans-serif",
+          lineHeight: 1.5,
+        }}
+      >
+        Be careful editing these prompts. Changes affect the AI system prompt for all users. Only edit if you know what you're doing.
       </div>
 
-      {/* Save feedback */}
-      {saveMessage && (
-        <div
-          className="mb-4 px-3 py-2 rounded-md text-sm font-medium"
-          style={{
-            backgroundColor: saveMessage.includes('Failed') ? '#FEF2F2' : '#F0FDF4',
-            color: saveMessage.includes('Failed') ? 'var(--color-error)' : 'var(--color-success)',
-            fontFamily: "'Satoshi', system-ui, sans-serif",
-          }}
-        >
-          {saveMessage}
-        </div>
-      )}
+      {/* Company-wide prompt */}
+      {companyConfig && (
+        <div className="mb-8">
+          <SectionHeader>Company-wide</SectionHeader>
 
-      {/* Questions tab */}
-      {activeTab === 'questions' && (
-        <div className="flex flex-col gap-3">
-          <p
-            className="text-xs mb-2"
-            style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
-          >
-            Company-wide intake questions asked of all users. Departments can add additional questions in their own settings.
-          </p>
-
-          {objectives.map((obj) => {
-            const isExpanded = expandedCard === obj.id;
-            return (
-              <div
-                key={obj.id}
-                className="rounded-lg border overflow-hidden"
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  borderColor: isExpanded ? 'var(--color-primary)' : 'var(--color-border)',
-                }}
-              >
-                <button
-                  onClick={() => isExpanded ? collapseCard() : expandObjective(obj)}
-                  className="flex items-center justify-between w-full px-4 py-3 text-left transition-colors"
-                  style={{ cursor: 'pointer' }}
-                  onMouseEnter={(e) => {
-                    if (!isExpanded) e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span
-                      className="text-sm truncate"
-                      style={{
-                        color: 'var(--color-text-primary)',
-                        fontFamily: "'Satoshi', system-ui, sans-serif",
-                        fontWeight: 450,
-                      }}
-                    >
-                      {obj.label}
-                    </span>
-                    {(obj.week_introduced ?? 1) > 1 && (
-                      <span
-                        className="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium"
-                        style={{
-                          backgroundColor: 'var(--color-surface-raised, #F1F5F9)',
-                          color: 'var(--color-text-muted)',
-                          fontFamily: "'Satoshi', system-ui, sans-serif",
-                        }}
-                      >
-                        Wk {obj.week_introduced}
-                      </span>
-                    )}
-                  </div>
-                  {isExpanded ? (
-                    <ChevronUp className="w-4 h-4 shrink-0 ml-3" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 shrink-0 ml-3" style={{ color: 'var(--color-text-placeholder)' }} strokeWidth={1.5} />
-                  )}
-                </button>
-
-                {isExpanded && (
-                  <div className="px-4 pb-4 flex flex-col gap-3" style={{ borderTop: '1px solid var(--color-border)' }}>
-                    <div className="pt-3">
-                      <label
-                        className="block text-xs font-medium mb-1"
-                        style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
-                      >
-                        Label
-                      </label>
-                      <input
-                        ref={labelInputRef}
-                        type="text"
-                        value={editLabel}
-                        onChange={(e) => setEditLabel(e.target.value)}
-                        className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors"
-                        style={{
-                          borderColor: 'var(--color-border)',
-                          color: 'var(--color-text-primary)',
-                          fontFamily: "'Satoshi', system-ui, sans-serif",
-                        }}
-                        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-                        onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block text-xs font-medium mb-1"
-                        style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
-                      >
-                        Description
-                      </label>
-                      <textarea
-                        value={editDescription}
-                        onChange={(e) => setEditDescription(e.target.value)}
-                        rows={3}
-                        className="w-full rounded-md border px-3 py-2 text-sm outline-none resize-y transition-colors"
-                        style={{
-                          borderColor: 'var(--color-border)',
-                          color: 'var(--color-text-primary)',
-                          fontFamily: "'Satoshi', system-ui, sans-serif",
-                        }}
-                        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-                        onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
-                      />
-                    </div>
-
-                    <div className="flex gap-3">
-                      <div className="flex-1">
-                        <label
-                          className="block text-xs font-medium mb-1"
-                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
-                        >
-                          Extraction key
-                        </label>
-                        <input
-                          type="text"
-                          value={editExtractionKey}
-                          onChange={(e) => setEditExtractionKey(e.target.value)}
-                          disabled={extractionKeyLocked}
-                          placeholder="e.g. ai_tools_used"
-                          className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors"
-                          style={{
-                            borderColor: 'var(--color-border)',
-                            color: extractionKeyLocked ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
-                            backgroundColor: extractionKeyLocked ? 'var(--color-surface-raised)' : undefined,
-                            fontFamily: "'Satoshi', system-ui, sans-serif",
-                            cursor: extractionKeyLocked ? 'not-allowed' : undefined,
-                          }}
-                          onFocus={(e) => { if (!extractionKeyLocked) e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-                          onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
-                        />
-                      </div>
-                      <div style={{ width: 120 }}>
-                        <label
-                          className="block text-xs font-medium mb-1"
-                          style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
-                        >
-                          Week introduced
-                        </label>
-                        <select
-                          value={editWeekIntroduced}
-                          onChange={(e) => setEditWeekIntroduced(Number(e.target.value))}
-                          className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors appearance-none"
-                          style={{
-                            borderColor: 'var(--color-border)',
-                            color: 'var(--color-text-primary)',
-                            backgroundColor: '#FFFFFF',
-                            fontFamily: "'Satoshi', system-ui, sans-serif",
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {Array.from({ length: 12 }, (_, i) => i + 1).map((w) => (
-                            <option key={w} value={w}>Week {w}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        onClick={() => saveObjective(obj.id)}
-                        disabled={saving || !editLabel.trim()}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                        style={{
-                          backgroundColor: saving || !editLabel.trim() ? 'var(--color-border)' : 'var(--color-primary)',
-                          color: '#FFFFFF',
-                          cursor: saving || !editLabel.trim() ? 'not-allowed' : 'pointer',
-                          fontFamily: "'Satoshi', system-ui, sans-serif",
-                        }}
-                      >
-                        <Save className="w-3.5 h-3.5" strokeWidth={1.5} />
-                        Save
-                      </button>
-                      <button
-                        onClick={collapseCard}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                        style={{
-                          color: 'var(--color-text-muted)',
-                          cursor: 'pointer',
-                          fontFamily: "'Satoshi', system-ui, sans-serif",
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                      >
-                        <X className="w-3.5 h-3.5" strokeWidth={1.5} />
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => deleteObjective(obj.id)}
-                        disabled={saving}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium ml-auto transition-colors"
-                        style={{
-                          color: 'var(--color-error)',
-                          cursor: saving ? 'not-allowed' : 'pointer',
-                          fontFamily: "'Satoshi', system-ui, sans-serif",
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          <button
-            onClick={addObjective}
-            disabled={saving}
-            className="flex items-center justify-center gap-2 w-full rounded-lg border-2 border-dashed px-4 py-3 text-sm font-medium transition-colors"
-            style={{
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-text-muted)',
-              cursor: saving ? 'not-allowed' : 'pointer',
-              fontFamily: "'Satoshi', system-ui, sans-serif",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--color-primary)';
-              e.currentTarget.style.color = 'var(--color-primary)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--color-border)';
-              e.currentTarget.style.color = 'var(--color-text-muted)';
-            }}
-          >
-            <Plus className="w-4 h-4" strokeWidth={1.5} />
-            Add objective
-          </button>
-        </div>
-      )}
-
-      {/* Context tab */}
-      {activeTab === 'context' && (
-        <div className="flex flex-col gap-4">
-          <div
-            className="px-3 py-2 rounded-md text-xs"
-            style={{
-              backgroundColor: '#FFFBEB',
-              color: '#92400E',
-              fontFamily: "'Satoshi', system-ui, sans-serif",
-              lineHeight: 1.5,
-            }}
-          >
-            Be careful editing this - changes affect the AI system prompt for all users across all sessions company-wide. Only edit if you know what you're doing.
-          </div>
-
-          <div>
-            <label
-              className="block text-xs font-medium mb-2"
-              style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
-            >
-              Company context prompt
-            </label>
-            <textarea
-              value={contextPrompt}
-              onChange={(e) => {
-                setContextPrompt(e.target.value);
-                setContextDirty(true);
-              }}
-              rows={16}
-              placeholder="Provide company-wide context that the AI coach should know across all departments and sessions. For example: approved AI tools, company policies, program goals."
-              className="w-full rounded-md border px-4 py-3 text-sm outline-none resize-y transition-colors"
+          {companySaveMessage && (
+            <div
+              className="mb-4 px-3 py-2 rounded-md text-sm font-medium"
               style={{
-                borderColor: 'var(--color-border)',
-                color: 'var(--color-text-primary)',
-                fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-                lineHeight: 1.6,
-                fontSize: 13,
-              }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
-            />
-            <p
-              className="text-xs mt-1"
-              style={{ color: 'var(--color-text-placeholder)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
-            >
-              This text is included in the AI system prompt for all users across all sessions.
-            </p>
-          </div>
-
-          <div>
-            <button
-              onClick={saveContext}
-              disabled={saving || !contextDirty}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-              style={{
-                backgroundColor: saving || !contextDirty ? 'var(--color-border)' : 'var(--color-primary)',
-                color: '#FFFFFF',
-                cursor: saving || !contextDirty ? 'not-allowed' : 'pointer',
+                backgroundColor: companySaveMessage.includes('Failed') ? '#FEF2F2' : '#F0FDF4',
+                color: companySaveMessage.includes('Failed') ? 'var(--color-error)' : 'var(--color-success)',
                 fontFamily: "'Satoshi', system-ui, sans-serif",
               }}
             >
-              <Save className="w-3.5 h-3.5" strokeWidth={1.5} />
-              Save context
-            </button>
+              {companySaveMessage}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-4">
+            <div>
+              <label
+                className="block text-xs font-medium mb-2"
+                style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+              >
+                Company context prompt
+              </label>
+              <textarea
+                value={companyPrompt}
+                onChange={(e) => {
+                  setCompanyPrompt(e.target.value);
+                  setCompanyDirty(true);
+                }}
+                rows={12}
+                placeholder="Provide company-wide context that the AI coach should know across all departments and sessions."
+                className="w-full rounded-md border px-4 py-3 text-sm outline-none resize-y transition-colors"
+                style={{
+                  borderColor: 'var(--color-border)',
+                  color: 'var(--color-text-primary)',
+                  fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                  lineHeight: 1.6,
+                  fontSize: 13,
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+              />
+              <p
+                className="text-xs mt-1"
+                style={{ color: 'var(--color-text-placeholder)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+              >
+                This text is included in the AI system prompt for all users across all sessions.
+              </p>
+            </div>
+
+            <div>
+              <button
+                onClick={saveCompanyContext}
+                disabled={companySaving || !companyDirty}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: companySaving || !companyDirty ? 'var(--color-border)' : 'var(--color-primary)',
+                  color: '#FFFFFF',
+                  cursor: companySaving || !companyDirty ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Satoshi', system-ui, sans-serif",
+                }}
+              >
+                <Save className="w-3.5 h-3.5" strokeWidth={1.5} />
+                Save prompt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Department prompt */}
+      {deptConfig && (
+        <div>
+          <div className="flex items-center gap-3 mb-4">
+            <h2
+              className="text-xs font-medium tracking-wider uppercase"
+              style={{
+                color: 'var(--color-text-muted)',
+                fontFamily: "'Satoshi', system-ui, sans-serif",
+                letterSpacing: '0.08em',
+              }}
+            >
+              Department:
+            </h2>
+            {departments.length > 1 ? (
+              <div className="relative inline-block">
+                <select
+                  value={selectedDept}
+                  onChange={(e) => setSelectedDept(e.target.value)}
+                  className="appearance-none rounded-md border pl-3 pr-8 py-1.5 text-sm"
+                  style={{
+                    borderColor: 'var(--color-border)',
+                    backgroundColor: '#FFFFFF',
+                    color: 'var(--color-text-primary)',
+                    fontFamily: "'Satoshi', system-ui, sans-serif",
+                    cursor: 'pointer',
+                  }}
+                >
+                  {departments.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+                <ChevronDown
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ width: 14, height: 14, color: 'var(--color-text-muted)' }}
+                  strokeWidth={1.5}
+                />
+              </div>
+            ) : (
+              <span
+                className="text-xs font-medium tracking-wider uppercase"
+                style={{
+                  color: 'var(--color-text-muted)',
+                  fontFamily: "'Satoshi', system-ui, sans-serif",
+                  letterSpacing: '0.08em',
+                }}
+              >
+                {selectedDept}
+              </span>
+            )}
+          </div>
+
+          {deptSaveMessage && (
+            <div
+              className="mb-4 px-3 py-2 rounded-md text-sm font-medium"
+              style={{
+                backgroundColor: deptSaveMessage.includes('Failed') ? '#FEF2F2' : '#F0FDF4',
+                color: deptSaveMessage.includes('Failed') ? 'var(--color-error)' : 'var(--color-success)',
+                fontFamily: "'Satoshi', system-ui, sans-serif",
+              }}
+            >
+              {deptSaveMessage}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-4">
+            <div>
+              <label
+                className="block text-xs font-medium mb-2"
+                style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+              >
+                Department context prompt
+              </label>
+              <textarea
+                value={deptPrompt}
+                onChange={(e) => {
+                  setDeptPrompt(e.target.value);
+                  setDeptDirty(true);
+                }}
+                rows={12}
+                placeholder="Provide context about this department that the AI coach should know. Markdown supported."
+                className="w-full rounded-md border px-4 py-3 text-sm outline-none resize-y transition-colors"
+                style={{
+                  borderColor: 'var(--color-border)',
+                  color: 'var(--color-text-primary)',
+                  fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                  lineHeight: 1.6,
+                  fontSize: 13,
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+              />
+              <p
+                className="text-xs mt-1"
+                style={{ color: 'var(--color-text-placeholder)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
+              >
+                This text is included in the AI system prompt for all users in this department.
+              </p>
+            </div>
+
+            <div>
+              <button
+                onClick={saveDeptContext}
+                disabled={deptSaving || !deptDirty}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: deptSaving || !deptDirty ? 'var(--color-border)' : 'var(--color-primary)',
+                  color: '#FFFFFF',
+                  cursor: deptSaving || !deptDirty ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Satoshi', system-ui, sans-serif",
+                }}
+              >
+                <Save className="w-3.5 h-3.5" strokeWidth={1.5} />
+                Save prompt
+              </button>
+            </div>
           </div>
         </div>
       )}
