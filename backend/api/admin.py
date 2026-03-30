@@ -163,9 +163,25 @@ async def get_department_config(department: str, user: AuthUser):
 
 @router.put("/departments/{department}")
 async def update_department_config(department: str, config: dict, user: AuthUser):
-    """Update a department's config."""
+    """Update a department's config. Saves prompt and objectives to separate files."""
     await _require_any_admin(user, department)
     await _dept_config_repo.save_department_config(department, config)
+    return {"status": "updated"}
+
+
+@router.put("/departments/{department}/prompt")
+async def update_department_prompt(department: str, body: dict, user: AuthUser):
+    """Update a department's prompt only. Cannot overwrite objectives."""
+    await _require_any_admin(user, department)
+    await _dept_config_repo.save_department_prompt(department, body.get("prompt", ""))
+    return {"status": "updated"}
+
+
+@router.put("/departments/{department}/objectives")
+async def update_department_objectives(department: str, body: dict, user: AuthUser):
+    """Update a department's objectives only. Cannot overwrite prompt."""
+    await _require_any_admin(user, department)
+    await _dept_config_repo.save_department_objectives(department, body.get("objectives", []))
     return {"status": "updated"}
 
 

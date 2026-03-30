@@ -8,6 +8,8 @@ from backend.storage import StorageBackend
 logger = logging.getLogger(__name__)
 
 CONFIG_PREFIX = "config/departments/"
+DEPT_PROMPT_PREFIX = "config/departments/prompt/"
+DEPT_OBJECTIVES_PREFIX = "config/departments/objectives/"
 ADMIN_ACCESS_KEY = "config/admin-access.json"
 COMPANY_CONFIG_KEY = "config/company.json"
 COMPANY_PROMPT_KEY = "config/company-prompt.json"
@@ -25,20 +27,82 @@ class DepartmentConfigRepository:
         self.storage = storage
 
     async def get_department_config(self, department: str) -> dict | None:
-        """Read a department's config (prompt + objectives).
+        """Read a department's config (prompt + objectives merged).
 
-        Returns None if the department config does not exist.
+        Reads prompt and objectives from separate files. Falls back to the
+        legacy combined ``departments/{department}.json`` if the split files
+        don't exist yet.
         """
-        key = f"{CONFIG_PREFIX}{department}.json"
-        data = await self.storage.read(key)
-        if data is None:
-            return None
-        return json.loads(data.decode())
+        prompt_key = f"{DEPT_PROMPT_PREFIX}{department}.json"
+        objectives_key = f"{DEPT_OBJECTIVES_PREFIX}{department}.json"
+
+        prompt_data = await self.storage.read(prompt_key)
+        objectives_data = await self.storage.read(objectives_key)
+
+        if prompt_data is None and objectives_data is None:
+            # Fallback: read legacy combined file
+            legacy_key = f"{CONFIG_PREFIX}{department}.json"
+            data = await self.storage.read(legacy_key)
+            if data is None:
+                return None
+            return json.loads(data.decode())
+
+        # If only one split file exists, backfill the missing half from the
+        # legacy file so a partial migration doesn't silently drop data.
+        if prompt_data is None or objectives_data is None:
+            legacy_key = f"{CONFIG_PREFIX}{department}.json"
+            legacy_raw = await self.storage.read(legacy_key)
+            legacy = json.loads(legacy_raw.decode()) if legacy_raw else {}
+        else:
+            legacy = {}
+
+        prompt = json.loads(prompt_data.decode()).get("prompt", "") if prompt_data else legacy.get("prompt", "")
+        objectives = json.loads(objectives_data.decode()).get("objectives", []) if objectives_data else legacy.get("objectives", [])
+        return {"prompt": prompt, "objectives": objectives}
 
     async def save_department_config(self, department: str, config: dict) -> None:
-        """Write a department's config."""
-        key = f"{CONFIG_PREFIX}{department}.json"
-        data = json.dumps(config, indent=2).encode()
+        """Write prompt and objectives to their separate files."""
+        if "prompt" in config:
+            await self.save_department_prompt(department, config["prompt"])
+        if "objectives" in config:
+            await self.save_department_objectives(department, config["objectives"])
+
+    async def get_department_prompt(self, department: str) -> str | None:
+        """Read a department's prompt only."""
+        prompt_key = f"{DEPT_PROMPT_PREFIX}{department}.json"
+        data = await self.storage.read(prompt_key)
+        if data is not None:
+            return json.loads(data.decode()).get("prompt", "")
+        # Fallback to legacy combined file
+        legacy_key = f"{CONFIG_PREFIX}{department}.json"
+        legacy_data = await self.storage.read(legacy_key)
+        if legacy_data is None:
+            return None
+        return json.loads(legacy_data.decode()).get("prompt", "")
+
+    async def save_department_prompt(self, department: str, prompt: str) -> None:
+        """Write a department's prompt (separate from objectives)."""
+        key = f"{DEPT_PROMPT_PREFIX}{department}.json"
+        data = json.dumps({"prompt": prompt}, indent=2).encode()
+        await self.storage.write(key, data, content_type="application/json")
+
+    async def get_department_objectives(self, department: str) -> list | None:
+        """Read a department's objectives only."""
+        objectives_key = f"{DEPT_OBJECTIVES_PREFIX}{department}.json"
+        data = await self.storage.read(objectives_key)
+        if data is not None:
+            return json.loads(data.decode()).get("objectives", [])
+        # Fallback to legacy combined file
+        legacy_key = f"{CONFIG_PREFIX}{department}.json"
+        legacy_data = await self.storage.read(legacy_key)
+        if legacy_data is None:
+            return None
+        return json.loads(legacy_data.decode()).get("objectives", [])
+
+    async def save_department_objectives(self, department: str, objectives: list) -> None:
+        """Write a department's objectives (separate from prompt)."""
+        key = f"{DEPT_OBJECTIVES_PREFIX}{department}.json"
+        data = json.dumps({"objectives": objectives}, indent=2).encode()
         await self.storage.write(key, data, content_type="application/json")
 
     async def get_admin_access(self) -> dict:
@@ -72,8 +136,16 @@ class DepartmentConfigRepository:
                 return None
             return json.loads(data.decode())
 
-        prompt = json.loads(prompt_data.decode()).get("prompt", "") if prompt_data else ""
-        objectives = json.loads(objectives_data.decode()).get("objectives", []) if objectives_data else []
+        # If only one split file exists, backfill the missing half from the
+        # legacy file so a partial migration doesn't silently drop data.
+        if prompt_data is None or objectives_data is None:
+            legacy_data = await self.storage.read(COMPANY_CONFIG_KEY)
+            legacy = json.loads(legacy_data.decode()) if legacy_data else {}
+        else:
+            legacy = {}
+
+        prompt = json.loads(prompt_data.decode()).get("prompt", "") if prompt_data else legacy.get("prompt", "")
+        objectives = json.loads(objectives_data.decode()).get("objectives", []) if objectives_data else legacy.get("objectives", [])
         return {"prompt": prompt, "objectives": objectives}
 
     async def save_company_prompt(self, prompt: str) -> None:
@@ -121,13 +193,33 @@ class DepartmentConfigRepository:
         """List all departments that have config files.
 
         Returns department slugs (filenames without the .json extension).
+        Checks both legacy combined files and split prompt/objectives files.
         """
+        departments: set[str] = set()
+
+        # Legacy combined files: config/departments/{slug}.json
         keys = await self.storage.list_keys(CONFIG_PREFIX)
-        departments: list[str] = []
         for key in keys:
             if key.endswith(".json"):
-                # Strip prefix and .json suffix to get the department slug
                 slug = key[len(CONFIG_PREFIX):-len(".json")]
+                # Skip split file subdirectories (prompt/*, objectives/*)
+                if slug and "/" not in slug:
+                    departments.add(slug)
+
+        # Split prompt files: config/departments/prompt/{slug}.json
+        prompt_keys = await self.storage.list_keys(DEPT_PROMPT_PREFIX)
+        for key in prompt_keys:
+            if key.endswith(".json"):
+                slug = key[len(DEPT_PROMPT_PREFIX):-len(".json")]
                 if slug:
-                    departments.append(slug)
+                    departments.add(slug)
+
+        # Split objectives files: config/departments/objectives/{slug}.json
+        obj_keys = await self.storage.list_keys(DEPT_OBJECTIVES_PREFIX)
+        for key in obj_keys:
+            if key.endswith(".json"):
+                slug = key[len(DEPT_OBJECTIVES_PREFIX):-len(".json")]
+                if slug:
+                    departments.add(slug)
+
         return sorted(departments)

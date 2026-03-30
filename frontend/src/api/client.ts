@@ -193,6 +193,22 @@ export async function saveDepartmentConfig(department: string, config: Departmen
   await checkResponse(res);
 }
 
+export async function saveDepartmentPrompt(department: string, prompt: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/departments/${encodeURIComponent(department)}/prompt`, {
+    method: 'PUT',
+    body: JSON.stringify({ prompt }),
+  });
+  await checkResponse(res);
+}
+
+export async function saveDepartmentObjectives(department: string, objectives: DepartmentConfig['objectives']): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/departments/${encodeURIComponent(department)}/objectives`, {
+    method: 'PUT',
+    body: JSON.stringify({ objectives }),
+  });
+  await checkResponse(res);
+}
+
 export async function getCompanyConfig(): Promise<CompanyConfig> {
   const res = await fetchWithAuth(`${API_BASE}/api/admin/company`);
   await checkResponse(res);

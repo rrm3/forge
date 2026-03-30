@@ -9,7 +9,7 @@ import { Plus, Trash2, Save, X, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   getAdminAccess,
   getDepartmentConfig,
-  saveDepartmentConfig,
+  saveDepartmentObjectives,
   getCompanyConfig,
   saveCompanyObjectives,
 } from '../api/client';
@@ -411,17 +411,14 @@ export function AdminPanel() {
   async function saveDeptObjective(id: string, label: string, description: string, extractionKey: string, weekIntroduced: number) {
     if (!deptConfig) return;
     setSaving(true);
-    const updated: DepartmentConfig = {
-      ...deptConfig,
-      objectives: deptConfig.objectives.map((o) =>
-        o.id === id
-          ? { ...o, label, description, extraction_key: extractionKey, week_introduced: weekIntroduced }
-          : o
-      ),
-    };
+    const updatedObjectives = deptConfig.objectives.map((o) =>
+      o.id === id
+        ? { ...o, label, description, extraction_key: extractionKey, week_introduced: weekIntroduced }
+        : o
+    );
     try {
-      await saveDepartmentConfig(selectedDept, updated);
-      setDeptConfig(updated);
+      await saveDepartmentObjectives(selectedDept, updatedObjectives);
+      setDeptConfig({ ...deptConfig, objectives: updatedObjectives });
       setExpandedCard(null);
       flashSave('Objective saved');
     } catch {
@@ -434,13 +431,10 @@ export function AdminPanel() {
   async function deleteDeptObjective(id: string) {
     if (!deptConfig || deptConfig.objectives.length <= 1) return;
     setSaving(true);
-    const updated: DepartmentConfig = {
-      ...deptConfig,
-      objectives: deptConfig.objectives.filter((o) => o.id !== id),
-    };
+    const updatedObjectives = deptConfig.objectives.filter((o) => o.id !== id);
     try {
-      await saveDepartmentConfig(selectedDept, updated);
-      setDeptConfig(updated);
+      await saveDepartmentObjectives(selectedDept, updatedObjectives);
+      setDeptConfig({ ...deptConfig, objectives: updatedObjectives });
       setExpandedCard(null);
       flashSave('Objective deleted');
     } catch {
@@ -459,14 +453,11 @@ export function AdminPanel() {
       extraction_key: '',
       week_introduced: 1,
     };
-    const updated: DepartmentConfig = {
-      ...deptConfig,
-      objectives: [...deptConfig.objectives, newObj],
-    };
+    const updatedObjectives = [...deptConfig.objectives, newObj];
     setSaving(true);
     try {
-      await saveDepartmentConfig(selectedDept, updated);
-      setDeptConfig(updated);
+      await saveDepartmentObjectives(selectedDept, updatedObjectives);
+      setDeptConfig({ ...deptConfig, objectives: updatedObjectives });
       setExpandedCard(newObj.id);
       setTimeout(() => labelInputRef.current?.focus(), 50);
       flashSave('Objective added');

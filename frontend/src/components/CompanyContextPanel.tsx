@@ -9,7 +9,7 @@ import { Save, ChevronDown } from 'lucide-react';
 import {
   getAdminAccess,
   getDepartmentConfig,
-  saveDepartmentConfig,
+  saveDepartmentPrompt,
   getCompanyConfig,
   saveCompanyPrompt,
 } from '../api/client';
@@ -100,10 +100,9 @@ export function CompanyContextPanel() {
   async function saveDeptContext() {
     if (!deptConfig) return;
     setDeptSaving(true);
-    const updated: DepartmentConfig = { ...deptConfig, prompt: deptPrompt };
     try {
-      await saveDepartmentConfig(selectedDept, updated);
-      setDeptConfig(updated);
+      await saveDepartmentPrompt(selectedDept, deptPrompt);
+      setDeptConfig({ ...deptConfig, prompt: deptPrompt });
       setDeptDirty(false);
       flashDeptSave('Prompt saved');
     } catch {
