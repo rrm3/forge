@@ -142,13 +142,24 @@ async def reset_intake(user: AuthUser):
                     await _sessions_repo.delete(user.user_id, s.session_id)
                     logger.info("Deleted intake session %s (Week %d) for user %s", s.session_id, current_week, user.user_id)
 
-        # Remove the plan-dayN response but keep all other intake responses
+        # Remove plan-dayN and any Week N objective responses, keep everything else
         if _storage:
             from backend.storage import load_intake_responses, save_intake_responses
+            from backend.repository.department_config import DepartmentConfigRepository
             responses = await load_intake_responses(_storage, user.user_id)
             plan_key = f"plan-day{current_week}"
-            if plan_key in responses:
-                del responses[plan_key]
+            keys_to_remove = {plan_key}
+            # Also remove objectives introduced in the current week
+            if profile.department:
+                dept_repo = DepartmentConfigRepository(_storage)
+                company_config = await dept_repo.get_company_config()
+                for obj in (company_config or {}).get("objectives", []):
+                    if obj.get("week_introduced", 1) == current_week:
+                        keys_to_remove.add(obj["id"])
+            removed = {k for k in keys_to_remove if k in responses}
+            if removed:
+                for k in removed:
+                    del responses[k]
                 await save_intake_responses(_storage, user.user_id, responses)
 
         logger.info("Reset Week %d intake for user %s (%s)", current_week, user.user_id, user.email)
