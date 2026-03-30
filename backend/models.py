@@ -62,7 +62,7 @@ class Session(BaseModel):
     session_id: str
     user_id: str
     title: str = ""
-    type: str = "chat"  # chat, tip, stuck, brainstorm, wrapup, intake
+    type: str = "chat"  # chat, tip, stuck, brainstorm, wrapup, intake, collab
     program_week: int = 0  # Set for intake/wrapup sessions to identify which week
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
@@ -182,7 +182,7 @@ class Collaboration(BaseModel):
     needed_skills: list[str] = Field(default_factory=list)
     time_commitment: str = ""
     status: str = "open"  # open | building | done | archived
-    interested_ids: list[str] = Field(default_factory=list)
+    interested_count: int = 0
     comment_count: int = 0
     business_value: str = ""
     tags: list[str] = Field(default_factory=list)

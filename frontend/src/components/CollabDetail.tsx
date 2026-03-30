@@ -84,7 +84,7 @@ export function CollabDetail({ collab, onBack, onCollabUpdated, onCollabDeleted 
 
   // Interest state
   const [interested, setInterested] = useState(collab.user_has_interest);
-  const [interestedIds, setInterestedIds] = useState<string[]>(collab.interested_ids);
+  const [interestedIds, setInterestedIds] = useState<string[]>(collab.interested_user_ids ?? []);
   const [interestLoading, setInterestLoading] = useState(false);
 
   // Edit state
@@ -116,8 +116,8 @@ export function CollabDetail({ collab, onBack, onCollabUpdated, onCollabDeleted 
   // Sync from props if collab changes
   useEffect(() => {
     setInterested(collab.user_has_interest);
-    setInterestedIds(collab.interested_ids);
-  }, [collab.user_has_interest, collab.interested_ids]);
+    setInterestedIds(collab.interested_user_ids ?? []);
+  }, [collab.user_has_interest, collab.interested_user_ids]);
 
   // Load comments
   const fetchComments = useCallback(async () => {
@@ -157,7 +157,7 @@ export function CollabDetail({ collab, onBack, onCollabUpdated, onCollabDeleted 
     } catch {
       // Revert
       setInterested(wasInterested);
-      setInterestedIds(collab.interested_ids);
+      setInterestedIds(collab.interested_user_ids ?? []);
     } finally {
       setInterestLoading(false);
     }

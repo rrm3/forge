@@ -4,11 +4,8 @@ import { Plus, Users } from 'lucide-react';
 import { listCollabs } from '../api/client';
 import type { Collaboration, CollabStatus } from '../api/types';
 import { ProfileChip } from './ProfileChip';
-import { UserAvatar } from './UserAvatar';
 import { useAuth } from '../auth/useAuth';
 import { useSession } from '../state/SessionContext';
-import { useProfileCache } from '../state/profileCache';
-import { getPublicProfile } from '../api/client';
 
 type StatusFilter = 'all' | CollabStatus | 'mine';
 
@@ -71,55 +68,14 @@ function StatusBadge({ status }: { status: CollabStatus }) {
   );
 }
 
-function InterestedAvatars({ userIds }: { userIds: string[] }) {
-  const profiles = useProfileCache((s) => s.profiles);
-  const { set, markLoading } = useProfileCache();
+function InterestedCount({ count }: { count: number }) {
+  if (count === 0) return null;
 
-  // Ensure profiles are loaded for the interested users
-  useEffect(() => {
-    const state = useProfileCache.getState();
-    for (const uid of userIds.slice(0, 3)) {
-      if (!state.profiles[uid] && !state.loading.has(uid)) {
-        markLoading(uid);
-        getPublicProfile(uid)
-          .then((p) => set(uid, p))
-          .catch(() => {
-            set(uid, { user_id: uid, name: 'Unknown', title: '', department: '', avatar_url: '', team: '' });
-          });
-      }
-    }
-  }, [userIds, set, markLoading]);
-
-  if (userIds.length === 0) return null;
-
-  const shown = userIds.slice(0, 3);
   return (
     <div className="flex items-center gap-1.5">
-      <div className="flex items-center" style={{ marginRight: 2 }}>
-        {shown.map((uid, i) => {
-          const p = profiles[uid];
-          return (
-            <div
-              key={uid}
-              style={{
-                marginLeft: i === 0 ? 0 : -4,
-                zIndex: shown.length - i,
-                position: 'relative',
-                borderRadius: '50%',
-                border: '1.5px solid var(--color-surface-white)',
-              }}
-            >
-              <UserAvatar
-                name={p?.name || '?'}
-                avatarUrl={p?.avatar_url}
-                size={20}
-              />
-            </div>
-          );
-        })}
-      </div>
+      <Users className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} strokeWidth={1.5} />
       <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-        {userIds.length} interested
+        {count} interested
       </span>
     </div>
   );
@@ -322,7 +278,7 @@ export function CollabsView() {
                   <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                     {relativeTime(collab.created_at)}
                   </span>
-                  <InterestedAvatars userIds={collab.interested_ids} />
+                  <InterestedCount count={collab.interested_count} />
                 </div>
               </button>
             ))}

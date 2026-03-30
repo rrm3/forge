@@ -137,7 +137,8 @@ export interface Collaboration {
   needed_skills: string[];
   time_commitment: string;
   status: CollabStatus;
-  interested_ids: string[];
+  interested_count: number;
+  interested_user_ids?: string[];  // Only populated on detail endpoint
   comment_count: number;
   business_value: string;
   tags: string[];

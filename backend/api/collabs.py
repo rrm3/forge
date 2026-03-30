@@ -102,11 +102,13 @@ async def list_collabs(
     collab_ids = [c.collab_id for c in collabs]
 
     user_interests = await _collabs_repo.get_user_interests(user.user_id, collab_ids)
+    interest_counts = await _collabs_repo.get_interest_counts(collab_ids)
 
     result = []
     for c in collabs:
         d = c.model_dump(mode="json")
         d["user_has_interest"] = c.collab_id in user_interests
+        d["interested_count"] = interest_counts.get(c.collab_id, 0)
         result.append(d)
     return result
 
@@ -122,9 +124,12 @@ async def get_collab(
         raise HTTPException(status_code=404, detail="Collaboration not found")
 
     user_interests = await _collabs_repo.get_user_interests(user.user_id, [collab_id])
+    interested_user_ids = await _collabs_repo.get_interested_user_ids(collab_id)
 
     d = collab.model_dump(mode="json")
     d["user_has_interest"] = collab_id in user_interests
+    d["interested_count"] = len(interested_user_ids)
+    d["interested_user_ids"] = interested_user_ids
     return d
 
 
@@ -186,9 +191,6 @@ async def express_interest(
 
     is_new = await _collabs_repo.express_interest(collab_id, user.user_id, body.message)
     if is_new:
-        # Update interested_ids on the collab record
-        ids = list(set(collab.interested_ids + [user.user_id]))
-        await _collabs_repo.update(collab_id, {"interested_ids": ids})
         posthog_track(user.user_id, "collab_interest_expressed", {"collab_id": collab_id})
         return {"status": "interested"}
     return {"status": "already_interested"}
@@ -205,9 +207,6 @@ async def withdraw_interest(
         raise HTTPException(status_code=404, detail="Collaboration not found")
 
     await _collabs_repo.withdraw_interest(collab_id, user.user_id)
-    # Update interested_ids on the collab record
-    ids = [uid for uid in collab.interested_ids if uid != user.user_id]
-    await _collabs_repo.update(collab_id, {"interested_ids": ids})
     return {"status": "withdrawn"}
 
 
@@ -222,7 +221,8 @@ async def update_status(
     if collab is None:
         raise HTTPException(status_code=404, detail="Collaboration not found")
     is_author = collab.author_id == user.user_id
-    is_interested = user.user_id in collab.interested_ids
+    user_interests = await _collabs_repo.get_user_interests(user.user_id, [collab_id])
+    is_interested = collab_id in user_interests
     if not is_author and not is_interested:
         raise HTTPException(status_code=403, detail="Only the author or interested collaborators can change status")
 
@@ -231,7 +231,7 @@ async def update_status(
         raise HTTPException(status_code=404, detail="Collaboration not found")
 
     d = updated.model_dump(mode="json")
-    d["user_has_interest"] = False
+    d["user_has_interest"] = is_interested
     return d
 
 

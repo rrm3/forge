@@ -62,6 +62,16 @@ class CollabRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_interested_user_ids(self, collab_id: str) -> list[str]:
+        """Return the list of user IDs who have expressed interest in a collab."""
+        pass
+
+    @abstractmethod
+    async def get_interest_counts(self, collab_ids: list[str]) -> dict[str, int]:
+        """Batch get interest counts for multiple collabs. Returns {collab_id: count}."""
+        pass
+
+    @abstractmethod
     async def list_comments(self, collab_id: str) -> list[CollabComment]:
         """List comments for a collaboration in chronological order."""
         pass
@@ -115,7 +125,7 @@ class DynamoDBCollabRepository(CollabRepository):
             needed_skills=list(item.get("needed_skills", [])),
             time_commitment=item.get("time_commitment", ""),
             status=item.get("status", "open"),
-            interested_ids=[],  # populated by API route from interests table
+            interested_count=0,  # populated by API layer from interests table
             comment_count=int(item.get("comment_count", 0)),
             business_value=item.get("business_value", ""),
             tags=list(item.get("tags", [])),
@@ -310,6 +320,46 @@ class DynamoDBCollabRepository(CollabRepository):
                 pass
         return interested
 
+    async def get_interested_user_ids(self, collab_id: str) -> list[str]:
+        """Query the interests table for all users interested in a collab."""
+        loop = asyncio.get_event_loop()
+        try:
+            response = await loop.run_in_executor(
+                None,
+                partial(
+                    self.interests_table.query,
+                    KeyConditionExpression="collab_id = :cid",
+                    ExpressionAttributeValues={":cid": collab_id},
+                    ProjectionExpression="user_id",
+                ),
+            )
+            return [item["user_id"] for item in response.get("Items", [])]
+        except ClientError:
+            return []
+
+    async def get_interest_counts(self, collab_ids: list[str]) -> dict[str, int]:
+        """Batch get interest counts by querying each collab's interests."""
+        if not collab_ids:
+            return {}
+
+        loop = asyncio.get_event_loop()
+        counts: dict[str, int] = {}
+        for collab_id in collab_ids:
+            try:
+                response = await loop.run_in_executor(
+                    None,
+                    partial(
+                        self.interests_table.query,
+                        KeyConditionExpression="collab_id = :cid",
+                        ExpressionAttributeValues={":cid": collab_id},
+                        Select="COUNT",
+                    ),
+                )
+                counts[collab_id] = response.get("Count", 0)
+            except ClientError:
+                counts[collab_id] = 0
+        return counts
+
     async def list_comments(self, collab_id: str) -> list[CollabComment]:
         """Query comments for a collab in chronological order."""
         loop = asyncio.get_event_loop()
@@ -478,6 +528,15 @@ class MemoryCollabRepository(CollabRepository):
 
     async def get_user_interests(self, user_id: str, collab_ids: list[str]) -> set[str]:
         return {cid for cid in collab_ids if (cid, user_id) in self._interests}
+
+    async def get_interested_user_ids(self, collab_id: str) -> list[str]:
+        return [uid for cid, uid in self._interests if cid == collab_id]
+
+    async def get_interest_counts(self, collab_ids: list[str]) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for cid in collab_ids:
+            counts[cid] = sum(1 for c, _ in self._interests if c == cid)
+        return counts
 
     async def list_comments(self, collab_id: str) -> list[CollabComment]:
         return list(self._comments.get(collab_id, []))
