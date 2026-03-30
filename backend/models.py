@@ -44,6 +44,7 @@ class Session(BaseModel):
     user_id: str
     title: str = ""
     type: str = "chat"  # chat, tip, stuck, brainstorm, wrapup, intake
+    program_week: int = 0  # Set for intake/wrapup sessions to identify which week
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
     message_count: int = 0

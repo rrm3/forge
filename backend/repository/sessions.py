@@ -71,6 +71,7 @@ class DynamoDBSessionRepository(SessionRepository):
             "updated_at": session.updated_at.isoformat(),
             "message_count": session.message_count,
             "summary": session.summary,
+            "program_week": session.program_week,
         }
 
     def _deserialize(self, item: dict) -> Session:
@@ -90,6 +91,7 @@ class DynamoDBSessionRepository(SessionRepository):
             updated_at=updated,
             message_count=int(item.get("message_count", 0)),
             summary=item.get("summary", ""),
+            program_week=int(item.get("program_week", 0)),
         )
 
     async def list(self, user_id: str) -> list[Session]:

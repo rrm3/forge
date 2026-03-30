@@ -294,7 +294,8 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
         title = wrapup_title(week)
     else:
         title = HARDCODED_TITLES.get(session_type, "")
-    session = Session(session_id=session_id, user_id=user_data["user_id"], title=title, type=session_type)
+    session = Session(session_id=session_id, user_id=user_data["user_id"], title=title, type=session_type,
+                      program_week=week or 0)
     await _deps.sessions_repo.create(session)
 
     sender = ApiGatewayManagementSender(connection_id, settings.websocket_api_endpoint, settings.aws_region)

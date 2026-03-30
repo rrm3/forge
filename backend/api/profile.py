@@ -115,7 +115,7 @@ async def reset_intake(user: AuthUser):
     Also used by the admin TopBar reset button.
     """
     profile = await _get_or_create_profile(user)
-    from backend.models import effective_program_week, intake_title
+    from backend.models import effective_program_week
     current_week = effective_program_week(profile)
     current_week_str = str(current_week)
 
@@ -129,10 +129,9 @@ async def reset_intake(user: AuthUser):
 
         # Delete only the current week's intake session
         if _sessions_repo:
-            expected_title = intake_title(current_week)
             sessions = await _sessions_repo.list(user.user_id)
             for s in sessions:
-                if s.type == "intake" and s.title == expected_title:
+                if s.type == "intake" and s.program_week == current_week:
                     if _storage:
                         key = f"sessions/{user.user_id}/{s.session_id}.json"
                         try:
@@ -249,12 +248,11 @@ async def reevaluate_intake(user: AuthUser):
     if not _sessions_repo or not _storage:
         raise HTTPException(status_code=500, detail="Dependencies not configured")
 
-    from backend.models import effective_program_week, intake_title
+    from backend.models import effective_program_week
     week = effective_program_week(profile)
-    expected_title = intake_title(week)
     sessions = await _sessions_repo.list(user.user_id)
-    # Find the current week's intake session by title, fall back to any intake
-    intake_session = next((s for s in sessions if s.type == "intake" and s.title == expected_title), None)
+    # Find the current week's intake session
+    intake_session = next((s for s in sessions if s.type == "intake" and s.program_week == week), None)
     if not intake_session:
         return {"completed": False, "newly_completed": 0}
 

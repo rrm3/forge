@@ -5,6 +5,7 @@ export interface Session {
   user_id: string;
   title: string;
   type: SessionType;
+  program_week: number;
   created_at: string;
   updated_at: string;
   message_count: number;

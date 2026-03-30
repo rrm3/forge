@@ -155,7 +155,8 @@ async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: d
         title = wrapup_title(week)
     else:
         title = INITIAL_TITLES.get(session_type, "")
-    session = Session(session_id=session_id, user_id=user.user_id, title=title, type=session_type)
+    session = Session(session_id=session_id, user_id=user.user_id, title=title, type=session_type,
+                      program_week=week or 0)
     await _deps.sessions_repo.create(session)
 
     await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
