@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 CONFIG_PREFIX = "config/departments/"
 ADMIN_ACCESS_KEY = "config/admin-access.json"
 COMPANY_CONFIG_KEY = "config/company.json"
+COMPANY_PROMPT_KEY = "config/company-prompt.json"
+COMPANY_OBJECTIVES_KEY = "config/company-objectives.json"
 
 
 class DepartmentConfigRepository:
@@ -55,19 +57,41 @@ class DepartmentConfigRepository:
         await self.storage.write(ADMIN_ACCESS_KEY, data, content_type="application/json")
 
     async def get_company_config(self) -> dict | None:
-        """Read the company-wide config (prompt shared across all sessions).
+        """Read the company-wide config (prompt + objectives merged).
 
-        Returns None if the company config does not exist.
+        Reads prompt and objectives from separate files. Falls back to the
+        legacy combined ``company.json`` if the split files don't exist yet.
         """
-        data = await self.storage.read(COMPANY_CONFIG_KEY)
-        if data is None:
-            return None
-        return json.loads(data.decode())
+        prompt_data = await self.storage.read(COMPANY_PROMPT_KEY)
+        objectives_data = await self.storage.read(COMPANY_OBJECTIVES_KEY)
+
+        if prompt_data is None and objectives_data is None:
+            # Fallback: read legacy combined file
+            data = await self.storage.read(COMPANY_CONFIG_KEY)
+            if data is None:
+                return None
+            return json.loads(data.decode())
+
+        prompt = json.loads(prompt_data.decode()).get("prompt", "") if prompt_data else ""
+        objectives = json.loads(objectives_data.decode()).get("objectives", []) if objectives_data else []
+        return {"prompt": prompt, "objectives": objectives}
+
+    async def save_company_prompt(self, prompt: str) -> None:
+        """Write the company-wide prompt (separate from objectives)."""
+        data = json.dumps({"prompt": prompt}, indent=2).encode()
+        await self.storage.write(COMPANY_PROMPT_KEY, data, content_type="application/json")
+
+    async def save_company_objectives(self, objectives: list) -> None:
+        """Write the company-wide objectives (separate from prompt)."""
+        data = json.dumps({"objectives": objectives}, indent=2).encode()
+        await self.storage.write(COMPANY_OBJECTIVES_KEY, data, content_type="application/json")
 
     async def save_company_config(self, config: dict) -> None:
-        """Write the company-wide config."""
-        data = json.dumps(config, indent=2).encode()
-        await self.storage.write(COMPANY_CONFIG_KEY, data, content_type="application/json")
+        """Write prompt and objectives to their separate files."""
+        if "prompt" in config:
+            await self.save_company_prompt(config["prompt"])
+        if "objectives" in config:
+            await self.save_company_objectives(config["objectives"])
 
     async def get_merged_objectives(self, department: str, program_week: int | None = None) -> list[dict]:
         """Return company-wide objectives + department-specific objectives merged.

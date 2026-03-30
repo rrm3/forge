@@ -1,4 +1,4 @@
-import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, CompanyConfig, Tip, TipComment, UserIdea, AdminUserSummary, AdminUserIntake } from './types';
+import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, CompanyConfig, Tip, TipComment, UserIdea, AdminUserSummary, AdminUserIntake, Collaboration, CollabComment } from './types';
 
 let getTokenFn: (() => Promise<string | null>) | null = null;
 let tokenGetterReady: (() => void) | null = null;
@@ -199,10 +199,18 @@ export async function getCompanyConfig(): Promise<CompanyConfig> {
   return res.json();
 }
 
-export async function saveCompanyConfig(config: Partial<CompanyConfig>): Promise<void> {
-  const res = await fetchWithAuth(`${API_BASE}/api/admin/company`, {
+export async function saveCompanyPrompt(prompt: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/company/prompt`, {
     method: 'PUT',
-    body: JSON.stringify(config),
+    body: JSON.stringify({ prompt }),
+  });
+  await checkResponse(res);
+}
+
+export async function saveCompanyObjectives(objectives: CompanyConfig['objectives']): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/company/objectives`, {
+    method: 'PUT',
+    body: JSON.stringify({ objectives }),
   });
   await checkResponse(res);
 }
@@ -393,5 +401,109 @@ export async function updateUserIdea(ideaId: string, fields: { title?: string; d
 
 export async function deleteUserIdea(ideaId: string): Promise<void> {
   const res = await fetchWithAuth(`${API_BASE}/api/user-ideas/${encodeURIComponent(ideaId)}`, { method: 'DELETE' });
+  await checkResponse(res);
+}
+
+// Collabs API
+
+export async function listCollabs(params?: {
+  status?: string;
+  department?: string;
+  limit?: number;
+}): Promise<Collaboration[]> {
+  const query = new URLSearchParams();
+  if (params?.status) query.set('status', params.status);
+  if (params?.department) query.set('department', params.department);
+  if (params?.limit) query.set('limit', params.limit.toString());
+  const qs = query.toString();
+  const res = await fetchWithAuth(`${API_BASE}/api/collabs${qs ? '?' + qs : ''}`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function createCollab(data: {
+  title: string;
+  problem: string;
+  needed_skills: string[];
+  time_commitment?: string;
+  tags?: string[];
+  department?: string;
+}): Promise<Collaboration> {
+  const res = await fetchWithAuth(`${API_BASE}/api/collabs`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function getCollab(collabId: string): Promise<Collaboration> {
+  const res = await fetchWithAuth(`${API_BASE}/api/collabs/${encodeURIComponent(collabId)}`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function updateCollab(collabId: string, fields: {
+  title?: string;
+  problem?: string;
+  needed_skills?: string[];
+  time_commitment?: string;
+  tags?: string[];
+}): Promise<Collaboration> {
+  const res = await fetchWithAuth(`${API_BASE}/api/collabs/${encodeURIComponent(collabId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(fields),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function deleteCollab(collabId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/collabs/${encodeURIComponent(collabId)}`, { method: 'DELETE' });
+  await checkResponse(res);
+}
+
+export async function expressInterest(collabId: string, message?: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/collabs/${encodeURIComponent(collabId)}/interest`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
+  await checkResponse(res);
+}
+
+export async function withdrawInterest(collabId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/collabs/${encodeURIComponent(collabId)}/interest`, { method: 'DELETE' });
+  await checkResponse(res);
+}
+
+export async function updateCollabStatus(collabId: string, status: string): Promise<Collaboration> {
+  const res = await fetchWithAuth(`${API_BASE}/api/collabs/${encodeURIComponent(collabId)}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function listCollabComments(collabId: string): Promise<CollabComment[]> {
+  const res = await fetchWithAuth(`${API_BASE}/api/collabs/${encodeURIComponent(collabId)}/comments`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function addCollabComment(collabId: string, content: string): Promise<CollabComment> {
+  const res = await fetchWithAuth(`${API_BASE}/api/collabs/${encodeURIComponent(collabId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function deleteCollabComment(collabId: string, commentId: string): Promise<void> {
+  const res = await fetchWithAuth(
+    `${API_BASE}/api/collabs/${encodeURIComponent(collabId)}/comments/${encodeURIComponent(commentId)}`,
+    { method: 'DELETE' },
+  );
   await checkResponse(res);
 }

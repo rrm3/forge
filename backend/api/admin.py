@@ -120,9 +120,25 @@ async def get_company_config(user: AuthUser):
     return config or {"prompt": "", "objectives": []}
 
 
+@router.put("/company/prompt")
+async def update_company_prompt(body: dict, user: AuthUser):
+    """Update company-wide prompt only. Cannot overwrite objectives."""
+    await _require_admin(user.email)
+    await _dept_config_repo.save_company_prompt(body.get("prompt", ""))
+    return {"status": "updated"}
+
+
+@router.put("/company/objectives")
+async def update_company_objectives(body: dict, user: AuthUser):
+    """Update company-wide objectives only. Cannot overwrite prompt."""
+    await _require_admin(user.email)
+    await _dept_config_repo.save_company_objectives(body.get("objectives", []))
+    return {"status": "updated"}
+
+
 @router.put("/company")
 async def update_company_config(config: dict, user: AuthUser):
-    """Update company-wide context config. Full admin only."""
+    """Update company-wide config. Saves prompt and objectives to separate files."""
     await _require_admin(user.email)
     await _dept_config_repo.save_company_config(config)
     return {"status": "updated"}
