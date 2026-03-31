@@ -26,15 +26,6 @@ function getSessionIcon(type: string) {
   return SESSION_ICONS[type] || MessageCircle;
 }
 
-function getWeekKey(dateStr: string): string {
-  const date = new Date(dateStr);
-  const daysElapsed = Math.floor(
-    (date.getTime() - PROGRAM_START_DATE.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  const week = Math.max(1, Math.floor(daysElapsed / 7) + 1);
-  return `Week ${week}`;
-}
-
 /** Get the Tuesday date for a given program week label like "Week 1". */
 function getTuesdayForWeek(weekLabel: string): string {
   const match = weekLabel.match(/^Week (\d+)$/);
@@ -57,7 +48,7 @@ function groupByWeek(sessions: Session[]): [string, Session[]][] {
     // Don't show incomplete intake sessions
     if (session.type === 'intake' && !session.title) continue;
 
-    const week = getWeekKey(session.updated_at);
+    const week = `Week ${session.program_week || 1}`;
     if (!groups.has(week)) groups.set(week, []);
     groups.get(week)!.push(session);
   }
