@@ -140,11 +140,22 @@ async def run_agent_session(
     department_config = None
     merged_objectives: list[dict] = []
     intake_responses = {}
+    dept_slug = None
     if profile and profile.department:
         dept_slug = profile.department.lower().replace(" ", "-")
         department_config = await dept_config_repo.get_department_config(dept_slug)
-        if session_type == "intake" and not intake_is_complete:
+    if session_type == "intake" and not intake_is_complete:
+        if dept_slug:
             merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug, program_week=current_week)
+        else:
+            # No department — still load company-wide objectives so Week 2+
+            # users get the correct objective-driven intake (digest, check-in
+            # questions, plan-for-today) instead of falling back to legacy.
+            all_co = (company_config or {}).get("objectives", [])
+            merged_objectives = [
+                o for o in all_co
+                if current_week is None or o.get("week_introduced", 1) <= current_week
+            ]
     # Load intake responses only for incomplete intake sessions
     if session_type == "intake" and not intake_is_complete:
         intake_responses = await load_intake_responses(deps.storage, user_id)

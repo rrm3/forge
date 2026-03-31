@@ -362,11 +362,15 @@ async def get_user_intake(user_id: str, user: AuthUser):
     intake_responses = await load_intake_responses(_storage, user_id) if _storage else {}
 
     # Resolve objective UUIDs to human-readable labels using merged objectives
-    if intake_responses and profile.department:
+    if intake_responses:
         from backend.repository.department_config import DepartmentConfigRepository
         dept_repo = DepartmentConfigRepository(_storage)
-        dept_slug = profile.department.lower().replace(" ", "-")
-        merged = await dept_repo.get_merged_objectives(dept_slug)
+        if profile.department:
+            dept_slug = profile.department.lower().replace(" ", "-")
+            merged = await dept_repo.get_merged_objectives(dept_slug)
+        else:
+            company_config = await dept_repo.get_company_config()
+            merged = (company_config or {}).get("objectives", [])
         if merged:
             label_map = {o["id"]: o["label"] for o in merged}
             intake_responses = {

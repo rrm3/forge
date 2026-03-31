@@ -159,10 +159,15 @@ async def reset_intake(user: AuthUser):
             plan_key = f"plan-day{current_week}"
             keys_to_remove = {plan_key}
             # Also remove objectives introduced in the current week
+            dept_repo = DepartmentConfigRepository(_storage)
+            company_config = await dept_repo.get_company_config()
+            for obj in (company_config or {}).get("objectives", []):
+                if obj.get("week_introduced", 1) == current_week:
+                    keys_to_remove.add(obj["id"])
             if profile.department:
-                dept_repo = DepartmentConfigRepository(_storage)
-                company_config = await dept_repo.get_company_config()
-                for obj in (company_config or {}).get("objectives", []):
+                dept_slug = profile.department.lower().replace(" ", "-")
+                dept_config = await dept_repo.get_department_config(dept_slug)
+                for obj in (dept_config or {}).get("objectives", []):
                     if obj.get("week_introduced", 1) == current_week:
                         keys_to_remove.add(obj["id"])
             removed = {k for k in keys_to_remove if k in responses}
@@ -274,13 +279,18 @@ async def reevaluate_intake(user: AuthUser):
 
     # Load merged objectives (company + department)
     from backend.repository.department_config import DepartmentConfigRepository
+    from backend.models import effective_program_week
     dept_config_repo = DepartmentConfigRepository(_storage)
+    week = effective_program_week(profile)
     merged_objectives: list[dict] = []
     if profile.department:
         dept_slug = profile.department.lower().replace(" ", "-")
-        from backend.models import effective_program_week
-        week = effective_program_week(profile)
         merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug, program_week=week)
+    else:
+        # No department — still load company-wide objectives
+        company_config = await dept_config_repo.get_company_config()
+        all_co = (company_config or {}).get("objectives", [])
+        merged_objectives = [o for o in all_co if o.get("week_introduced", 1) <= week]
 
     if not merged_objectives:
         return {"completed": False, "newly_completed": 0}
