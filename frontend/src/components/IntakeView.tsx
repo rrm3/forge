@@ -369,6 +369,8 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
                 <IdeaPreviewCard
                   initial={state.ideaReady}
                   sessionId={state.activeSessionId || ''}
+                  onSaved={() => dispatch({ type: 'SET_IDEA_READY', idea: null })}
+                  onSkip={() => dispatch({ type: 'SET_IDEA_READY', idea: null })}
                 />
               )}
 
