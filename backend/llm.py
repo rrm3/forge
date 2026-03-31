@@ -189,14 +189,19 @@ def _parse_response(response) -> LLMResponse:
     # Parse tool calls
     tool_calls = None
     if message.tool_calls:
-        tool_calls = [
-            ToolCall(
-                id=tc.id,
-                name=tc.function.name,
-                arguments=json.loads(tc.function.arguments),
-            )
-            for tc in message.tool_calls
-        ]
+        tool_calls = []
+        for tc in message.tool_calls:
+            raw_args = tc.function.arguments
+            if isinstance(raw_args, dict):
+                arguments = raw_args
+            elif isinstance(raw_args, str):
+                try:
+                    arguments = json.loads(raw_args)
+                except json.JSONDecodeError:
+                    arguments = {}
+            else:
+                arguments = {}
+            tool_calls.append(ToolCall(id=tc.id, name=tc.function.name, arguments=arguments))
 
     # Extract text content (may be str or list of blocks)
     text_content: str | None = None

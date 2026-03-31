@@ -251,10 +251,10 @@ def _parse_stream_response(
                 try:
                     arguments = json.loads(raw_args)
                 except json.JSONDecodeError:
-                    logger.warning("Tool '%s': failed to parse arguments: %s", tc.function.name, raw_args)
+                    logger.warning("Tool '%s': failed to parse arguments (len=%d)", tc.function.name, len(raw_args))
                     arguments = {}
             else:
-                logger.warning("Tool '%s': unexpected arguments type %s: %s", tc.function.name, type(raw_args), raw_args)
+                logger.warning("Tool '%s': unexpected arguments type %s", tc.function.name, type(raw_args).__name__)
                 arguments = {}
             tool_calls.append(
                 ToolCall(id=tc.id, name=tc.function.name, arguments=arguments)
