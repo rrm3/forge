@@ -31,9 +31,9 @@ function getTuesdayForWeek(weekLabel: string): string {
   const match = weekLabel.match(/^Week (\d+)$/);
   if (!match) return '';
   const weekNum = parseInt(match[1], 10);
-  // PROGRAM_START_DATE is a Monday (2026-03-24). Tuesday is +1 day, then +7 per week after.
+  // PROGRAM_START_DATE is a Tuesday (2026-03-24). Offset by +7 per additional week.
   const tuesday = new Date(PROGRAM_START_DATE);
-  tuesday.setDate(tuesday.getDate() + 1 + (weekNum - 1) * 7);
+  tuesday.setDate(tuesday.getDate() + (weekNum - 1) * 7);
   return tuesday.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 }
 
