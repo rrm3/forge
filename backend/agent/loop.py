@@ -287,16 +287,23 @@ def _parse_stream_response(
 
 
 def _format_tool_schemas(schemas: list[dict]) -> list[dict]:
-    """Wrap tool schemas in OpenAI function-calling format if not already wrapped."""
+    """Wrap tool schemas in OpenAI function-calling format if not already wrapped.
+
+    Schemas use Anthropic's ``input_schema`` key internally; litellm's OpenAI
+    translation layer expects ``parameters``, so we rename during formatting.
+    """
     formatted = []
     for schema in schemas:
         if schema.get("type") == "function":
             formatted.append(schema)
         else:
+            func = dict(schema)
+            if "input_schema" in func and "parameters" not in func:
+                func["parameters"] = func.pop("input_schema")
             formatted.append(
                 {
                     "type": "function",
-                    "function": schema,
+                    "function": func,
                 }
             )
     return formatted
