@@ -28,7 +28,13 @@ _BASE_DELAY = 1.0  # seconds
 
 
 def is_retryable_error(exc: Exception) -> bool:
-    return isinstance(exc, RETRYABLE_ERRORS)
+    if isinstance(exc, RETRYABLE_ERRORS):
+        return True
+    # Bedrock internalServerException is transient but litellm wraps it as
+    # BadRequestError.  Retry it rather than surfacing an opaque failure.
+    if isinstance(exc, litellm.BadRequestError) and "internalServerException" in str(exc):
+        return True
+    return False
 
 
 def classify_llm_error(exc: Exception) -> str:
@@ -40,6 +46,8 @@ def classify_llm_error(exc: Exception) -> str:
     if isinstance(exc, litellm.NotFoundError):
         return "Model not found or not available with your credentials."
     if isinstance(exc, litellm.BadRequestError):
+        if "internalServerException" in str(exc):
+            return "The AI service is temporarily unavailable. Please try again in a moment."
         detail = str(exc)[:200]
         if detail:
             return f"Provider rejected the request: {detail}"
@@ -144,7 +152,11 @@ async def call_llm(
             logger.info("LLM completed in %.1fs", elapsed)
             return _parse_response(response)
 
-        except RETRYABLE_ERRORS as exc:
+        except Exception as exc:
+            if not is_retryable_error(exc):
+                msg = classify_llm_error(exc)
+                logger.error("Non-retryable LLM error: %s — %s", exc, msg)
+                raise
             last_exc = exc
             delay = _get_retry_after(exc) or (_BASE_DELAY * (2**attempt))
             if attempt < _MAX_RETRIES - 1:
@@ -158,11 +170,6 @@ async def call_llm(
                 await asyncio.sleep(delay)
             else:
                 logger.error("LLM call failed after %d attempts: %s", _MAX_RETRIES, exc)
-
-        except Exception as exc:
-            msg = classify_llm_error(exc)
-            logger.error("Non-retryable LLM error: %s — %s", exc, msg)
-            raise
 
     raise last_exc  # type: ignore[misc]
 
