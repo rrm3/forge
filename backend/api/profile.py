@@ -162,13 +162,13 @@ async def reset_intake(user: AuthUser):
             dept_repo = DepartmentConfigRepository(_storage)
             company_config = await dept_repo.get_company_config()
             for obj in (company_config or {}).get("objectives", []):
-                if obj.get("week_introduced", 1) == current_week:
+                if obj.get("week_introduced", 1) == current_week and "id" in obj:
                     keys_to_remove.add(obj["id"])
             if profile.department:
                 dept_slug = profile.department.lower().replace(" ", "-")
                 dept_config = await dept_repo.get_department_config(dept_slug)
                 for obj in (dept_config or {}).get("objectives", []):
-                    if obj.get("week_introduced", 1) == current_week:
+                    if obj.get("week_introduced", 1) == current_week and "id" in obj:
                         keys_to_remove.add(obj["id"])
             removed = {k for k in keys_to_remove if k in responses}
             if removed:
@@ -321,7 +321,7 @@ async def reevaluate_intake(user: AuthUser):
     # Never mark intake as complete here - that's the executor's job via
     # _check_intake_completion, which runs after the AI responds. The reevaluate
     # endpoint only backfills objective detection for the progress UI.
-    objective_ids = {obj["id"] for obj in merged_objectives}
+    objective_ids = {obj["id"] for obj in merged_objectives if "id" in obj}
     completed_ids = set(intake_responses.keys())
     all_complete = objective_ids.issubset(completed_ids)
 
