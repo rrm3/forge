@@ -30,6 +30,28 @@ def get_program_week(as_of: date | None = None, timezone: str | None = None) -> 
     return min(week, PROGRAM_WEEKS)
 
 
+PLAN_OBJECTIVE_DESCRIPTION = (
+    "The user must state what they plan to work on in today's AI Tuesday session. "
+    "A vague acknowledgment of last week is not enough. You need a concrete answer to: "
+    "what are you going to do today? This could be continuing a project, trying a new tool, "
+    "brainstorming an idea, or exploring something specific. "
+    "If the plan sounds too ambitious for a single session (e.g. building a full integration, "
+    "shipping a product), gently help them scope it to something achievable today: "
+    "'That's a great goal - what's the first concrete step you could make progress on today?' "
+    "A good plan is a 2-4 hour chunk: research a specific question, prototype one piece, "
+    "map out requirements, or test an approach. NOT complete until the user has stated a plan."
+)
+
+
+def make_plan_objective(week: int) -> dict:
+    """Build the synthetic plan-for-today objective injected for Week 2+."""
+    return {
+        "id": f"plan-day{week}",
+        "label": f"Plan for Day {week}",
+        "description": PLAN_OBJECTIVE_DESCRIPTION,
+    }
+
+
 def effective_program_week(profile: "UserProfile", timezone: str | None = None) -> int:
     """Return the program week for a user, respecting per-user override for testing.
 

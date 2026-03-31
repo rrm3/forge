@@ -285,6 +285,11 @@ async def reevaluate_intake(user: AuthUser):
     if not merged_objectives:
         return {"completed": False, "newly_completed": 0}
 
+    # Inject the synthetic plan-dayN objective for Week 2+, matching executor.py
+    if week > 1:
+        from backend.models import make_plan_objective
+        merged_objectives = list(merged_objectives) + [make_plan_objective(week)]
+
     # Convert transcript to LLM messages
     from backend.agent.executor import _transcript_to_llm_messages
     llm_messages = _transcript_to_llm_messages(transcript)

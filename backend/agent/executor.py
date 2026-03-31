@@ -29,7 +29,7 @@ from backend.api.transport import MessageSender
 from backend.config import settings
 from backend.deps import AgentDeps
 from backend.llm import call_llm
-from backend.models import Message, UserIdea, effective_program_week, get_program_week
+from backend.models import Message, UserIdea, effective_program_week, get_program_week, make_plan_objective
 from backend.repository.department_config import DepartmentConfigRepository
 from backend.storage import load_intake_responses, load_memory, load_transcript, save_intake_responses, save_transcript
 from backend.tools.registry import ToolContext
@@ -152,17 +152,7 @@ async def run_agent_session(
     # For Week 2+, inject a synthetic "plan for today" objective.
     if merged_objectives and current_week > 1:
         plan_key = f"plan-day{current_week}"
-        merged_objectives = list(merged_objectives) + [{
-            "id": plan_key,
-            "label": f"Plan for Day {current_week}",
-            "description": (
-                "The user must state what they plan to work on in today's AI Tuesday session. "
-                "A vague acknowledgment of last week is not enough. You need a concrete answer to: "
-                "what are you going to do today? This could be continuing a project, trying a new tool, "
-                "brainstorming an idea, or exploring something specific. NOT complete until the user "
-                "has given a specific plan."
-            ),
-        }]
+        merged_objectives = list(merged_objectives) + [make_plan_objective(current_week)]
 
     # Build a merged config dict for context/evaluation (company + dept objectives)
     merged_config = dict(department_config or {})
@@ -218,7 +208,20 @@ async def run_agent_session(
             extraction_messages = _transcript_to_llm_messages(transcript)
             extraction_messages.append({"role": "user", "content": user_message.strip()})
 
-            newly_completed = await evaluate_objectives(extraction_messages, merged_objectives, intake_responses)
+            # Don't evaluate plan-dayN until it's the last remaining objective.
+            # This prevents ambient conversation from implicitly completing the
+            # plan before the AI explicitly asks about it. Once the AI asks
+            # (because it's the only item left), the evaluator runs with a low
+            # bar so users can't get stuck.
+            eval_objectives = merged_objectives
+            if current_week > 1:
+                completed = set(intake_responses.keys())
+                if plan_key not in completed and any(
+                    o["id"] not in completed for o in merged_objectives if o["id"] != plan_key
+                ):
+                    eval_objectives = [o for o in merged_objectives if o["id"] != plan_key]
+
+            newly_completed = await evaluate_objectives(extraction_messages, eval_objectives, intake_responses)
 
             if newly_completed:
                 intake_responses.update(newly_completed)

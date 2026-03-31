@@ -68,6 +68,11 @@ class ToolRegistry:
                     logger.debug("Tool '%s': dropped unknown args %s", tool_name, dropped)
 
             return await handler(**filtered_args, context=context)
+        except TypeError as exc:
+            # Missing required args - return a clean message to the LLM
+            # so it can retry, instead of a raw Python traceback
+            logger.warning("Tool '%s' called with bad arguments: %s", tool_name, exc)
+            return f"Error: {exc}. Please provide all required arguments."
         except Exception:
             logger.exception("Tool '%s' raised an exception", tool_name)
             raise
