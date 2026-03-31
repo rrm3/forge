@@ -86,6 +86,7 @@ class Session(BaseModel):
     title: str = ""
     type: str = "chat"  # chat, tip, stuck, brainstorm, wrapup, intake, collab
     program_week: int = 0  # Set for intake/wrapup sessions to identify which week
+    idea_id: str = ""  # Linked idea for idea-focused chats
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
     message_count: int = 0

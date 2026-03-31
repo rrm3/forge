@@ -178,7 +178,7 @@ async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: d
     else:
         title = INITIAL_TITLES.get(session_type, "")
     session = Session(session_id=session_id, user_id=user.user_id, title=title, type=session_type,
-                      program_week=week or 0)
+                      program_week=week or 0, idea_id=idea_id or "")
     await _deps.sessions_repo.create(session)
 
     await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
@@ -209,7 +209,12 @@ async def _handle_chat(sender: MessageSender, user: CurrentUser, msg: dict):
         await sender.send({"type": "error", "session_id": session_id, "message": "Session not found or access denied"})
         return
 
-    await _run_agent(sender, user, session_id, message, is_new_session=False, session_type=getattr(session, "type", "chat"))
+    # Re-fetch linked idea so the system prompt includes idea context on every turn
+    idea = None
+    if session.idea_id and _deps.user_ideas_repo:
+        idea = await _deps.user_ideas_repo.get(user.user_id, session.idea_id)
+
+    await _run_agent(sender, user, session_id, message, is_new_session=False, session_type=getattr(session, "type", "chat"), idea=idea)
 
 
 def _handle_cancel(msg: dict):
