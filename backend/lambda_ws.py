@@ -253,6 +253,11 @@ async def _worker_chat(connection_id: str, user_data: dict, msg: dict):
 
     sender = ApiGatewayManagementSender(connection_id, settings.websocket_api_endpoint, settings.aws_region)
 
+    # Re-fetch linked idea so the system prompt includes idea context on every turn
+    idea = None
+    if session.idea_id and _deps.user_ideas_repo:
+        idea = await _deps.user_ideas_repo.get(user_data["user_id"], session.idea_id)
+
     def cancel_check():
         return _connections_repo.is_cancelled(session_id) if _connections_repo else False
 
@@ -267,6 +272,7 @@ async def _worker_chat(connection_id: str, user_data: dict, msg: dict):
         is_new_session=False,
         session_type=getattr(session, "type", "chat"),
         cancel_check=cancel_check,
+        idea=idea,
     )
 
 
@@ -324,6 +330,7 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
             return
 
     session_id = str(uuid.uuid4())
+    idea_id = msg.get("idea_id")
     HARDCODED_TITLES = {"stuck": "Get Help", "tip": "New Tip", "collab": "New Collab"}
     if session_type == "intake":
         title = intake_title(week)
@@ -332,10 +339,17 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
     else:
         title = HARDCODED_TITLES.get(session_type, "")
     session = Session(session_id=session_id, user_id=user_data["user_id"], title=title, type=session_type,
-                      program_week=week or 0)
+                      program_week=week or 0, idea_id=idea_id or "")
     await _deps.sessions_repo.create(session)
 
     await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
+
+    # If starting a chat linked to an idea, look it up and link the session
+    idea = None
+    if idea_id and _deps.user_ideas_repo:
+        idea = await _deps.user_ideas_repo.get(user_data["user_id"], idea_id)
+        if idea:
+            await _deps.user_ideas_repo.link_session(user_data["user_id"], idea_id, session_id)
 
     if mode == "text":
         def cancel_check():
@@ -352,6 +366,7 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
             is_new_session=True,
             session_type=session_type,
             cancel_check=cancel_check,
+            idea=idea,
         )
 
 
