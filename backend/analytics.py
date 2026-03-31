@@ -76,7 +76,7 @@ def capture_exception(
     props: dict[str, Any] = {
         "$exception_type": type(exc).__name__,
         "$exception_message": str(exc),
-        "$exception_stack_trace_raw": traceback.format_exception(exc),
+        "$exception_stack_trace_raw": "".join(traceback.format_exception(exc)),
     }
     if properties:
         props.update(properties)
