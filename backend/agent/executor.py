@@ -208,17 +208,19 @@ async def run_agent_session(
             extraction_messages = _transcript_to_llm_messages(transcript)
             extraction_messages.append({"role": "user", "content": user_message.strip()})
 
-            # Don't evaluate plan-dayN until it's the last remaining objective.
+            # Don't evaluate plan-dayN until most other objectives are done.
             # This prevents ambient conversation from implicitly completing the
-            # plan before the AI explicitly asks about it. Once the AI asks
-            # (because it's the only item left), the evaluator runs with a low
-            # bar so users can't get stuck.
+            # plan before the AI explicitly asks about it. But only exclude
+            # when 2+ other objectives remain — if just 1 is stuck, include
+            # plan-dayN so the intake can't deadlock.
             eval_objectives = merged_objectives
             if current_week > 1:
                 completed = set(intake_responses.keys())
-                if plan_key not in completed and any(
-                    o["id"] not in completed for o in merged_objectives if o["id"] != plan_key
-                ):
+                remaining_non_plan = sum(
+                    1 for o in merged_objectives
+                    if o["id"] != plan_key and o["id"] not in completed
+                )
+                if plan_key not in completed and remaining_non_plan >= 2:
                     eval_objectives = [o for o in merged_objectives if o["id"] != plan_key]
 
             newly_completed = await evaluate_objectives(extraction_messages, eval_objectives, intake_responses)

@@ -307,28 +307,18 @@ async def reevaluate_intake(user: AuthUser):
             len(newly_completed), user.user_id,
         )
 
-    # Update progress counts on profile for dashboard
+    # Update progress counts on profile for dashboard.
+    # Never mark intake as complete here - that's the executor's job via
+    # _check_intake_completion, which runs after the AI responds. The reevaluate
+    # endpoint only backfills objective detection for the progress UI.
     objective_ids = {obj["id"] for obj in merged_objectives}
     completed_ids = set(intake_responses.keys())
     all_complete = objective_ids.issubset(completed_ids)
 
-    progress_update: dict = {
+    await _profiles_repo.update(user.user_id, {
         "intake_objectives_done": len(completed_ids & objective_ids),
         "intake_objectives_total": len(objective_ids),
-    }
-    if all_complete:
-        from backend.models import effective_program_week
-        week_str = str(effective_program_week(profile))
-        now_iso = datetime.now(UTC).isoformat()
-        current_weeks = dict(profile.intake_weeks or {}) if profile else {}
-        current_weeks[week_str] = now_iso
-        progress_update["intake_completed_at"] = now_iso
-        progress_update["onboarding_complete"] = True
-        progress_update["intake_skipped"] = False
-        progress_update["intake_weeks"] = current_weeks
-        logger.info("Reevaluation marked intake complete for user=%s", user.user_id)
-
-    await _profiles_repo.update(user.user_id, progress_update)
+    })
 
     return {"completed": all_complete, "newly_completed": len(newly_completed)}
 

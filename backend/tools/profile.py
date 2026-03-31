@@ -20,32 +20,27 @@ READ_PROFILE_SCHEMA = {
 
 UPDATE_PROFILE_SCHEMA = {
     "name": "update_profile",
-    "description": "Update the user's profile with new information captured during conversation",
+    "description": "Update the user's profile with new information captured during conversation. Pass the fields you want to update directly as arguments.",
     "input_schema": {
         "type": "object",
         "properties": {
-            "fields": {
-                "type": "object",
-                "description": "Profile fields to update",
-                "properties": {
-                    "title": {"type": "string"},
-                    "department": {"type": "string"},
-                    "team": {"type": "string"},
-                    "ai_experience_level": {"type": "string"},
-                    "interests": {"type": "array", "items": {"type": "string"}},
-                    "tools_used": {"type": "array", "items": {"type": "string"}},
-                    "goals": {"type": "array", "items": {"type": "string"}},
-                    "products": {"type": "array", "items": {"type": "string"}},
-                    "daily_tasks": {"type": "string"},
-                    "work_summary": {"type": "string", "description": "User's own description of their day-to-day work"},
-                    "core_skills": {"type": "array", "items": {"type": "string"}},
-                    "learning_goals": {"type": "array", "items": {"type": "string"}},
-                    "ai_tools_used": {"type": "array", "items": {"type": "string"}},
-                    "ai_superpower": {"type": "string"},
-                },
-            },
+            "title": {"type": "string", "description": "Job title"},
+            "department": {"type": "string", "description": "Department name"},
+            "team": {"type": "string", "description": "Team name"},
+            "ai_experience_level": {"type": "string", "description": "Self-reported AI experience"},
+            "interests": {"type": "array", "items": {"type": "string"}, "description": "Topics of interest"},
+            "tools_used": {"type": "array", "items": {"type": "string"}, "description": "Tools used regularly"},
+            "goals": {"type": "array", "items": {"type": "string"}, "description": "Goals for the 12-week program"},
+            "products": {"type": "array", "items": {"type": "string"}, "description": "Products they work on"},
+            "daily_tasks": {"type": "string", "description": "What they do day-to-day"},
+            "work_summary": {"type": "string", "description": "User's own description of their day-to-day work"},
+            "core_skills": {"type": "array", "items": {"type": "string"}, "description": "Their core skills and strengths"},
+            "learning_goals": {"type": "array", "items": {"type": "string"}, "description": "What they want to learn"},
+            "ai_tools_used": {"type": "array", "items": {"type": "string"}, "description": "AI tools they've personally used"},
+            "ai_superpower": {"type": "string", "description": "What AI superpower they'd want"},
+            "intake_summary": {"type": "string", "description": "Narrative summary of what was learned during intake"},
+            "ai_proficiency": {"type": "object", "description": "AI proficiency assessment: {level: 1-5, rationale: '...'}"},
         },
-        "required": ["fields"],
     },
 }
 
@@ -120,6 +115,7 @@ async def update_profile(context: ToolContext, fields: dict | None = None, **kwa
         "title", "department", "team", "ai_experience_level", "interests",
         "tools_used", "goals", "products", "daily_tasks", "work_summary",
         "core_skills", "learning_goals", "ai_tools_used", "ai_superpower",
+        "intake_summary", "ai_proficiency",
     }
     filtered = {k: v for k, v in fields.items() if k in allowed}
     if not filtered:

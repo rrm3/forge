@@ -146,14 +146,20 @@ async def extract_profile_data(
 
 
 def _format_conversation(messages: list[dict]) -> str:
-    """Format only USER messages for extraction. We exclude assistant messages
-    to prevent the extractor from attributing AI statements to the user."""
+    """Format conversation for objective evaluation.
+
+    Includes both user and assistant messages so the evaluator can see
+    which question each user response answers. The evaluation prompt
+    instructs the model to only attribute content from USER messages.
+    """
     lines = []
     for msg in messages:
         role = msg.get("role", "unknown")
         content = msg.get("content", "")
         if role == "user":
             lines.append(f"USER: {content}")
+        elif role == "assistant":
+            lines.append(f"ASSISTANT: {content}")
     return "\n\n".join(lines)
 
 
@@ -230,9 +236,16 @@ REMAINING_OBJECTIVES_PLACEHOLDER
 Already completed (do not re-evaluate):
 COMPLETED_OBJECTIVES_PLACEHOLDER
 
-Based on what the USER said in the conversation below, determine which remaining objectives the user has addressed. An objective is covered when the user has shared something relevant to that topic. Brief or partial answers count - a single sentence or even a few words is enough if it tells you something about this person. The bar is low: if you learned anything about the topic from what the user said, mark it covered.
+Based on what the USER said in the conversation below, determine which remaining objectives the user has addressed. An objective is covered when the user has responded to a question about that topic. This includes:
+- Sharing specific information ("I use Claude daily")
+- Brief or partial answers ("not really" or "a bit")
+- Negative answers ("no", "none", "nothing") — these ARE valid responses that cover the objective
+
+The bar is low: if the AI asked about the topic and the user responded (even with "no"), mark it covered.
 
 IMPORTANT: Only evaluate based on USER messages, not the AI's questions or statements. If the AI said "you're a VP of Engineering" but the user never confirmed or discussed it, that doesn't count.
+
+IMPORTANT: When a user gives a short response like "no", "yes", or "not really", match it to the specific question the AI asked immediately before that response. Do NOT match it to a different objective. For example, if the AI asked about blockers and the user said "no", that covers the blockers objective — not sharing or collaboration.
 
 Return a JSON object where keys are objective IDs and values are a brief summary (1-2 sentences) of what the user said that covers it. Only include objectives that ARE covered. If none are newly covered, return {}.
 

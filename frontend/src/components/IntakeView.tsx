@@ -503,7 +503,7 @@ interface CompletionCardProps {
 
 // Weekly feature nudges - each week highlights a different app feature
 const WEEKLY_NUDGES: Record<number, { Icon: typeof Lightbulb; text: string }> = {
-  2: { Icon: Sparkles, text: 'Two new ways to connect with colleagues: share Tips & Tricks from what you\'ve learned, or post a Collab to find partners for cross-team projects. Both are in the sidebar.\n\nNEW: Create a Collab idea to find others in the organization interested in working on a project with you, a great way to find people from different functions to tackle cross-functional problems.' },
+  2: { Icon: Sparkles, text: 'Don\'t forget to check out Tips & Tricks on the home screen to see what others in the program are learning.\n\nNEW: Collabs lets you post project ideas and find partners across departments. If you\'re looking for colleagues with complementary skills or shared interests to tackle a problem together, post it there.' },
   3: { Icon: Compass, text: 'Have a problem you keep running into? Try "I\'m stuck" to brainstorm AI solutions with your companion.' },
   4: { Icon: Sunrise, text: 'End your AI Tuesday with a quick wrap-up to reflect on what you learned and plan your next steps.' },
   5: { Icon: Star, text: 'Ready to go deeper? Use "Brainstorm" to explore a bigger AI opportunity for your team.' },
@@ -586,9 +586,11 @@ function CompletionCard({ week, onContinue }: CompletionCardProps) {
           strokeWidth={1.5}
           style={{ color: 'var(--color-primary)' }}
         />
-        <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-          {nudge.text}
-        </p>
+        <div className="text-sm space-y-2" style={{ color: 'var(--color-text-secondary)' }}>
+          {nudge.text.split('\n\n').map((para, i) => (
+            <p key={i}>{para}</p>
+          ))}
+        </div>
       </div>
 
       <div>
