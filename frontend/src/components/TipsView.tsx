@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ThumbsUp, Plus, Info, X, Lightbulb, MessageCircle } from 'lucide-react';
+import { ThumbsUp, Plus, Lightbulb, MessageCircle } from 'lucide-react';
 import { listTips, voteTip, unvoteTip } from '../api/client';
 import type { Tip, TipCategory } from '../api/types';
 import { CreateGemSkillForm } from './CreateGemSkillForm';
@@ -94,7 +94,7 @@ export function TipsView() {
   const [sortBy, setSortBy] = useState<'recent' | 'popular'>('recent');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [showCreateForm, setShowCreateForm] = useState<'gem' | 'skill' | null>(null);
-  const [skillBannerDismissed, setSkillBannerDismissed] = useState(false);
+
 
   const fetchTips = useCallback(async () => {
     setLoading(true);
@@ -274,26 +274,6 @@ export function TipsView() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-6">
-        {/* Claude Skills availability notice */}
-        {categoryFilter === 'skill' && !skillBannerDismissed && (
-          <div
-            className="flex items-start gap-3 max-w-2xl mx-auto mb-4 px-4 py-3 rounded-lg border"
-            style={{ backgroundColor: 'var(--color-primary-subtle)', borderColor: 'var(--color-primary)' }}
-          >
-            <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--color-primary)' }} strokeWidth={1.5} />
-            <p className="text-sm flex-1" style={{ color: 'var(--color-text-primary)' }}>
-              Claude is not yet available to all users, but is coming soon!
-            </p>
-            <button
-              onClick={() => setSkillBannerDismissed(true)}
-              className="flex-shrink-0 p-0.5 rounded transition-colors"
-              style={{ color: 'var(--color-text-muted)' }}
-            >
-              <X className="w-3.5 h-3.5" strokeWidth={2} />
-            </button>
-          </div>
-        )}
-
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <div

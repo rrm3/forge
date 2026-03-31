@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { ArrowLeft, X, Check, Info } from 'lucide-react';
+import { ArrowLeft, X, Check } from 'lucide-react';
 import { createTip, checkSimilarTips, addTipComment } from '../api/client';
 import type { SimilarMatch } from '../api/types';
 import { ProfileChip } from './ProfileChip';
@@ -277,19 +277,6 @@ export function CreateGemSkillForm({ category, onBack, onPublished }: CreateGemS
             {category === 'gem' ? <GeminiIcon size={22} /> : <ClaudeIcon size={22} />}
             {meta.title}
           </h1>
-
-          {/* Claude Skills availability notice */}
-          {category === 'skill' && (
-            <div
-              className="flex items-start gap-3 mb-5 px-4 py-3 rounded-lg border"
-              style={{ backgroundColor: 'var(--color-primary-subtle)', borderColor: 'var(--color-primary)' }}
-            >
-              <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--color-primary)' }} strokeWidth={1.5} />
-              <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                Claude is not yet available to all users, but is coming soon!
-              </p>
-            </div>
-          )}
 
           <div className="space-y-5">
             {/* Title */}
