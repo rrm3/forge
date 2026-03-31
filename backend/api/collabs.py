@@ -100,17 +100,14 @@ async def list_collabs(
     """List collaborations, optionally filtered by status and/or department.
     Archived collabs are always excluded."""
     collabs = await _collabs_repo.list(status=status, department=department, limit=limit)
-    collabs = [c for c in collabs if c.status != "archived"]
     collab_ids = [c.collab_id for c in collabs]
 
     user_interests = await _collabs_repo.get_user_interests(user.user_id, collab_ids)
-    interest_counts = await _collabs_repo.get_interest_counts(collab_ids)
 
     result = []
     for c in collabs:
         d = c.model_dump(mode="json")
         d["user_has_interest"] = c.collab_id in user_interests
-        d["interested_count"] = interest_counts.get(c.collab_id, 0)
         result.append(d)
     return result
 
@@ -212,6 +209,13 @@ async def withdraw_interest(
     return {"status": "withdrawn"}
 
 
+VALID_TRANSITIONS: dict[str, set[str]] = {
+    "open": {"building"},
+    "building": {"done", "open"},
+    "done": {"building"},
+}
+
+
 @router.put("/{collab_id}/status")
 async def update_status(
     collab_id: str,
@@ -227,6 +231,13 @@ async def update_status(
     is_interested = collab_id in user_interests
     if not is_author and not is_interested:
         raise HTTPException(status_code=403, detail="Only the author or interested collaborators can change status")
+
+    allowed = VALID_TRANSITIONS.get(collab.status, set())
+    if body.status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot transition from '{collab.status}' to '{body.status}'",
+        )
 
     updated = await _collabs_repo.update(collab_id, {"status": body.status})
     if updated is None:

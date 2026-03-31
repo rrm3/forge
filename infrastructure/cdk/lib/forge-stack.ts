@@ -139,6 +139,7 @@ export class ForgeStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       partitionKey: { name: 'collab_id', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'user_id', type: dynamodb.AttributeType.STRING },
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
@@ -147,6 +148,7 @@ export class ForgeStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       partitionKey: { name: 'collab_id', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'comment_id', type: dynamodb.AttributeType.STRING },
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 

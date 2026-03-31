@@ -314,12 +314,6 @@ async def run_agent_session(
             exclude={"prepare_tip", "prepare_collab"},
         )
 
-    # Log the full system prompt for intake debugging
-    if session_type == "intake":
-        print(f"=== INTAKE SYSTEM PROMPT (user={user_id}, turn={len(transcript)}) ===", flush=True)
-        print(system_prompt, flush=True)
-        print("=== END SYSTEM PROMPT ===", flush=True)
-
     try:
         async for event in react_loop(
             user_message=llm_prompt,

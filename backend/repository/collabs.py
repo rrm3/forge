@@ -106,6 +106,7 @@ class DynamoDBCollabRepository(CollabRepository):
             "needed_skills": collab.needed_skills,
             "time_commitment": collab.time_commitment,
             "status": collab.status,
+            "interested_count": collab.interested_count,
             "comment_count": collab.comment_count,
             "tags": collab.tags,
             "created_at": collab.created_at.isoformat(),
@@ -125,7 +126,7 @@ class DynamoDBCollabRepository(CollabRepository):
             needed_skills=list(item.get("needed_skills", [])),
             time_commitment=item.get("time_commitment", ""),
             status=item.get("status", "open"),
-            interested_count=0,  # populated by API layer from interests table
+            interested_count=int(item.get("interested_count", 0)),
             comment_count=int(item.get("comment_count", 0)),
             business_value=item.get("business_value", ""),
             tags=list(item.get("tags", [])),
@@ -171,6 +172,9 @@ class DynamoDBCollabRepository(CollabRepository):
 
         if status:
             collabs = [c for c in collabs if c.status == status]
+        else:
+            # Exclude archived by default unless explicitly requested
+            collabs = [c for c in collabs if c.status != "archived"]
 
         if department:
             dept_lower = department.lower()
@@ -260,7 +264,7 @@ class DynamoDBCollabRepository(CollabRepository):
             logger.error("Failed to archive collab %s", collab_id, exc_info=True)
 
     async def express_interest(self, collab_id: str, user_id: str, message: str = "") -> bool:
-        """Put interest with condition to prevent duplicates."""
+        """Put interest with condition to prevent duplicates. Atomically increments interested_count."""
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(
@@ -280,10 +284,23 @@ class DynamoDBCollabRepository(CollabRepository):
             if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
                 return False
             raise
+        # Atomic increment interested_count on the collab
+        try:
+            await loop.run_in_executor(
+                None,
+                partial(
+                    self.collabs_table.update_item,
+                    Key={"collab_id": collab_id},
+                    UpdateExpression="ADD interested_count :one",
+                    ExpressionAttributeValues={":one": 1},
+                ),
+            )
+        except ClientError:
+            logger.warning("Failed to increment interested_count for %s", collab_id, exc_info=True)
         return True
 
     async def withdraw_interest(self, collab_id: str, user_id: str) -> bool:
-        """Delete interest record."""
+        """Delete interest record. Atomically decrements interested_count."""
         loop = asyncio.get_event_loop()
         try:
             response = await loop.run_in_executor(
@@ -294,30 +311,56 @@ class DynamoDBCollabRepository(CollabRepository):
                     ReturnValues="ALL_OLD",
                 ),
             )
-            return bool(response.get("Attributes"))
+            if not response.get("Attributes"):
+                return False
         except ClientError:
             return False
+        # Atomic decrement interested_count, but never below zero
+        try:
+            await loop.run_in_executor(
+                None,
+                partial(
+                    self.collabs_table.update_item,
+                    Key={"collab_id": collab_id},
+                    UpdateExpression="ADD interested_count :neg_one",
+                    ConditionExpression="interested_count > :zero",
+                    ExpressionAttributeValues={":neg_one": -1, ":zero": 0},
+                ),
+            )
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                logger.warning("Failed to decrement interested_count for %s", collab_id, exc_info=True)
+        return True
 
     async def get_user_interests(self, user_id: str, collab_ids: list[str]) -> set[str]:
-        """Batch check which collabs the user has expressed interest in."""
+        """Batch check which collabs the user has expressed interest in using BatchGetItem."""
         if not collab_ids:
             return set()
 
         loop = asyncio.get_event_loop()
         interested = set()
-        for collab_id in collab_ids:
+        table_name = self.interests_table.table_name
+        # BatchGetItem supports up to 100 keys per call
+        for i in range(0, len(collab_ids), 100):
+            batch = collab_ids[i:i + 100]
+            keys = [{"collab_id": cid, "user_id": user_id} for cid in batch]
             try:
                 response = await loop.run_in_executor(
                     None,
                     partial(
-                        self.interests_table.get_item,
-                        Key={"collab_id": collab_id, "user_id": user_id},
+                        self.dynamodb.meta.client.batch_get_item,
+                        RequestItems={
+                            table_name: {
+                                "Keys": keys,
+                                "ProjectionExpression": "collab_id",
+                            }
+                        },
                     ),
                 )
-                if response.get("Item"):
-                    interested.add(collab_id)
+                for item in response.get("Responses", {}).get(table_name, []):
+                    interested.add(item["collab_id"])
             except ClientError:
-                pass
+                logger.warning("BatchGetItem failed for interests", exc_info=True)
         return interested
 
     async def get_interested_user_ids(self, collab_id: str) -> list[str]:
@@ -472,6 +515,8 @@ class MemoryCollabRepository(CollabRepository):
         collabs = list(self._collabs.values())
         if status:
             collabs = [c for c in collabs if c.status == status]
+        else:
+            collabs = [c for c in collabs if c.status != "archived"]
         if department:
             dept_lower = department.lower()
             collabs = [c for c in collabs if c.department.lower() == dept_lower or c.department.lower() in ("everyone", "all", "")]
@@ -514,6 +559,9 @@ class MemoryCollabRepository(CollabRepository):
             return False
         self._interests.add(key)
         self._interest_messages[key] = message
+        collab = self._collabs.get(collab_id)
+        if collab:
+            self._collabs[collab_id] = collab.model_copy(update={"interested_count": collab.interested_count + 1})
         self._save()
         return True
 
@@ -523,6 +571,9 @@ class MemoryCollabRepository(CollabRepository):
             return False
         self._interests.discard(key)
         self._interest_messages.pop(key, None)
+        collab = self._collabs.get(collab_id)
+        if collab:
+            self._collabs[collab_id] = collab.model_copy(update={"interested_count": max(0, collab.interested_count - 1)})
         self._save()
         return True
 
