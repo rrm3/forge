@@ -36,15 +36,32 @@ class ToolRegistry:
         """Return all tool schemas in Anthropic tool_use format."""
         return list(self._schemas)
 
+    def _get_schema(self, tool_name: str) -> dict | None:
+        for s in self._schemas:
+            if s["name"] == tool_name:
+                return s
+        return None
+
     async def execute(self, tool_name: str, arguments: dict, context: ToolContext) -> str:
         """Execute a tool by name with the given arguments and context.
 
         Strips unknown kwargs that the LLM might hallucinate, preventing
-        'unexpected keyword argument' errors.
+        'unexpected keyword argument' errors.  Also validates required args
+        from the schema before calling the handler.
         """
         handler = self._handlers.get(tool_name)
         if handler is None:
             return f"Unknown tool: {tool_name}"
+
+        # Validate required arguments from schema before calling handler
+        schema = self._get_schema(tool_name)
+        if schema:
+            required = schema.get("input_schema", {}).get("required", [])
+            missing = [r for r in required if r not in arguments]
+            if missing:
+                logger.warning("Tool '%s': missing required args %s", tool_name, missing)
+                return f"Error: missing required argument(s): {', '.join(missing)}. Please provide all required arguments."
+
         try:
             # Filter arguments to only those the handler accepts
             sig = inspect.signature(handler)
