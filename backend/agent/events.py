@@ -33,6 +33,7 @@ class DoneEvent:
 @dataclass
 class ErrorEvent:
     error: str
+    exception: Exception | None = None
 
 
 LoopEvent = TextEvent | ToolCallEvent | ToolResultEvent | DoneEvent | ErrorEvent

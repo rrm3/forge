@@ -87,7 +87,7 @@ async def react_loop(
         except Exception as exc:
             msg = classify_llm_error(exc)
             logger.error("LLM call failed: %s - %s", exc, msg)
-            yield ErrorEvent(error=msg)
+            yield ErrorEvent(error=msg, exception=exc)
             return
 
         # Separate text from previous iteration with a paragraph break

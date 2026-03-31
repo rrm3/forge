@@ -24,7 +24,7 @@ from backend.agent.events import (
 )
 from backend.agent.loop import react_loop
 from backend.agent.skills import load_skill
-from backend.analytics import identify as posthog_identify, track as posthog_track
+from backend.analytics import capture_exception as posthog_exception, identify as posthog_identify, track as posthog_track
 from backend.api.transport import MessageSender
 from backend.config import settings
 from backend.deps import AgentDeps
@@ -422,6 +422,11 @@ async def run_agent_session(
                     "session_type": session_type,
                     "error": event.error,
                 })
+                if event.exception:
+                    posthog_exception(event.exception, distinct_id=user_id, properties={
+                        "session_id": session_id,
+                        "session_type": session_type,
+                    })
     finally:
         if cancel_task:
             cancel_task.cancel()

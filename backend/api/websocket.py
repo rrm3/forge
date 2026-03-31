@@ -251,9 +251,11 @@ async def _run_agent(sender: MessageSender, user: CurrentUser, session_id: str, 
                 cancel_check=lambda: cancel_event.is_set(),
                 idea=idea,
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("Agent loop error: session=%s", session_id)
             await sender.send({"type": "error", "session_id": session_id, "message": "Internal error processing message."})
+            from backend.analytics import capture_exception as posthog_exception
+            posthog_exception(exc, distinct_id=user.user_id, properties={"session_id": session_id})
         finally:
             _cancel_events.pop(session_id, None)
             _session_locks.pop(session_id, None)

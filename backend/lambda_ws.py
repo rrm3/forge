@@ -221,6 +221,8 @@ def _handle_worker(event) -> dict:
             "session_id": session_id,
             "message": "Internal error processing message.",
         })
+        from backend.analytics import capture_exception as posthog_exception
+        posthog_exception(e, distinct_id=user_data.get("user_id"), properties={"session_id": session_id, "action": action})
     finally:
         # Clear processing mutex for chat/start_session
         if action in ("chat", "start_session") and session_id and _connections_repo:
