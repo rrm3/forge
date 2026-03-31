@@ -372,7 +372,7 @@ async def get_user_intake(user_id: str, user: AuthUser):
             company_config = await dept_repo.get_company_config()
             merged = (company_config or {}).get("objectives", [])
         if merged:
-            label_map = {o["id"]: o["label"] for o in merged}
+            label_map = {o["id"]: o.get("label", o["id"]) for o in merged if "id" in o}
             intake_responses = {
                 label_map.get(k, k): v
                 for k, v in intake_responses.items()

@@ -242,7 +242,7 @@ class DynamoDBProfileRepository(ProfileRepository):
                 try:
                     profiles.append(self._deserialize(item))
                 except Exception:
-                    logger.warning("Skipping malformed profile: user_id=%s", item.get("user_id", "?"))
+                    logger.warning("Skipping malformed profile: user_id=%s", item.get("user_id", "?"), exc_info=True)
             last_key = response.get("LastEvaluatedKey")
             if not last_key:
                 break
