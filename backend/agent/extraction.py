@@ -21,10 +21,10 @@ from backend.models import UserProfile
 logger = logging.getLogger(__name__)
 
 # Fast, cheap model for profile field extraction
-EXTRACTION_MODEL = "bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0"
+EXTRACTION_MODEL = "bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 # More capable model for nuanced judgment (objective evaluation)
-EVALUATION_MODEL = "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0"
+EVALUATION_MODEL = "bedrock/global.anthropic.claude-sonnet-4-6"
 
 # Fields we extract and their descriptions (for the extraction prompt)
 EXTRACTABLE_FIELDS = {

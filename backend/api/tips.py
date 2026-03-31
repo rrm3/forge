@@ -25,8 +25,8 @@ router = APIRouter(prefix="/tips", tags=["tips"])
 
 _tips_repo = None
 
-HAIKU_MODEL = "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
-SONNET_MODEL = "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0"
+HAIKU_MODEL = "bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
+SONNET_MODEL = "bedrock/global.anthropic.claude-sonnet-4-6"
 LANCE_SCOPE = "tips"
 LANCE_COLLECTION = "tips"
 

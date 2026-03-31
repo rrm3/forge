@@ -269,7 +269,7 @@ export class ForgeStack extends cdk.Stack {
         `arn:aws:bedrock:*::foundation-model/anthropic.claude-*`,
         `arn:aws:bedrock:*::foundation-model/cohere.embed-*`,
         `arn:aws:bedrock:*::foundation-model/cohere.rerank-*`,
-        `arn:aws:bedrock:*:${this.account}:inference-profile/us.anthropic.*`,
+        `arn:aws:bedrock:*:${this.account}:inference-profile/global.anthropic.*`,
       ],
     }));
 
@@ -312,7 +312,7 @@ export class ForgeStack extends cdk.Stack {
         S3_BUCKET: dataBucket.bucketName,
         LANCE_BACKEND: 's3',
         LANCE_S3_BUCKET: dataBucket.bucketName,
-        LLM_MODEL: 'bedrock/us.anthropic.claude-opus-4-6-v1',
+        LLM_MODEL: 'bedrock/global.anthropic.claude-opus-4-6-v1',
         ORGCHART_S3_KEY: 'orgchart/org-chart.db',
         CONNECTIONS_TABLE: connectionsTable.tableName,
         POSTHOG_API_KEY: posthogApiKey,
@@ -391,7 +391,7 @@ export class ForgeStack extends cdk.Stack {
       resources: [
         `arn:aws:bedrock:*::foundation-model/anthropic.claude-*`,
         `arn:aws:bedrock:*::foundation-model/cohere.embed-*`,
-        `arn:aws:bedrock:*:${this.account}:inference-profile/us.anthropic.*`,
+        `arn:aws:bedrock:*:${this.account}:inference-profile/global.anthropic.*`,
       ],
     }));
     wsLambdaRole.addToPolicy(new iam.PolicyStatement({
@@ -422,7 +422,7 @@ export class ForgeStack extends cdk.Stack {
         S3_BUCKET: dataBucket.bucketName,
         LANCE_BACKEND: 's3',
         LANCE_S3_BUCKET: dataBucket.bucketName,
-        LLM_MODEL: 'bedrock/us.anthropic.claude-opus-4-6-v1',
+        LLM_MODEL: 'bedrock/global.anthropic.claude-opus-4-6-v1',
         ORGCHART_S3_KEY: 'orgchart/org-chart.db',
         CONNECTIONS_TABLE: connectionsTable.tableName,
         LAMBDA_FUNCTION_NAME: `${prefix}-ws:live`, // self-invoke targets alias for warm instances
