@@ -2,10 +2,13 @@
 
 import asyncio
 import json
+import logging
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 import boto3
 from botocore.exceptions import ClientError
@@ -114,6 +117,13 @@ class DynamoDBProfileRepository(ProfileRepository):
                 return []
             return [str(v) if isinstance(v, str) else json.dumps(v) if isinstance(v, dict) else str(v) for v in val]
 
+        # Handle missing timestamps gracefully (partial records from upserts)
+        fallback_ts = datetime(2026, 1, 1, tzinfo=UTC)
+        created_raw = item.get("created_at")
+        updated_raw = item.get("updated_at")
+        created_at = datetime.fromisoformat(created_raw) if created_raw else fallback_ts
+        updated_at = datetime.fromisoformat(updated_raw) if updated_raw else fallback_ts
+
         return UserProfile(
             user_id=item["user_id"],
             email=item.get("email", ""),
@@ -149,8 +159,8 @@ class DynamoDBProfileRepository(ProfileRepository):
             program_week_override=int(item.get("program_week_override", 0)),
             timezone=item.get("timezone", ""),
             is_department_admin=bool(item.get("is_department_admin", False)),
-            created_at=datetime.fromisoformat(item["created_at"]),
-            updated_at=datetime.fromisoformat(item["updated_at"]),
+            created_at=created_at,
+            updated_at=updated_at,
         )
 
     async def get(self, user_id: str) -> UserProfile | None:
@@ -229,7 +239,10 @@ class DynamoDBProfileRepository(ProfileRepository):
                 None, partial(self.table.scan, **kwargs)
             )
             for item in response.get("Items", []):
-                profiles.append(self._deserialize(item))
+                try:
+                    profiles.append(self._deserialize(item))
+                except Exception:
+                    logger.warning("Skipping malformed profile: user_id=%s", item.get("user_id", "?"))
             last_key = response.get("LastEvaluatedKey")
             if not last_key:
                 break
