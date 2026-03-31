@@ -222,78 +222,89 @@ export class ForgeStack extends cdk.Stack {
       iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
     );
 
-    // DynamoDB access
-    lambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'DynamoDBAccess',
-      actions: [
-        'dynamodb:GetItem',
-        'dynamodb:PutItem',
-        'dynamodb:UpdateItem',
-        'dynamodb:DeleteItem',
-        'dynamodb:Query',
-        'dynamodb:Scan',
-        'dynamodb:BatchGetItem',
-        'dynamodb:BatchWriteItem',
+    // Shared managed policy for permissions common to both Lambda roles.
+    // Using a managed policy (not inline) prevents CloudFormation from
+    // detaching/reattaching permissions during stack updates, which caused
+    // a 15-minute Bedrock permissions gap on every deploy.
+    const sharedLambdaPolicy = new iam.ManagedPolicy(this, 'SharedLambdaPolicy', {
+      managedPolicyName: `${prefix}-shared-lambda`,
+      statements: [
+        new iam.PolicyStatement({
+          sid: 'DynamoDBAccess',
+          actions: [
+            'dynamodb:GetItem',
+            'dynamodb:PutItem',
+            'dynamodb:UpdateItem',
+            'dynamodb:DeleteItem',
+            'dynamodb:Query',
+            'dynamodb:Scan',
+            'dynamodb:BatchGetItem',
+            'dynamodb:BatchWriteItem',
+          ],
+          resources: [
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/forge-*`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/forge-*/index/*`,
+          ],
+        }),
+        new iam.PolicyStatement({
+          sid: 'S3Access',
+          actions: [
+            's3:GetObject',
+            's3:PutObject',
+            's3:DeleteObject',
+            's3:ListBucket',
+            's3:GetObjectVersion',
+            's3:DeleteObjectVersion',
+          ],
+          resources: [
+            dataBucket.bucketArn,
+            `${dataBucket.bucketArn}/*`,
+          ],
+        }),
+        new iam.PolicyStatement({
+          sid: 'BedrockAccess',
+          actions: [
+            'bedrock:InvokeModel',
+            'bedrock:InvokeModelWithResponseStream',
+          ],
+          resources: [
+            `arn:aws:bedrock:*::foundation-model/anthropic.claude-*`,
+            `arn:aws:bedrock:*::foundation-model/cohere.embed-*`,
+            `arn:aws:bedrock:*::foundation-model/cohere.rerank-*`,
+            `arn:aws:bedrock:*:${this.account}:inference-profile/global.anthropic.*`,
+            `arn:aws:bedrock:*:${this.account}:inference-profile/us.anthropic.*`,
+          ],
+        }),
+        new iam.PolicyStatement({
+          sid: 'SSMAccess',
+          actions: [
+            'ssm:GetParameter',
+            'ssm:GetParameters',
+          ],
+          resources: [
+            `arn:aws:ssm:${this.region}:${this.account}:parameter/forge/*`,
+          ],
+        }),
       ],
-      resources: [
-        `arn:aws:dynamodb:${this.region}:${this.account}:table/forge-*`,
-        `arn:aws:dynamodb:${this.region}:${this.account}:table/forge-*/index/*`,
-      ],
-    }));
+    });
 
-    // S3 access
-    lambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'S3Access',
-      actions: [
-        's3:GetObject',
-        's3:PutObject',
-        's3:DeleteObject',
-        's3:ListBucket',
-        's3:GetObjectVersion',
-        's3:DeleteObjectVersion',
-      ],
-      resources: [
-        dataBucket.bucketArn,
-        `${dataBucket.bucketArn}/*`,
-      ],
-    }));
+    lambdaRole.addManagedPolicy(sharedLambdaPolicy);
 
-    // Bedrock access
-    lambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'BedrockAccess',
-      actions: [
-        'bedrock:InvokeModel',
-        'bedrock:InvokeModelWithResponseStream',
+    // Backend-only: Marketplace permissions for Bedrock model subscriptions
+    const backendExtraPolicy = new iam.ManagedPolicy(this, 'BackendExtraPolicy', {
+      managedPolicyName: `${prefix}-backend-extra`,
+      statements: [
+        new iam.PolicyStatement({
+          sid: 'MarketplaceAccess',
+          actions: [
+            'aws-marketplace:ViewSubscriptions',
+            'aws-marketplace:Subscribe',
+          ],
+          resources: ['*'],
+        }),
       ],
-      resources: [
-        `arn:aws:bedrock:*::foundation-model/anthropic.claude-*`,
-        `arn:aws:bedrock:*::foundation-model/cohere.embed-*`,
-        `arn:aws:bedrock:*::foundation-model/cohere.rerank-*`,
-        `arn:aws:bedrock:*:${this.account}:inference-profile/global.anthropic.*`,
-      ],
-    }));
-
-    // Marketplace permissions required for Bedrock model subscriptions
-    lambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'MarketplaceAccess',
-      actions: [
-        'aws-marketplace:ViewSubscriptions',
-        'aws-marketplace:Subscribe',
-      ],
-      resources: ['*'],
-    }));
-
-    // SSM Parameter Store access (for OpenAI API key)
-    lambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'SSMAccess',
-      actions: [
-        'ssm:GetParameter',
-        'ssm:GetParameters',
-      ],
-      resources: [
-        `arn:aws:ssm:${this.region}:${this.account}:parameter/forge/*`,
-      ],
-    }));
+    });
+    lambdaRole.addManagedPolicy(backendExtraPolicy);
 
     // ---------------------------------------------------------------
     // Lambda Function (container image from ECR)
@@ -367,43 +378,29 @@ export class ForgeStack extends cdk.Stack {
       ],
     });
 
-    // WS Lambda needs the same permissions as the backend
-    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'DynamoDBAccess',
-      actions: [
-        'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem',
-        'dynamodb:DeleteItem', 'dynamodb:Query', 'dynamodb:Scan',
-        'dynamodb:BatchGetItem', 'dynamodb:BatchWriteItem',
+    // Shared permissions (DynamoDB, S3, Bedrock, SSM) via managed policy
+    wsLambdaRole.addManagedPolicy(sharedLambdaPolicy);
+
+    // WS-only permissions via separate managed policy
+    const wsExtraPolicy = new iam.ManagedPolicy(this, 'WsExtraPolicy', {
+      managedPolicyName: `${prefix}-ws-extra`,
+      statements: [
+        new iam.PolicyStatement({
+          sid: 'WebSocketManagementApi',
+          actions: ['execute-api:ManageConnections'],
+          resources: [`arn:aws:execute-api:${this.region}:${this.account}:*/*`],
+        }),
+        new iam.PolicyStatement({
+          sid: 'SelfInvoke',
+          actions: ['lambda:InvokeFunction'],
+          resources: [
+            `arn:aws:lambda:${this.region}:${this.account}:function:${prefix}-ws`,
+            `arn:aws:lambda:${this.region}:${this.account}:function:${prefix}-ws:*`,
+          ],
+        }),
       ],
-      resources: [
-        `arn:aws:dynamodb:${this.region}:${this.account}:table/forge-*`,
-        `arn:aws:dynamodb:${this.region}:${this.account}:table/forge-*/index/*`,
-      ],
-    }));
-    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'S3Access',
-      actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
-      resources: [dataBucket.bucketArn, `${dataBucket.bucketArn}/*`],
-    }));
-    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'BedrockAccess',
-      actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-      resources: [
-        `arn:aws:bedrock:*::foundation-model/anthropic.claude-*`,
-        `arn:aws:bedrock:*::foundation-model/cohere.embed-*`,
-        `arn:aws:bedrock:*:${this.account}:inference-profile/global.anthropic.*`,
-      ],
-    }));
-    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'SSMAccess',
-      actions: ['ssm:GetParameter', 'ssm:GetParameters'],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/forge/*`],
-    }));
-    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'WebSocketManagementApi',
-      actions: ['execute-api:ManageConnections'],
-      resources: [`arn:aws:execute-api:${this.region}:${this.account}:*/*`],
-    }));
+    });
+    wsLambdaRole.addManagedPolicy(wsExtraPolicy);
 
     const wsFunction = new lambda.DockerImageFunction(this, 'WsFunction', {
       functionName: `${prefix}-ws`,
@@ -447,15 +444,7 @@ export class ForgeStack extends cdk.Stack {
       wsAlias.node.addDependency(wsFunction.currentVersion);
     }
 
-    // Grant WS Lambda permission to invoke itself (Dispatcher -> Worker)
-    wsLambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'SelfInvoke',
-      actions: ['lambda:InvokeFunction'],
-      resources: [
-        `arn:aws:lambda:${this.region}:${this.account}:function:${prefix}-ws`,
-        `arn:aws:lambda:${this.region}:${this.account}:function:${prefix}-ws:*`,
-      ],
-    }));
+    // SelfInvoke is part of wsExtraPolicy (managed policy above)
 
     // ---------------------------------------------------------------
     // API Gateway WebSocket API

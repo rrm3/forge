@@ -36,9 +36,31 @@ jobs:
           DEV_MODE: "true"
         run: uv run python -m pytest tests/ -q
 
+  check-infra-changes:
+    name: Check for CDK changes
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.check.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect infrastructure changes
+        id: check
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -qE '^infrastructure/cdk/'; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "CDK changes detected - will run cdk deploy"
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No CDK changes - skipping cdk deploy"
+          fi
+
   deploy-infra:
     name: Deploy Infrastructure (CDK)
-    # needs: test  # temporarily disabled - GH Actions runner hanging
+    needs: [check-infra-changes]
+    if: needs.check-infra-changes.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
@@ -65,7 +87,8 @@ jobs:
 
   deploy-backend:
     name: Deploy Backend
-    needs: [deploy-infra]  # test temporarily disabled
+    needs: [check-infra-changes, deploy-infra]
+    if: ${{ !cancelled() && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     outputs:
@@ -306,7 +329,8 @@ jobs:
 
   deploy-frontend:
     name: Deploy Frontend
-    needs: [deploy-infra]  # test temporarily disabled
+    needs: [check-infra-changes, deploy-infra]
+    if: ${{ !cancelled() && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:

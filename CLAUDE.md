@@ -31,6 +31,12 @@ provisioned concurrency, or environment variables.
 * NEVER manually call `update-function-configuration` on production Lambdas - use CDK
 * Lambda env vars come from `app.ts` `ENV_CONFIG`, NOT from CDK context - add new env vars there
 
+## PostHog Analytics
+* Use `DS_READONLY_POSTHOG_API_KEY` env var for read-only PostHog API access (Digital Science account)
+* PostHog host: `https://us.i.posthog.com`
+* Production project API key (write): `phc_Qn6PGsXODJxvYCMV8Vv099fYpf9oAi1OPctdvgwb828`
+* Staging project API key (write): `phc_7wUFuz56pMvIhqnSalLqHakMDY2PKeT4KIM1NZHFQpB`
+
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.
 All font choices, colors, spacing, and aesthetic direction are defined there.
