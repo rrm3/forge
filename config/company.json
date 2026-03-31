@@ -53,21 +53,23 @@
     {
       "id": "c0-blockers",
       "label": "What's blocking them from using AI more",
-      "description": "Is there something they wanted to try with AI but couldn't? Could be access issues (don't have the right tool), knowledge gaps (didn't know how to prompt it), or organizational friction (policies, approvals, data sensitivity). Specific blockers are more useful than vague ones.",
+      "description": "Is there something they wanted to try with AI but couldn't? Access issues, knowledge gaps, or organizational friction. Specific blockers are more useful than vague ones.",
       "extraction_key": "",
       "week_introduced": 2
     },
     {
       "id": "c0-sharing",
       "label": "Whether they shared what they learned with others",
-      "description": "Did they show or tell anyone about what they learned or tried? A colleague, their team, in a meeting? 'No' is a perfectly fine answer. After collecting their answer, always mention that this app has a Tips & Tricks feature where they can share what they've learned with everyone in the program - it's a great way to help others who might be working on similar things. If they seem interested or already have something concrete to share, offer to help them draft one right now using the prepare_tip tool. Keep it light - mention, don't push.",
+      "description": "Did they show or tell anyone about what they learned or tried?",
+      "post_turn": "Mention that this app has a Tips & Tricks feature on the home screen where they can share what they've learned with everyone in the program.",
       "extraction_key": "",
       "week_introduced": 2
     },
     {
       "id": "c0-collabs",
       "label": "Whether they want to collaborate with others",
-      "description": "Are there any projects or problems where they'd like to work with others in the program? Maybe they need a skill they don't have, or they've spotted an opportunity that crosses teams. 'No' is a perfectly fine answer. If they say yes, just capture what they're interested in. A follow-up objective will appear to help them create the collab post.",
+      "description": "Are there any projects or problems where they'd like to work with others in the program?",
+      "post_turn": "Mention that we just launched a new feature called Collabs on the home screen where they can post project ideas and find collaborators across the company. Do NOT offer to draft or create one for them.",
       "extraction_key": "",
       "week_introduced": 2
     }

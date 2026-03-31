@@ -258,16 +258,20 @@ def _build_intake_progress(
     responses = intake_responses or {}
     done = []
     remaining = []
+    post_turn_instructions = []
 
     for obj in objectives:
         obj_id = obj.get("id", "")
         label = obj.get("label", "")
         description = obj.get("description", "")
+        post_turn = obj.get("post_turn", "")
 
         if obj_id in responses:
             value = responses[obj_id].get("value", "")
             summary = _truncate(value, 120)
             done.append(f"  [x] {label}: {summary}")
+            if post_turn:
+                post_turn_instructions.append(post_turn)
         else:
             remaining.append((label, description))
 
@@ -276,22 +280,35 @@ def _build_intake_progress(
     if not remaining:
         # All objectives complete
         lines.append("")
+        if post_turn_instructions:
+            lines.append("**INCLUDE in your next response:**")
+            for instruction in post_turn_instructions:
+                lines.append(f"  - {instruction}")
+            lines.append("")
         lines.append("═══════════════════════════════════════════════════")
         lines.append("ALL OBJECTIVES COMPLETE. THE INTAKE IS DONE.")
         lines.append("═══════════════════════════════════════════════════")
         lines.append("")
         lines.append("MANDATORY RULES FOR THIS MESSAGE (VIOLATION = BROKEN USER EXPERIENCE):")
-        lines.append("1. Do NOT ask ANY questions. Not one. No question marks. The user CANNOT reply.")
-        lines.append("2. Do NOT end with a question. Do NOT say 'what do you think?' or 'how does that sound?'")
+        lines.append("1. Do NOT ask ANY questions. Not one. No question marks anywhere in your response. The user CANNOT reply after this message.")
+        lines.append("2. Do NOT end with a question. Do NOT say 'what do you think?', 'how does that sound?', 'what do you want to focus on?'")
         lines.append("3. Do NOT invite further discussion. The conversation is OVER after this message.")
-        lines.append("4. DO confirm their plan back to them: 'Your plan for today: [X].'")
-        lines.append("5. DO offer one practical suggestion or tip related to their plan.")
-        lines.append("6. DO end with a brief, warm, forward-looking statement. No questions.")
+        lines.append("4. If the user stated a plan, confirm it back. If not, skip this - do NOT ask for one.")
+        lines.append("5. Offer one practical suggestion related to what they discussed today.")
+        lines.append("6. End with a brief, warm, forward-looking statement. No questions. No question marks.")
         return "\n".join(lines)
 
     if done:
         lines.append("**Completed:**")
         lines.extend(done)
+
+    if post_turn_instructions:
+        lines.append("")
+        lines.append("**INCLUDE in your next response:**")
+        for instruction in post_turn_instructions:
+            lines.append(f"  - {instruction}")
+        import logging as _log
+        _log.getLogger(__name__).info("Post-turn instructions injected: %s", post_turn_instructions)
 
     if len(remaining) <= 2:
         # Almost done

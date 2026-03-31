@@ -71,3 +71,17 @@ class ToolRegistry:
         except Exception:
             logger.exception("Tool '%s' raised an exception", tool_name)
             raise
+
+
+class FilteredToolRegistry:
+    """Wraps a ToolRegistry, hiding specific tools from the schema list."""
+
+    def __init__(self, registry: ToolRegistry, exclude: set[str]) -> None:
+        self._registry = registry
+        self._exclude = exclude
+
+    def get_schemas(self) -> list[dict]:
+        return [s for s in self._registry.get_schemas() if s["name"] not in self._exclude]
+
+    async def execute(self, tool_name: str, arguments: dict, context: ToolContext) -> str:
+        return await self._registry.execute(tool_name, arguments, context)

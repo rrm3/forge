@@ -149,52 +149,20 @@ async def run_agent_session(
     if session_type == "intake" and not intake_is_complete:
         intake_responses = await load_intake_responses(deps.storage, user_id)
 
-    # For Week 2+, inject synthetic objectives for sub-flows and plan-for-today.
+    # For Week 2+, inject a synthetic "plan for today" objective.
     if merged_objectives and current_week > 1:
-        merged_objectives = list(merged_objectives)
-
-        # --- Collab sub-flow ---
-        # When user expressed interest in collaborating, inject a sub-objective
-        # to gather details and create the collab post. This keeps the companion
-        # focused on the collab before moving to "Plan for Day."
-        _collab_pending = False
-        collab_resp = intake_responses.get("c0-collabs", {})
-        collab_val = (collab_resp.get("value", "") if isinstance(collab_resp, dict) else str(collab_resp)).lower()
-        collab_interested = bool(collab_resp) and not any(
-            neg in collab_val for neg in ["said no", "not interested", "declined", "no,", "does not want", "didn't want", "no interest"]
-        )
-        if collab_interested and "c0-collabs-create" not in intake_responses:
-            _collab_pending = True
-            merged_objectives.append({
-                "id": "c0-collabs-create",
-                "label": "Create the collab post",
-                "description": (
-                    "The user wants to collaborate on something. Your job is to gather enough detail "
-                    "to draft a good collab post, then call prepare_collab. Ask ONE question at a time:\n"
-                    "1. What's the problem they want to solve? Get 3-5 sentences of context.\n"
-                    "2. What skills does a collaborator need? e.g., 'Python', 'Salesforce', 'data analysis'.\n"
-                    "3. How much time would it take? e.g., 'A few hours', 'Half a day'.\n"
-                    "Once you have all three, call prepare_collab with: title (short name), problem "
-                    "(the full description), needed_skills (array of strings), time_commitment.\n"
-                    "If the user changes their mind or says they'd rather do it later, that's fine - "
-                    "mark this complete and move on. Don't push."
-                ),
-            })
-
-        # --- Plan for today (only after sub-flows resolve) ---
         plan_key = f"plan-day{current_week}"
-        if not _collab_pending:
-            merged_objectives.append({
-                "id": plan_key,
-                "label": f"Plan for Day {current_week}",
-                "description": (
-                    "The user must state what they plan to work on in today's AI Tuesday session. "
-                    "A vague acknowledgment of last week is not enough. You need a concrete answer to: "
-                    "what are you going to do today? This could be continuing a project, trying a new tool, "
-                    "brainstorming an idea, or exploring something specific. NOT complete until the user "
-                    "has given a specific plan."
-                ),
-            })
+        merged_objectives = list(merged_objectives) + [{
+            "id": plan_key,
+            "label": f"Plan for Day {current_week}",
+            "description": (
+                "The user must state what they plan to work on in today's AI Tuesday session. "
+                "A vague acknowledgment of last week is not enough. You need a concrete answer to: "
+                "what are you going to do today? This could be continuing a project, trying a new tool, "
+                "brainstorming an idea, or exploring something specific. NOT complete until the user "
+                "has given a specific plan."
+            ),
+        }]
 
     # Build a merged config dict for context/evaluation (company + dept objectives)
     merged_config = dict(department_config or {})
@@ -337,12 +305,27 @@ async def run_agent_session(
     # is released before the frontend allows sending the next message.
     deferred_done_payload: dict | None = None
 
+    # Intake sessions get a restricted tool set - no tip/collab creation
+    tools_for_session = deps.tool_registry
+    if session_type == "intake" and not intake_is_complete:
+        from backend.tools.registry import FilteredToolRegistry
+        tools_for_session = FilteredToolRegistry(
+            deps.tool_registry,
+            exclude={"prepare_tip", "prepare_collab"},
+        )
+
+    # Log the full system prompt for intake debugging
+    if session_type == "intake":
+        print(f"=== INTAKE SYSTEM PROMPT (user={user_id}, turn={len(transcript)}) ===", flush=True)
+        print(system_prompt, flush=True)
+        print("=== END SYSTEM PROMPT ===", flush=True)
+
     try:
         async for event in react_loop(
             user_message=llm_prompt,
             messages=llm_messages,
             system_prompt=system_prompt,
-            tools=deps.tool_registry,
+            tools=tools_for_session,
             context=context,
             cancel_event=cancel_event,
             metadata=posthog_metadata,
@@ -623,22 +606,11 @@ async def _check_intake_completion(
             objective_ids = {obj["id"] for obj in objectives}
             completed_ids = set(intake_responses.keys()) if intake_responses else set()
             all_objectives_done = objective_ids.issubset(completed_ids)
-            # Week 2+: also require a daily plan entry and any active sub-flows
+            # Week 2+: also require a daily plan entry (plan-dayN)
             current_wk = effective_program_week(profile) if profile else 1
             plan_key = f"plan-day{current_wk}"
             needs_plan = current_wk > 1
-            # Check if collab sub-flow is pending (interested but not yet created)
-            collab_resp = intake_responses.get("c0-collabs", {})
-            collab_val = (collab_resp.get("value", "") if isinstance(collab_resp, dict) else str(collab_resp)).lower()
-            collab_interested = bool(collab_resp) and not any(
-                neg in collab_val for neg in ["said no", "not interested", "declined", "no,", "does not want", "didn't want", "no interest"]
-            )
-            needs_collab_create = collab_interested and "c0-collabs-create" not in completed_ids
-            all_complete = (
-                all_objectives_done
-                and (not needs_plan or plan_key in completed_ids)
-                and not needs_collab_create
-            )
+            all_complete = all_objectives_done and (not needs_plan or plan_key in completed_ids)
         else:
             # Legacy fallback
             from backend.agent.context import _INTAKE_FIELDS
