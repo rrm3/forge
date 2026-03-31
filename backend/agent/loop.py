@@ -244,9 +244,17 @@ def _parse_stream_response(
     if message.tool_calls:
         tool_calls = []
         for tc in message.tool_calls:
-            try:
-                arguments = json.loads(tc.function.arguments)
-            except (json.JSONDecodeError, TypeError):
+            raw_args = tc.function.arguments
+            if isinstance(raw_args, dict):
+                arguments = raw_args
+            elif isinstance(raw_args, str):
+                try:
+                    arguments = json.loads(raw_args)
+                except json.JSONDecodeError:
+                    logger.warning("Tool '%s': failed to parse arguments: %s", tc.function.name, raw_args)
+                    arguments = {}
+            else:
+                logger.warning("Tool '%s': unexpected arguments type %s: %s", tc.function.name, type(raw_args), raw_args)
                 arguments = {}
             tool_calls.append(
                 ToolCall(id=tc.id, name=tc.function.name, arguments=arguments)
