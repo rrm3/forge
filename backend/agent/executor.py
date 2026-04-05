@@ -39,7 +39,11 @@ logger = logging.getLogger(__name__)
 # Token batching interval (seconds)
 _TOKEN_BATCH_INTERVAL = 0.05  # 50ms
 
-# Tools whose calls/results are shown to the client (others hidden unless dev_mode)
+# Only these tools have their CALL events sent to non-admin clients. The frontend
+# renders a visible pill for each (e.g. "Searching the web...", "Reading document").
+# Everything else (calls AND results for all other tools, plus results for these
+# tools) is dev_mode only. Do not add tools here unless the client renders a pill
+# for them (see MessageBubble.tsx TOOL_LABELS) and the user needs a loading indicator.
 _USER_VISIBLE_TOOLS = {"search_internal", "search_web", "retrieve_document"}
 
 
@@ -320,8 +324,6 @@ async def run_agent_session(
     # Defer the 'done' message until after all cleanup so the session lock/mutex
     # is released before the frontend allows sending the next message.
     deferred_done_payload: dict | None = None
-    # Track tool_call_id -> tool_name so we can filter tool results
-    _tool_call_names: dict[str, str] = {}
 
     # Intake sessions get a restricted tool set - no tip/collab creation
     tools_for_session = deps.tool_registry
@@ -349,7 +351,6 @@ async def run_agent_session(
                     await flush_tokens()
             elif isinstance(event, ToolCallEvent):
                 await flush_tokens()
-                _tool_call_names[event.tool_call_id] = event.tool_name
                 # Record in transcript for auditability
                 transcript.append(Message(
                     role="tool_call",
@@ -358,7 +359,7 @@ async def run_agent_session(
                     tool_call_id=event.tool_call_id,
                     timestamp=datetime.now(UTC),
                 ))
-                # Send to client: search tools always visible, others only in dev mode
+                # Send call pill to client for user-visible tools (or all in dev mode)
                 if event.tool_name in _USER_VISIBLE_TOOLS or settings.dev_mode:
                     await sender.send({
                         "type": "tool_call",
@@ -375,9 +376,11 @@ async def run_agent_session(
                     tool_call_id=event.tool_call_id,
                     timestamp=datetime.now(UTC),
                 ))
-                # Send result to client for user-visible tools or dev mode
-                _result_tool_name = _tool_call_names.get(event.tool_call_id, "")
-                if _result_tool_name in _USER_VISIBLE_TOOLS or settings.dev_mode:
+                # INTENTIONAL: tool results are dev_mode only. Do not widen this
+                # gate to _USER_VISIBLE_TOOLS - raw results can contain internal
+                # docs and should not be sent to non-admin WebSocket connections.
+                # See _USER_VISIBLE_TOOLS comment above for the full rationale.
+                if settings.dev_mode:
                     await sender.send({
                         "type": "tool_result",
                         "session_id": session_id,
