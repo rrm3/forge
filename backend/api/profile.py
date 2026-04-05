@@ -290,7 +290,7 @@ async def reevaluate_intake(user: AuthUser):
         # No department — still load company-wide objectives
         company_config = await dept_config_repo.get_company_config()
         all_co = (company_config or {}).get("objectives", [])
-        merged_objectives = [o for o in all_co if o.get("week_introduced", 1) <= week]
+        merged_objectives = [o for o in all_co if o.get("week_introduced", 1) <= week and week <= o.get("week_max", 99)]
 
     if not merged_objectives:
         return {"completed": False, "newly_completed": 0}

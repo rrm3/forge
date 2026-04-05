@@ -65,8 +65,7 @@
       "description": "Did they show or tell anyone about what they learned or tried?",
       "post_turn": "Mention that this app has a Tips & Tricks feature on the home screen where they can share what they've learned with everyone in the program.",
       "extraction_key": "",
-      "week_introduced": 2,
-      "recurring": true
+      "week_introduced": 2
     },
     {
       "id": "c0-collabs",
