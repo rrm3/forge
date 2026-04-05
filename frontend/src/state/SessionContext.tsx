@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Session, SessionType, Message } from '../api/types';
+import { getProgramWeek } from '../program';
 import type { ServerMessage, ConnectionStatus } from '../api/websocket';
 import {
   listSessions,
@@ -40,6 +41,7 @@ interface SessionState {
   collabReady: { title: string; problem: string; needed_skills: string[]; time_commitment: string; tags: string[]; department: string } | null;
   collabPublished: boolean;
   ideaReady: { title: string; description: string; tags: string[] } | null;
+  ideaPublished: boolean;
   ideaContext: { idea_id: string; title: string; description: string; tags: string[] } | null;
 }
 
@@ -62,6 +64,7 @@ type SessionAction =
   | { type: 'SET_COLLAB_READY'; collab: { title: string; problem: string; needed_skills: string[]; time_commitment: string; tags: string[]; department: string } }
   | { type: 'SET_COLLAB_PUBLISHED' }
   | { type: 'SET_IDEA_READY'; idea: { title: string; description: string; tags: string[] } | null }
+  | { type: 'SET_IDEA_PUBLISHED' }
   | { type: 'SET_IDEA_CONTEXT'; idea: { idea_id: string; title: string; description: string; tags: string[] } | null }
   | { type: 'DESELECT_SESSION' };
 
@@ -81,6 +84,7 @@ const initialState: SessionState = {
   collabReady: null,
   collabPublished: false,
   ideaReady: null,
+  ideaPublished: false,
   ideaContext: null,
 };
 
@@ -161,13 +165,16 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
       return { ...state, collabPublished: true, collabReady: null };
 
     case 'SET_IDEA_READY':
-      return { ...state, ideaReady: action.idea };
+      return { ...state, ideaReady: action.idea, ideaPublished: false };
+
+    case 'SET_IDEA_PUBLISHED':
+      return { ...state, ideaPublished: true, ideaReady: null };
 
     case 'SET_IDEA_CONTEXT':
       return { ...state, ideaContext: action.idea };
 
     case 'DESELECT_SESSION':
-      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false, tipReady: null, tipPublished: false, collabReady: null, collabPublished: false, ideaReady: null, ideaContext: null };
+      return { ...state, activeSessionId: null, messages: [], streamingText: '', isStreaming: false, tipReady: null, tipPublished: false, collabReady: null, collabPublished: false, ideaReady: null, ideaPublished: false, ideaContext: null };
 
     default:
       return state;
@@ -243,7 +250,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             user_id: '',
             title: '',
             type: msg.session_type as Session['type'],
-            program_week: 0,
+            program_week: msg.program_week ?? getProgramWeek(),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             message_count: 0,

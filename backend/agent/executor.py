@@ -39,7 +39,11 @@ logger = logging.getLogger(__name__)
 # Token batching interval (seconds)
 _TOKEN_BATCH_INTERVAL = 0.05  # 50ms
 
-# Tools whose calls/results are shown to the client (others hidden unless dev_mode)
+# Only these tools have their CALL events sent to non-admin clients. The frontend
+# renders a visible pill for each (e.g. "Searching the web...", "Reading document").
+# Everything else (calls AND results for all other tools, plus results for these
+# tools) is dev_mode only. Do not add tools here unless the client renders a pill
+# for them (see MessageBubble.tsx TOOL_LABELS) and the user needs a loading indicator.
 _USER_VISIBLE_TOOLS = {"search_internal", "search_web", "retrieve_document"}
 
 
@@ -355,7 +359,7 @@ async def run_agent_session(
                     tool_call_id=event.tool_call_id,
                     timestamp=datetime.now(UTC),
                 ))
-                # Send to client: search tools always visible, others only in dev mode
+                # Send call pill to client for user-visible tools (or all in dev mode)
                 if event.tool_name in _USER_VISIBLE_TOOLS or settings.dev_mode:
                     await sender.send({
                         "type": "tool_call",
@@ -372,7 +376,10 @@ async def run_agent_session(
                     tool_call_id=event.tool_call_id,
                     timestamp=datetime.now(UTC),
                 ))
-                # Only send result to client for user-visible tools or dev mode
+                # INTENTIONAL: tool results are dev_mode only. Do not widen this
+                # gate to _USER_VISIBLE_TOOLS - raw results can contain internal
+                # docs and should not be sent to non-admin WebSocket connections.
+                # See _USER_VISIBLE_TOOLS comment above for the full rationale.
                 if settings.dev_mode:
                     await sender.send({
                         "type": "tool_result",
@@ -482,6 +489,10 @@ async def run_agent_session(
                 merged_config if merged_objectives else department_config,
                 intake_responses,
             )
+
+        # Auto-save journal for wrapup sessions if save_journal wasn't called
+        if session_type == "wrapup":
+            await _auto_save_journal(transcript, deps, user_id, session_id)
 
         # Generate title for sessions
         # - intake/wrapup: hardcoded titles, never overwritten
@@ -753,6 +764,46 @@ async def _enrich_profile_async(
 
     except Exception:
         logger.warning("Opus enrichment failed for user=%s", user_id, exc_info=True)
+
+
+async def _auto_save_journal(transcript: list[Message], deps: AgentDeps, user_id: str, session_id: str):
+    """Auto-save a journal entry if save_journal was never called during this session.
+
+    For wrapup sessions, check whether save_journal was already called. If not,
+    synthesize a minimal journal entry from the assistant's text so the user's
+    reflection isn't lost when sessions time out or the user goes idle.
+    """
+    try:
+        # Check if save_journal was already called in the full transcript
+        for msg in transcript:
+            if msg.role == "tool_call" and msg.tool_name == "save_journal":
+                return  # Already saved explicitly
+
+        # Gather assistant text from this session
+        assistant_parts = [msg.content for msg in transcript if msg.role == "assistant" and msg.content]
+        if not assistant_parts:
+            return
+
+        # Only auto-save if there's meaningful conversation (>200 chars of assistant text)
+        combined = "\n\n".join(assistant_parts)
+        if len(combined) < 200:
+            return
+
+        if not deps.journal_repo:
+            return
+
+        from backend.models import JournalEntry
+        # Use deterministic ID so repeated calls for the same session upsert
+        entry = JournalEntry(
+            entry_id=f"auto-{session_id}",
+            user_id=user_id,
+            content=combined[-2000:] if len(combined) > 2000 else combined,
+            tags=["auto-saved"],
+        )
+        await deps.journal_repo.create(entry)
+        logger.info("Auto-saved journal entry for user=%s session=%s (entry=%s)", user_id, session_id, entry.entry_id)
+    except Exception:
+        logger.warning("Failed to auto-save journal for session=%s", session_id, exc_info=True)
 
 
 async def _check_tip_prepared(transcript: list[Message], sender: MessageSender, session_id: str):
