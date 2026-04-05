@@ -478,6 +478,7 @@ export function AdminUsers() {
               user={users.find((u) => u.user_id === selectedUserId) ?? null}
               intake={intakeDetail}
               loading={detailLoading}
+              currentWeek={currentWeek}
               onClose={() => setSelectedUserId(null)}
               onToggleRole={handleToggleRole}
               onToggleAdmin={handleToggleAdmin}
@@ -495,6 +496,7 @@ function DetailPanel({
   user,
   intake,
   loading,
+  currentWeek,
   onClose,
   onToggleRole,
   onToggleAdmin,
@@ -504,6 +506,7 @@ function DetailPanel({
   user: AdminUserSummary | null;
   intake: AdminUserIntake | null;
   loading: boolean;
+  currentWeek: number;
   onClose: () => void;
   onToggleRole: (userId: string, isDeptAdmin: boolean) => void;
   onToggleAdmin: (userId: string, isAdmin: boolean) => void;

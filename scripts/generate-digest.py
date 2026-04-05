@@ -13,8 +13,28 @@ import json
 import os
 import glob
 import sys
+from datetime import date, timedelta
 
 import boto3
+
+# AI Tuesdays 12-week program: first Tuesday is March 24, 2026
+PROGRAM_START_DATE = date(2026, 3, 24)
+
+
+def _week_date_range(week: int) -> tuple[str, str]:
+    """Return (start_iso, end_iso) for the given program week."""
+    start = PROGRAM_START_DATE + timedelta(weeks=week - 1)
+    end = start + timedelta(days=7)
+    return start.isoformat(), end.isoformat()
+
+
+def _session_in_week(messages: list[dict], week_start: str, week_end: str) -> bool:
+    """Check if any message timestamp falls within the week range."""
+    for msg in messages:
+        ts = msg.get("timestamp", "")
+        if ts and week_start <= ts[:10] < week_end:
+            return True
+    return False
 
 
 def main():
@@ -27,6 +47,7 @@ def main():
     week = args.week
     user_id = args.user_id
     name = " ".join(args.name)
+    week_start, week_end = _week_date_range(week)
 
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sessions_dir = os.path.join(base, "data", "analytics", "s3", "sessions", user_id)
@@ -41,6 +62,9 @@ def main():
         try:
             with open(sf) as f:
                 messages = json.load(f)
+            # Skip sessions outside the target week
+            if not _session_in_week(messages, week_start, week_end):
+                continue
             session_id = os.path.basename(sf).replace(".json", "")
             transcript_lines = []
             for msg in messages:

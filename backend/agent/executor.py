@@ -790,8 +790,9 @@ async def _auto_save_journal(transcript: list[Message], deps: AgentDeps, user_id
             return
 
         from backend.models import JournalEntry
+        # Use deterministic ID so repeated calls for the same session upsert
         entry = JournalEntry(
-            entry_id=str(uuid.uuid4()),
+            entry_id=f"auto-{session_id}",
             user_id=user_id,
             content=combined[-2000:] if len(combined) > 2000 else combined,
             tags=["auto-saved"],

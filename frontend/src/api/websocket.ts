@@ -11,7 +11,7 @@
 
 export type ServerMessage =
   | { type: 'connected'; user_id: string }
-  | { type: 'session'; session_id: string; session_type: string }
+  | { type: 'session'; session_id: string; session_type: string; program_week?: number }
   | { type: 'session_update'; session_id: string; title: string }
   | { type: 'token'; session_id: string; content: string }
   | { type: 'tool_call'; session_id: string; tool: string; tool_call_id: string; args: Record<string, unknown> }
