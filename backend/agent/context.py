@@ -268,7 +268,6 @@ def _build_intake_progress(
     responses = intake_responses or {}
     done = []
     remaining = []
-    post_turn_instructions = []
 
     for obj in objectives:
         obj_id = obj.get("id", "")
@@ -280,21 +279,22 @@ def _build_intake_progress(
             value = responses[obj_id].get("value", "")
             summary = _truncate(value, 120)
             done.append(f"  [x] {label}: {summary}")
-            if post_turn:
-                post_turn_instructions.append(post_turn)
+            # Only include post_turn for objectives answered THIS session (not
+            # carried over from previous weeks). Carried-over responses have
+            # captured_at before the session, but we can't easily check that here.
+            # Instead, post_turn is appended to the "remaining" section below
+            # so it only fires when the AI is actively asking about the objective.
         else:
-            remaining.append((label, description))
+            full_desc = description
+            if post_turn:
+                full_desc += f" AFTER the user answers, {post_turn}"
+            remaining.append((label, full_desc))
 
     lines = ["## Intake Progress"]
 
     if not remaining:
         # All objectives complete
         lines.append("")
-        if post_turn_instructions:
-            lines.append("**INCLUDE in your next response:**")
-            for instruction in post_turn_instructions:
-                lines.append(f"  - {instruction}")
-            lines.append("")
         lines.append("═══════════════════════════════════════════════════")
         lines.append("ALL OBJECTIVES COMPLETE. THE INTAKE IS DONE.")
         lines.append("═══════════════════════════════════════════════════")
@@ -312,13 +312,6 @@ def _build_intake_progress(
         lines.append("**Completed:**")
         lines.extend(done)
 
-    if post_turn_instructions:
-        lines.append("")
-        lines.append("**INCLUDE in your next response:**")
-        for instruction in post_turn_instructions:
-            lines.append(f"  - {instruction}")
-        import logging as _log
-        _log.getLogger(__name__).info("Post-turn instructions injected: %s", post_turn_instructions)
 
     if len(remaining) <= 2:
         # Almost done
