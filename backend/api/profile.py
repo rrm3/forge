@@ -306,6 +306,20 @@ async def reevaluate_intake(user: AuthUser):
 
     # Load current responses and evaluate
     intake_responses = await load_intake_responses(_storage, user.user_id)
+
+    # Clear stale responses for recurring objectives (same logic as executor.py)
+    if week > 1:
+        from backend.models import PROGRAM_START_DATE
+        from datetime import timedelta
+        week_start = PROGRAM_START_DATE + timedelta(weeks=week - 1)
+        recurring_ids = {o["id"] for o in merged_objectives if o.get("recurring")}
+        for obj_id in recurring_ids:
+            resp = intake_responses.get(obj_id)
+            if resp and isinstance(resp, dict) and resp.get("captured_at"):
+                captured = resp["captured_at"][:10]
+                if captured < week_start.isoformat():
+                    del intake_responses[obj_id]
+
     from backend.agent.extraction import evaluate_objectives
     newly_completed = await evaluate_objectives(llm_messages, merged_objectives, intake_responses)
 

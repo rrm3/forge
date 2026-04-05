@@ -48,14 +48,16 @@
       "label": "Whether they put anything from last week into practice",
       "description": "Ask this directly: 'Were you able to put anything from last week's AI Tuesday into practice in your work this past week?' Do NOT rephrase as 'experiment' or 'try out' - the question is specifically about applying what they learned to real work, not experimenting. Reference their specific goals and ideas from the digest. Looking for concrete examples: I used AI to draft a report, I automated a workflow, I applied a technique to a real task. 'No, I didn't get to it' is a valid answer.",
       "extraction_key": "",
-      "week_introduced": 2
+      "week_introduced": 2,
+      "recurring": true
     },
     {
       "id": "c0-blockers",
       "label": "What's blocking them from using AI more",
       "description": "Is there something they wanted to try with AI but couldn't? Access issues, knowledge gaps, or organizational friction. Specific blockers are more useful than vague ones.",
       "extraction_key": "",
-      "week_introduced": 2
+      "week_introduced": 2,
+      "recurring": true
     },
     {
       "id": "c0-sharing",
@@ -63,7 +65,8 @@
       "description": "Did they show or tell anyone about what they learned or tried?",
       "post_turn": "Mention that this app has a Tips & Tricks feature on the home screen where they can share what they've learned with everyone in the program.",
       "extraction_key": "",
-      "week_introduced": 2
+      "week_introduced": 2,
+      "recurring": true
     },
     {
       "id": "c0-collabs",

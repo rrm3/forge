@@ -164,6 +164,20 @@ async def run_agent_session(
     if session_type == "intake" and not intake_is_complete:
         intake_responses = await load_intake_responses(deps.storage, user_id)
 
+        # Clear stale responses for recurring objectives so they get re-asked each week.
+        # A response is stale if its captured_at is before the current week's start date.
+        if intake_responses and current_week > 1 and merged_objectives:
+            from backend.models import PROGRAM_START_DATE
+            from datetime import timedelta
+            week_start = PROGRAM_START_DATE + timedelta(weeks=current_week - 1)
+            recurring_ids = {o["id"] for o in merged_objectives if o.get("recurring")}
+            for obj_id in recurring_ids:
+                resp = intake_responses.get(obj_id)
+                if resp and isinstance(resp, dict) and resp.get("captured_at"):
+                    captured = resp["captured_at"][:10]  # ISO date prefix
+                    if captured < week_start.isoformat():
+                        del intake_responses[obj_id]
+
     # For Week 2+, inject a synthetic "plan for today" objective.
     if merged_objectives and current_week > 1:
         plan_key = f"plan-day{current_week}"
