@@ -310,10 +310,33 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
                         session_type, existing.session_id, user_data["user_id"], week, existing.message_count)
             session_id = existing.session_id
             await sender.send({"type": "session", "session_id": session_id, "session_type": session_type, "program_week": existing.program_week})
-            # Send done so frontend doesn't hang - the original agent run
-            # either already completed or is still in progress on another connection.
-            # Re-running with is_new_session=True would produce duplicate greetings.
-            await sender.send({"type": "done", "session_id": session_id})
+            if existing.message_count == 0:
+                # Session exists but greeting never completed. Re-run the agent
+                # only if the session is old enough that the original run likely
+                # failed (not just still in progress from a concurrent connection).
+                from datetime import UTC, datetime, timedelta
+                age = datetime.now(UTC) - existing.created_at
+                if age > timedelta(seconds=60):
+                    if mode == "text":
+                        def cancel_check():
+                            return _connections_repo.is_cancelled(session_id) if _connections_repo else False
+                        await run_agent_session(
+                            sender=sender,
+                            user_id=user_data["user_id"],
+                            user_email=user_data.get("email", ""),
+                            user_name=user_data.get("name", ""),
+                            session_id=session_id,
+                            user_message="",
+                            deps=_deps,
+                            is_new_session=True,
+                            session_type=session_type,
+                            cancel_check=cancel_check,
+                        )
+                else:
+                    # Still fresh - original run likely in progress, just send done
+                    await sender.send({"type": "done", "session_id": session_id})
+            else:
+                await sender.send({"type": "done", "session_id": session_id})
             return
 
     session_id = str(uuid.uuid4())

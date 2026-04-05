@@ -6,7 +6,7 @@ import Tooltip from '@mui/material/Tooltip';
 import { useSession } from '../state/SessionContext';
 import { resetIntake } from '../api/client';
 import { ConfirmResetModal } from './ConfirmResetModal';
-import { PROGRAM_START_DATE, getProgramWeek } from '../program';
+import { PROGRAM_START_DATE } from '../program';
 import type { Session } from '../api/types';
 
 const SESSION_ICONS: Record<string, typeof Lightbulb> = {
@@ -48,7 +48,7 @@ function groupByWeek(sessions: Session[]): [string, Session[]][] {
     // Don't show incomplete intake sessions
     if (session.type === 'intake' && !session.title) continue;
 
-    const week = `Week ${session.program_week || getProgramWeek()}`;
+    const week = `Week ${session.program_week || 1}`;
     if (!groups.has(week)) groups.set(week, []);
     groups.get(week)!.push(session);
   }

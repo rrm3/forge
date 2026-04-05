@@ -162,10 +162,19 @@ async def _handle_start_session(sender: MessageSender, user: CurrentUser, msg: d
                         session_type, existing.session_id, user.user_id, week, existing.message_count)
             session_id = existing.session_id
             await sender.send({"type": "session", "session_id": session_id, "session_type": session_type, "program_week": existing.program_week})
-            # Send done so frontend doesn't hang - the original agent run
-            # either already completed or is still in progress on another connection.
-            # Re-running with is_new_session=True would produce duplicate greetings.
-            await sender.send({"type": "done", "session_id": session_id})
+            if existing.message_count == 0:
+                # Session exists but greeting never completed. Re-run the agent
+                # only if the session is old enough that the original run likely
+                # failed (not just still in progress from a concurrent connection).
+                from datetime import UTC, datetime, timedelta
+                age = datetime.now(UTC) - existing.created_at
+                if age > timedelta(seconds=60):
+                    await _run_agent(sender, user, session_id, "", is_new_session=True, session_type=session_type)
+                else:
+                    # Still fresh - original run likely in progress, just send done
+                    await sender.send({"type": "done", "session_id": session_id})
+            else:
+                await sender.send({"type": "done", "session_id": session_id})
             return
 
     session_id = str(uuid.uuid4())
