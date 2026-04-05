@@ -273,13 +273,36 @@ export function ChatView() {
               </div>
             )}
 
-            {state.ideaReady && !isStreaming && (
+            {state.ideaReady && !isStreaming && !state.ideaPublished && (
               <IdeaPreviewCard
                 initial={state.ideaReady}
                 sessionId={state.activeSessionId || ''}
-                onSaved={() => {}}
+                onSaved={() => {
+                  dispatch({ type: 'SET_IDEA_PUBLISHED' });
+                }}
                 onSkip={() => dispatch({ type: 'SET_IDEA_READY', idea: null })}
               />
+            )}
+
+            {state.ideaPublished && (
+              <div
+                className="my-4 mx-auto max-w-[95%] md:max-w-[85%] rounded-xl border p-5"
+                style={{ backgroundColor: 'var(--color-surface-white)', borderColor: 'var(--color-border)' }}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Check className="w-4 h-4" style={{ color: '#059669' }} strokeWidth={2} />
+                  <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                    Idea saved!
+                  </span>
+                </div>
+                <button
+                  onClick={() => navigate('/ideas')}
+                  className="text-sm font-medium"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  View Ideas &rarr;
+                </button>
+              </div>
             )}
 
             <div ref={bottomRef} />

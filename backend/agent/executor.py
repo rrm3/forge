@@ -320,6 +320,8 @@ async def run_agent_session(
     # Defer the 'done' message until after all cleanup so the session lock/mutex
     # is released before the frontend allows sending the next message.
     deferred_done_payload: dict | None = None
+    # Track tool_call_id -> tool_name so we can filter tool results
+    _tool_call_names: dict[str, str] = {}
 
     # Intake sessions get a restricted tool set - no tip/collab creation
     tools_for_session = deps.tool_registry
@@ -347,6 +349,7 @@ async def run_agent_session(
                     await flush_tokens()
             elif isinstance(event, ToolCallEvent):
                 await flush_tokens()
+                _tool_call_names[event.tool_call_id] = event.tool_name
                 # Record in transcript for auditability
                 transcript.append(Message(
                     role="tool_call",
@@ -372,8 +375,9 @@ async def run_agent_session(
                     tool_call_id=event.tool_call_id,
                     timestamp=datetime.now(UTC),
                 ))
-                # Only send result to client for user-visible tools or dev mode
-                if settings.dev_mode:
+                # Send result to client for user-visible tools or dev mode
+                _result_tool_name = _tool_call_names.get(event.tool_call_id, "")
+                if _result_tool_name in _USER_VISIBLE_TOOLS or settings.dev_mode:
                     await sender.send({
                         "type": "tool_result",
                         "session_id": session_id,
@@ -482,6 +486,10 @@ async def run_agent_session(
                 merged_config if merged_objectives else department_config,
                 intake_responses,
             )
+
+        # Auto-save journal for wrapup sessions if save_journal wasn't called
+        if session_type == "wrapup":
+            await _auto_save_journal(transcript, deps, user_id, session_id)
 
         # Generate title for sessions
         # - intake/wrapup: hardcoded titles, never overwritten
@@ -753,6 +761,45 @@ async def _enrich_profile_async(
 
     except Exception:
         logger.warning("Opus enrichment failed for user=%s", user_id, exc_info=True)
+
+
+async def _auto_save_journal(transcript: list[Message], deps: AgentDeps, user_id: str, session_id: str):
+    """Auto-save a journal entry if save_journal was never called during this session.
+
+    For wrapup sessions, check whether save_journal was already called. If not,
+    synthesize a minimal journal entry from the assistant's text so the user's
+    reflection isn't lost when sessions time out or the user goes idle.
+    """
+    try:
+        # Check if save_journal was already called in the full transcript
+        for msg in transcript:
+            if msg.role == "tool_call" and msg.tool_name == "save_journal":
+                return  # Already saved explicitly
+
+        # Gather assistant text from this session
+        assistant_parts = [msg.content for msg in transcript if msg.role == "assistant" and msg.content]
+        if not assistant_parts:
+            return
+
+        # Only auto-save if there's meaningful conversation (>200 chars of assistant text)
+        combined = "\n\n".join(assistant_parts)
+        if len(combined) < 200:
+            return
+
+        if not deps.journal_repo:
+            return
+
+        from backend.models import JournalEntry
+        entry = JournalEntry(
+            entry_id=str(uuid.uuid4()),
+            user_id=user_id,
+            content=combined[-2000:] if len(combined) > 2000 else combined,
+            tags=["auto-saved"],
+        )
+        await deps.journal_repo.create(entry)
+        logger.info("Auto-saved journal entry for user=%s session=%s (entry=%s)", user_id, session_id, entry.entry_id)
+    except Exception:
+        logger.warning("Failed to auto-save journal for session=%s", session_id, exc_info=True)
 
 
 async def _check_tip_prepared(transcript: list[Message], sender: MessageSender, session_id: str):

@@ -6,6 +6,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Search, X, ChevronUp, ChevronDown, Shield } from 'lucide-react';
 import { listAdminUsers, getAdminUserIntake, setUserRole, setUserAdmin, deleteAdminUser } from '../api/client';
 import { UserAvatar } from './UserAvatar';
+import { getProgramWeek } from '../program';
 import type { AdminUserSummary, AdminUserIntake } from '../api/types';
 
 type SortKey = 'name' | 'department' | 'role' | 'session_count' | 'tip_count' | 'intake' | 'last_active';
@@ -171,10 +172,13 @@ export function AdminUsers() {
 
   // Stats
   const totalUsers = users.length;
-  const day1Complete = users.filter((u) => '1' in (u.intake_weeks ?? {})).length;
-  const day1Pct = totalUsers > 0 ? Math.round((day1Complete / totalUsers) * 100) : 0;
-  const day2Complete = users.filter((u) => '2' in (u.intake_weeks ?? {})).length;
-  const day2Pct = totalUsers > 0 ? Math.round((day2Complete / totalUsers) * 100) : 0;
+  const currentWeek = getProgramWeek();
+  const weekStats = Array.from({ length: currentWeek }, (_, i) => {
+    const w = i + 1;
+    const complete = users.filter((u) => String(w) in (u.intake_weeks ?? {})).length;
+    const pct = totalUsers > 0 ? Math.round((complete / totalUsers) * 100) : 0;
+    return { week: w, complete, pct };
+  });
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -232,11 +236,13 @@ export function AdminUsers() {
   return (
     <div className="relative">
       {/* Stats bar */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className={`grid gap-4 mb-6`} style={{ gridTemplateColumns: `repeat(${1 + weekStats.length}, 1fr)` }}>
         {[
           { label: 'Total Users', value: totalUsers },
-          { label: 'Day 1 Complete', value: `${day1Complete}/${totalUsers} (${day1Pct}%)` },
-          { label: 'Day 2 Complete', value: `${day2Complete}/${totalUsers} (${day2Pct}%)` },
+          ...weekStats.map((s) => ({
+            label: `Day ${s.week} Complete`,
+            value: `${s.complete}/${totalUsers} (${s.pct}%)`,
+          })),
         ].map((stat) => (
           <div
             key={stat.label}
@@ -326,12 +332,11 @@ export function AdminUsers() {
               <th style={{ ...thStyle, textAlign: 'center' }} onClick={() => handleSort('tip_count')}>
                 Tips <SortIcon col="tip_count" />
               </th>
-              <th style={{ ...thStyle, textAlign: 'center' }} onClick={() => handleSort('intake')}>
-                Day 1 <SortIcon col="intake" />
-              </th>
-              <th style={{ ...thStyle, textAlign: 'center' }}>
-                Day 2
-              </th>
+              {weekStats.map((s, i) => (
+                <th key={s.week} style={{ ...thStyle, textAlign: 'center' }} onClick={i === 0 ? () => handleSort('intake') : undefined}>
+                  Day {s.week} {i === 0 && <SortIcon col="intake" />}
+                </th>
+              ))}
               <th style={thStyle} onClick={() => handleSort('last_active')}>
                 Last Active <SortIcon col="last_active" />
               </th>
@@ -341,7 +346,7 @@ export function AdminUsers() {
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={6 + weekStats.length}
                   className="text-center py-8 text-sm"
                   style={{ color: 'var(--color-text-muted)', fontFamily: "'Satoshi', system-ui, sans-serif" }}
                 >
@@ -423,18 +428,15 @@ export function AdminUsers() {
                   <td style={{ ...monoTd, textAlign: 'center' }}>
                     {u.tip_count}
                   </td>
-                  <td style={{ ...monoTd, textAlign: 'center' }}>
-                    {'1' in (u.intake_weeks ?? {})
-                      ? <span style={{ color: 'var(--color-success, #16A34A)' }}>&#10003;</span>
-                      : u.intake_objectives_total > 0
-                        ? <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>{u.intake_objectives_done}/{u.intake_objectives_total}</span>
-                        : <span style={{ color: 'var(--color-text-placeholder)' }}>--</span>}
-                  </td>
-                  <td style={{ ...monoTd, textAlign: 'center' }}>
-                    {'2' in (u.intake_weeks ?? {})
-                      ? <span style={{ color: 'var(--color-success, #16A34A)' }}>&#10003;</span>
-                      : <span style={{ color: 'var(--color-text-placeholder)' }}>--</span>}
-                  </td>
+                  {weekStats.map((s) => (
+                    <td key={s.week} style={{ ...monoTd, textAlign: 'center' }}>
+                      {String(s.week) in (u.intake_weeks ?? {})
+                        ? <span style={{ color: 'var(--color-success, #16A34A)' }}>&#10003;</span>
+                        : s.week === currentWeek && u.intake_objectives_total > 0
+                          ? <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>{u.intake_objectives_done}/{u.intake_objectives_total}</span>
+                          : <span style={{ color: 'var(--color-text-placeholder)' }}>--</span>}
+                    </td>
+                  ))}
                   <td style={{ ...tdStyle, fontSize: 13, color: 'var(--color-text-muted)' }}>
                     {relativeTime(u.last_active)}
                   </td>
@@ -707,7 +709,7 @@ function DetailPanel({
       {/* Intake status */}
       <Section title="Status">
         <div className="flex flex-col gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-          {[1, 2].map((week) => {
+          {Array.from({ length: currentWeek }, (_, i) => i + 1).map((week) => {
             const weekStr = String(week);
             const completed = weekStr in (p.intake_weeks ?? {});
             const completedAt = completed ? (p.intake_weeks ?? {})[weekStr] : null;

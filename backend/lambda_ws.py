@@ -309,29 +309,15 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
             logger.info("Reusing existing %s session %s for user=%s week=%s (messages=%d)",
                         session_type, existing.session_id, user_data["user_id"], week, existing.message_count)
             session_id = existing.session_id
-            await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
-            if existing.message_count > 0:
-                await sender.send({"type": "done", "session_id": session_id})
-                return
-            if existing.message_count == 0:
-                if mode == "text":
-                    def cancel_check():
-                        return _connections_repo.is_cancelled(session_id) if _connections_repo else False
-                    await run_agent_session(
-                        sender=sender,
-                        user_id=user_data["user_id"],
-                        user_email=user_data.get("email", ""),
-                        user_name=user_data.get("name", ""),
-                        session_id=session_id,
-                        user_message="",
-                        deps=_deps,
-                        is_new_session=True,
-                        session_type=session_type,
-                        cancel_check=cancel_check,
-                    )
+            await sender.send({"type": "session", "session_id": session_id, "session_type": session_type, "program_week": existing.program_week})
+            # Send done so frontend doesn't hang - the original agent run
+            # either already completed or is still in progress on another connection.
+            # Re-running with is_new_session=True would produce duplicate greetings.
+            await sender.send({"type": "done", "session_id": session_id})
             return
 
     session_id = str(uuid.uuid4())
+    pw = week or 0
     idea_id = msg.get("idea_id")
     HARDCODED_TITLES = {"stuck": "Get Help", "tip": "New Tip", "collab": "New Collab"}
     if session_type == "intake":
@@ -341,10 +327,10 @@ async def _worker_start_session(connection_id: str, user_data: dict, msg: dict):
     else:
         title = HARDCODED_TITLES.get(session_type, "")
     session = Session(session_id=session_id, user_id=user_data["user_id"], title=title, type=session_type,
-                      program_week=week or 0, idea_id=idea_id or "")
+                      program_week=pw, idea_id=idea_id or "")
     await _deps.sessions_repo.create(session)
 
-    await sender.send({"type": "session", "session_id": session_id, "session_type": session_type})
+    await sender.send({"type": "session", "session_id": session_id, "session_type": session_type, "program_week": pw})
 
     # If starting a chat linked to an idea, look it up and link the session
     idea = None
