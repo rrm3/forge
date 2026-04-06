@@ -136,10 +136,10 @@ def build_system_prompt(
             intake_config = department_config
 
         if intake_config is not None:
-            objectives_section = _build_intake_objectives(intake_config)
-            if objectives_section:
-                parts.append(objectives_section)
-
+            # Only the progress section is injected. It shows ONE remaining
+            # objective at a time. _build_intake_objectives was removed because
+            # listing all remaining objectives caused the AI to ask about
+            # multiple/completed ones instead of following the single "next" one.
             progress_section = _build_intake_progress(intake_config, intake_responses)
             if progress_section:
                 parts.append(progress_section)
@@ -239,13 +239,20 @@ def _build_department_context(department_config: dict) -> str | None:
 # Layer 3: Intake objectives
 # ---------------------------------------------------------------------------
 
-def _build_intake_objectives(department_config: dict) -> str | None:
-    """Return objectives formatted as instructions for the AI."""
+def _build_intake_objectives(department_config: dict, intake_responses: dict | None = None) -> str | None:
+    """Return only REMAINING objectives as instructions for the AI.
+
+    Completed objectives are excluded so the AI can't ask about them.
+    """
     objectives = department_config.get("objectives", [])
     if not objectives:
         return None
+    responses = intake_responses or {}
+    remaining = [obj for obj in objectives if obj.get("id", "") not in responses]
+    if not remaining:
+        return None
     lines = ["## Intake Objectives", "Cover these topics during the conversation:"]
-    for obj in objectives:
+    for obj in remaining:
         label = obj.get("label", "")
         description = obj.get("description", "")
         lines.append(f"- **{label}**: {description}")
