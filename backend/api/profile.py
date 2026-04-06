@@ -164,11 +164,18 @@ async def reset_intake(user: AuthUser):
             for obj in (company_config or {}).get("objectives", []):
                 if obj.get("week_introduced", 1) == current_week and "id" in obj:
                     keys_to_remove.add(obj["id"])
+                # Recurring objectives must also be cleared on reset, otherwise
+                # they survive from the current week's session and appear already
+                # answered when the user restarts intake.
+                if obj.get("recurring") and "id" in obj:
+                    keys_to_remove.add(obj["id"])
             if profile.department:
                 dept_slug = profile.department.lower().replace(" ", "-")
                 dept_config = await dept_repo.get_department_config(dept_slug)
                 for obj in (dept_config or {}).get("objectives", []):
                     if obj.get("week_introduced", 1) == current_week and "id" in obj:
+                        keys_to_remove.add(obj["id"])
+                    if obj.get("recurring") and "id" in obj:
                         keys_to_remove.add(obj["id"])
             removed = {k for k in keys_to_remove if k in responses}
             if removed:
@@ -310,8 +317,14 @@ async def reevaluate_intake(user: AuthUser):
     # Clear stale responses for recurring objectives (same logic as executor.py)
     if week > 1:
         from backend.models import PROGRAM_START_DATE
-        from datetime import timedelta
+        from datetime import date as _date, timedelta
         week_start = PROGRAM_START_DATE + timedelta(weeks=week - 1)
+        # When testing with program_week_override, week_start may be in
+        # the future. Clamp to today so responses captured during the
+        # current session aren't incorrectly cleared as "stale."
+        _today = _date.today()
+        if week_start > _today:
+            week_start = _today
         recurring_ids = {o["id"] for o in merged_objectives if o.get("recurring")}
         for obj_id in recurring_ids:
             resp = intake_responses.get(obj_id)

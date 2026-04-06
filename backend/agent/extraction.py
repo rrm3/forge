@@ -286,7 +286,8 @@ async def evaluate_objectives(
     # Build the prompt
     remaining_lines = []
     for o in remaining:
-        remaining_lines.append(f"- {o['id']}: {o['label']} - {o.get('description', '')}")
+        desc = o.get("eval_description") or o.get("description", "")
+        remaining_lines.append(f"- {o['id']}: {o['label']} - {desc}")
     remaining_text = "\n".join(remaining_lines) if remaining_lines else "(none)"
 
     completed_lines = []

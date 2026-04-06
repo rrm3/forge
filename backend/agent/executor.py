@@ -169,8 +169,14 @@ async def run_agent_session(
         # A response is stale if its captured_at is before the current week's start date.
         if intake_responses and current_week > 1 and merged_objectives:
             from backend.models import PROGRAM_START_DATE
-            from datetime import timedelta
+            from datetime import date as _date, timedelta
             week_start = PROGRAM_START_DATE + timedelta(weeks=current_week - 1)
+            # When testing with program_week_override, week_start may be in
+            # the future. Clamp to today so responses captured during the
+            # current session aren't incorrectly cleared as "stale."
+            _today = _date.today()
+            if week_start > _today:
+                week_start = _today
             recurring_ids = {o["id"] for o in merged_objectives if o.get("recurring")}
             for obj_id in recurring_ids:
                 resp = intake_responses.get(obj_id)
