@@ -16,6 +16,7 @@ const ENV_CONFIG: Record<string, {
   backendProvisionedConcurrency: number;
   wsProvisionedConcurrency: number;
   posthogApiKey: string;
+  devMode?: boolean;
 }> = {
   production: {
     domainName: 'aituesdays.digitalscience.ai',
@@ -34,6 +35,7 @@ const ENV_CONFIG: Record<string, {
     backendProvisionedConcurrency: 0,
     wsProvisionedConcurrency: 0,
     posthogApiKey: 'phc_7wUFuz56pMvIhqnSalLqHakMDY2PKeT4KIM1NZHFQpB',
+    devMode: true,
   },
 };
 
@@ -49,6 +51,7 @@ new ForgeStack(app, `forge-${environment}`, {
   backendProvisionedConcurrency: envConfig?.backendProvisionedConcurrency ?? 0,
   wsProvisionedConcurrency: envConfig?.wsProvisionedConcurrency ?? 0,
   posthogApiKey: envConfig?.posthogApiKey || '',
+  devMode: envConfig?.devMode ?? false,
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION || 'us-east-1',

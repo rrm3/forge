@@ -68,8 +68,8 @@ async def _authenticate_ws(ws: WebSocket) -> CurrentUser | None:
     except Exception:
         return None
 
-    # Masquerade: swap identity in dev mode
-    if settings.dev_mode:
+    # Masquerade: swap identity in dev mode or when explicitly enabled on staging
+    if settings.dev_mode or settings.masquerade_enabled:
         masquerade_email = ws.query_params.get("masquerade")
         if masquerade_email:
             user = _masquerade_user(masquerade_email, user)

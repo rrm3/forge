@@ -164,11 +164,18 @@ async def reset_intake(user: AuthUser):
             for obj in (company_config or {}).get("objectives", []):
                 if obj.get("week_introduced", 1) == current_week and "id" in obj:
                     keys_to_remove.add(obj["id"])
+                # Recurring objectives must also be cleared on reset, otherwise
+                # they survive from the current week's session and appear already
+                # answered when the user restarts intake.
+                if obj.get("recurring") and "id" in obj:
+                    keys_to_remove.add(obj["id"])
             if profile.department:
                 dept_slug = profile.department.lower().replace(" ", "-")
                 dept_config = await dept_repo.get_department_config(dept_slug)
                 for obj in (dept_config or {}).get("objectives", []):
                     if obj.get("week_introduced", 1) == current_week and "id" in obj:
+                        keys_to_remove.add(obj["id"])
+                    if obj.get("recurring") and "id" in obj:
                         keys_to_remove.add(obj["id"])
             removed = {k for k in keys_to_remove if k in responses}
             if removed:
@@ -290,7 +297,7 @@ async def reevaluate_intake(user: AuthUser):
         # No department — still load company-wide objectives
         company_config = await dept_config_repo.get_company_config()
         all_co = (company_config or {}).get("objectives", [])
-        merged_objectives = [o for o in all_co if o.get("week_introduced", 1) <= week]
+        merged_objectives = [o for o in all_co if o.get("week_introduced", 1) <= week and week <= o.get("week_max", 99)]
 
     if not merged_objectives:
         return {"completed": False, "newly_completed": 0}
@@ -306,6 +313,26 @@ async def reevaluate_intake(user: AuthUser):
 
     # Load current responses and evaluate
     intake_responses = await load_intake_responses(_storage, user.user_id)
+
+    # Clear stale responses for recurring objectives (same logic as executor.py)
+    if week > 1:
+        from backend.models import PROGRAM_START_DATE
+        from datetime import date as _date, timedelta
+        week_start = PROGRAM_START_DATE + timedelta(weeks=week - 1)
+        # When testing with program_week_override, week_start may be in
+        # the future. Clamp to today so responses captured during the
+        # current session aren't incorrectly cleared as "stale."
+        _today = _date.today()
+        if week_start > _today:
+            week_start = _today
+        recurring_ids = {o["id"] for o in merged_objectives if o.get("recurring")}
+        for obj_id in recurring_ids:
+            resp = intake_responses.get(obj_id)
+            if resp and isinstance(resp, dict) and resp.get("captured_at"):
+                captured = resp["captured_at"][:10]
+                if captured < week_start.isoformat():
+                    del intake_responses[obj_id]
+
     from backend.agent.extraction import evaluate_objectives
     newly_completed = await evaluate_objectives(llm_messages, merged_objectives, intake_responses)
 

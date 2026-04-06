@@ -100,6 +100,16 @@ def _handle_connect(event, connection_id: str) -> dict:
         logger.info("Connect rejected: invalid token: %s", e)
         return {"statusCode": 401}
 
+    # Masquerade: swap identity when enabled (staging)
+    masquerade_email = qs.get("masquerade")
+    if masquerade_email:
+        from backend.config import settings
+        from backend.auth import _masquerade_user
+        if not (settings.dev_mode or settings.masquerade_enabled):
+            masquerade_email = None
+    if masquerade_email:
+        user = _masquerade_user(masquerade_email, user)
+
     # Store connection
     if _connections_repo:
         _connections_repo.put_connection(connection_id, user.user_id, user.email, user.name)

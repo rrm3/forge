@@ -65,6 +65,7 @@ class Settings(BaseSettings):
 
     # Dev
     dev_mode: bool = False
+    masquerade_enabled: bool = False  # Enable X-Masquerade-As without switching storage backends
 
 
 settings = Settings()

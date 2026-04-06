@@ -42,6 +42,14 @@ PLAN_OBJECTIVE_DESCRIPTION = (
     "map out requirements, or test an approach. NOT complete until the user has stated a plan."
 )
 
+# Simpler description used by the evaluator (extraction.py). The full
+# PLAN_OBJECTIVE_DESCRIPTION contains coaching instructions for the
+# conversational AI that conflict with the evaluator's "low bar" policy.
+PLAN_EVAL_DESCRIPTION = (
+    "The user has stated what they plan to work on today. "
+    "Any concrete mention of a task, project, tool, or activity counts."
+)
+
 
 def make_plan_objective(week: int) -> dict:
     """Build the synthetic plan-for-today objective injected for Week 2+."""
@@ -49,6 +57,7 @@ def make_plan_objective(week: int) -> dict:
         "id": f"plan-day{week}",
         "label": f"Plan for Day {week}",
         "description": PLAN_OBJECTIVE_DESCRIPTION,
+        "eval_description": PLAN_EVAL_DESCRIPTION,
     }
 
 

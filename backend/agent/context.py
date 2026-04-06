@@ -136,10 +136,10 @@ def build_system_prompt(
             intake_config = department_config
 
         if intake_config is not None:
-            objectives_section = _build_intake_objectives(intake_config)
-            if objectives_section:
-                parts.append(objectives_section)
-
+            # Only the progress section is injected. It shows ONE remaining
+            # objective at a time. _build_intake_objectives was removed because
+            # listing all remaining objectives caused the AI to ask about
+            # multiple/completed ones instead of following the single "next" one.
             progress_section = _build_intake_progress(intake_config, intake_responses)
             if progress_section:
                 parts.append(progress_section)
@@ -239,13 +239,20 @@ def _build_department_context(department_config: dict) -> str | None:
 # Layer 3: Intake objectives
 # ---------------------------------------------------------------------------
 
-def _build_intake_objectives(department_config: dict) -> str | None:
-    """Return objectives formatted as instructions for the AI."""
+def _build_intake_objectives(department_config: dict, intake_responses: dict | None = None) -> str | None:
+    """Return only REMAINING objectives as instructions for the AI.
+
+    Completed objectives are excluded so the AI can't ask about them.
+    """
     objectives = department_config.get("objectives", [])
     if not objectives:
         return None
+    responses = intake_responses or {}
+    remaining = [obj for obj in objectives if obj.get("id", "") not in responses]
+    if not remaining:
+        return None
     lines = ["## Intake Objectives", "Cover these topics during the conversation:"]
-    for obj in objectives:
+    for obj in remaining:
         label = obj.get("label", "")
         description = obj.get("description", "")
         lines.append(f"- **{label}**: {description}")
@@ -266,9 +273,11 @@ def _build_intake_progress(
         return None
 
     responses = intake_responses or {}
-    done = []
+    done_count = 0
     remaining = []
-    post_turn_instructions = []
+    # Track the most recently completed objective's post_turn so it can
+    # be included in the prompt when the AI responds to the user's answer.
+    pending_post_turn = None
 
     for obj in objectives:
         obj_id = obj.get("id", "")
@@ -277,23 +286,30 @@ def _build_intake_progress(
         post_turn = obj.get("post_turn", "")
 
         if obj_id in responses:
-            value = responses[obj_id].get("value", "")
-            summary = _truncate(value, 120)
-            done.append(f"  [x] {label}: {summary}")
+            done_count += 1
             if post_turn:
-                post_turn_instructions.append(post_turn)
+                # Only carry forward post_turn if this objective was answered
+                # recently (current session), not carried over from a prior week.
+                resp = responses[obj_id]
+                captured = resp.get("captured_at", "") if isinstance(resp, dict) else ""
+                if captured:
+                    from datetime import datetime, timedelta, UTC
+                    try:
+                        captured_dt = datetime.fromisoformat(captured)
+                        if datetime.now(UTC) - captured_dt < timedelta(minutes=10):
+                            pending_post_turn = post_turn
+                    except (ValueError, TypeError):
+                        pass
         else:
-            remaining.append((label, description))
+            remaining.append((label, description, post_turn))
 
     lines = ["## Intake Progress"]
 
     if not remaining:
         # All objectives complete
         lines.append("")
-        if post_turn_instructions:
-            lines.append("**INCLUDE in your next response:**")
-            for instruction in post_turn_instructions:
-                lines.append(f"  - {instruction}")
+        if pending_post_turn:
+            lines.append(f"**INCLUDE in your response:** {pending_post_turn}")
             lines.append("")
         lines.append("═══════════════════════════════════════════════════")
         lines.append("ALL OBJECTIVES COMPLETE. THE INTAKE IS DONE.")
@@ -308,30 +324,24 @@ def _build_intake_progress(
         lines.append("6. End with a brief, warm, forward-looking statement. No questions. No question marks.")
         return "\n".join(lines)
 
-    if done:
-        lines.append("**Completed:**")
-        lines.extend(done)
+    # Only inject the NEXT unanswered objective. The AI asks one question per
+    # turn. After the user answers, the evaluator marks it done and the next
+    # turn's system prompt will contain the next remaining objective.
+    next_label, next_desc, next_post_turn = remaining[0]
+    lines.append(f"{done_count} of {done_count + len(remaining)} objectives completed.")
+    lines.append(f"{len(remaining)} remaining.")
 
-    if post_turn_instructions:
+    # If the previously completed objective had a post_turn, include it
+    # so the AI can mention it when responding to the user's answer.
+    if pending_post_turn:
         lines.append("")
-        lines.append("**INCLUDE in your next response:**")
-        for instruction in post_turn_instructions:
-            lines.append(f"  - {instruction}")
-        import logging as _log
-        _log.getLogger(__name__).info("Post-turn instructions injected: %s", post_turn_instructions)
+        lines.append(f"**INCLUDE in your response:** {pending_post_turn}")
 
-    if len(remaining) <= 2:
-        # Almost done
-        lines.append("")
-        lines.append(f"**Almost done - only {len(remaining)} item(s) left:**")
-        for label, description in remaining:
-            lines.append(f"  [ ] {label}: {description}")
-        lines.append("")
-        lines.append("Ask about the remaining topic(s), then wrap up. Do not keep going after these.")
-    else:
-        lines.append("**Remaining (steer the conversation toward these):**")
-        for label, description in remaining:
-            lines.append(f"  [ ] {label}: {description}")
+    lines.append("")
+    lines.append(f"**Next objective to ask about:**")
+    lines.append(f"{next_label}: {next_desc}")
+    if next_post_turn:
+        lines.append(f"AFTER the user answers this, {next_post_turn}")
 
     return "\n".join(lines)
 
