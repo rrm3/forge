@@ -329,7 +329,7 @@ export class ForgeStack extends cdk.Stack {
         CONNECTIONS_TABLE: connectionsTable.tableName,
         POSTHOG_API_KEY: posthogApiKey,
         POSTHOG_HOST: 'https://us.i.posthog.com',
-        ...(props.devMode ? { DEV_MODE: 'true' } : {}),
+        ...(props.devMode ? { MASQUERADE_ENABLED: 'true' } : {}),
       },
       logGroup,
     });
@@ -427,7 +427,7 @@ export class ForgeStack extends cdk.Stack {
         LAMBDA_FUNCTION_NAME: `${prefix}-ws:live`, // self-invoke targets alias for warm instances
         POSTHOG_API_KEY: posthogApiKey,
         POSTHOG_HOST: 'https://us.i.posthog.com',
-        ...(props.devMode ? { DEV_MODE: 'true' } : {}),
+        ...(props.devMode ? { MASQUERADE_ENABLED: 'true' } : {}),
       },
       logGroup: wsLogGroup,
     });

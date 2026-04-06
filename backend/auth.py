@@ -132,8 +132,8 @@ async def verify_token(
     token = authorization[7:]
     user = _verify_oidc_token(token)
 
-    # Masquerade: swap identity in dev mode
-    if settings.dev_mode:
+    # Masquerade: swap identity in dev mode or when explicitly enabled on staging
+    if settings.dev_mode or settings.masquerade_enabled:
         masquerade_email = request.headers.get("X-Masquerade-As")
         if masquerade_email:
             user = _masquerade_user(masquerade_email, user)

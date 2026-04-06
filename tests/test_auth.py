@@ -130,6 +130,7 @@ class TestMasquerade:
 
         with patch("backend.auth.settings") as mock_settings:
             mock_settings.dev_mode = False
+            mock_settings.masquerade_enabled = False
             with patch("backend.auth._verify_oidc_token", return_value=mock_user):
                 user = await verify_token(
                     request=request,
