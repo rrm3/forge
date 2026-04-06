@@ -102,8 +102,12 @@ def _handle_connect(event, connection_id: str) -> dict:
 
     # Masquerade: swap identity when enabled (staging)
     masquerade_email = qs.get("masquerade")
-    if masquerade_email and (settings.dev_mode or settings.masquerade_enabled):
+    if masquerade_email:
+        from backend.config import settings
         from backend.auth import _masquerade_user
+        if not (settings.dev_mode or settings.masquerade_enabled):
+            masquerade_email = None
+    if masquerade_email:
         user = _masquerade_user(masquerade_email, user)
 
     # Store connection
