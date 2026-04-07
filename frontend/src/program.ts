@@ -31,7 +31,7 @@ export function getProgramWeek(asOf?: Date): number {
 
 export function intakeTitle(week?: number): string {
   const w = week ?? getProgramWeek();
-  return `Day ${w} Getting Started`;
+  return w <= 1 ? `Day ${w} Getting Started` : `Day ${w} Plan`;
 }
 
 export function wrapupTitle(week?: number): string {

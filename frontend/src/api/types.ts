@@ -55,6 +55,45 @@ export interface UserProfile {
   updated_at: string;
 }
 
+// Activity reports (My Team / Activity Log)
+export interface ActivityWeek {
+  intake_completed: boolean;
+  wrapup_completed: boolean;
+  session_count: number;
+  other_session_count: number;
+  message_count: number;
+  ideas_count: number;
+  tips_shared: number;
+  collabs_started: number;
+  tip_titles: string[];
+  idea_titles: string[];
+  collab_titles: string[];
+  plan: string;
+  accomplished: string;
+  insights: string[];
+}
+
+export interface ActivityReport {
+  user_id: string;
+  name: string;
+  title: string;
+  department: string;
+  team: string;
+  manager: string;
+  avatar_url: string;
+  weeks: Record<string, ActivityWeek>;
+  generated_at: string;
+  last_activity: string;
+  has_report: boolean;
+  has_profile?: boolean;
+  depth?: number;  // 1 = direct report, 2+ = indirect
+}
+
+export interface TeamResponse {
+  members: ActivityReport[];
+  team_size: number;
+}
+
 export interface JournalEntry {
   entry_id: string;
   user_id: string;
