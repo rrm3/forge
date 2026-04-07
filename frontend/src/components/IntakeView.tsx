@@ -21,6 +21,7 @@ import { TipPreviewCard } from './TipPreviewCard';
 import { CollabPreviewCard } from './CollabPreviewCard';
 import { IdeaPreviewCard } from './IdeaPreviewCard';
 import { reevaluateIntake, skipIntake } from '../api/client';
+import { intakeTitle } from '../program';
 
 interface IntakeViewProps {
   onComplete?: () => void;
@@ -283,13 +284,13 @@ export function IntakeView({ onComplete, profile }: IntakeViewProps) {
                 style={{ backgroundColor: 'var(--color-surface-white)', borderColor: 'var(--color-border)' }}
               >
                 <h3 className="text-base font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
-                  Skip getting started?
+                  Skip check-in?
                 </h3>
                 <p className="text-sm mb-3" style={{ color: 'var(--color-text-secondary)' }}>
                   This conversation helps us understand your role and goals so we can make better suggestions throughout the program. The more you share, the more relevant your experience will be.
                 </p>
                 <p className="text-sm mb-5" style={{ color: 'var(--color-text-secondary)' }}>
-                  If you'd like to come back to this later, you can resume anytime by clicking <strong>Day 1 Getting Started</strong> in the sidebar.
+                  If you'd like to come back to this later, you can resume anytime by clicking <strong>{intakeTitle()}</strong> in the sidebar.
                 </p>
                 <div className="flex gap-3 justify-end">
                   <button
@@ -505,7 +506,7 @@ interface CompletionCardProps {
 const WEEKLY_NUDGES: Record<number, { Icon: typeof Lightbulb; text: string }> = {
   2: { Icon: Sparkles, text: 'Don\'t forget to check out Tips & Tricks on the home screen to see what others in the program are learning.\n\nNEW: Collabs lets you post project ideas and find partners across departments. If you\'re looking for colleagues with complementary skills or shared interests to tackle a problem together, post it there.' },
   3: { Icon: Compass, text: 'Have a problem you keep running into? Try "I\'m stuck" to brainstorm AI solutions with your companion.' },
-  4: { Icon: Sunrise, text: 'End your AI Tuesday with a quick wrap-up to reflect on what you learned and plan your next steps.' },
+  4: { Icon: Sunrise, text: 'End your AI Tuesday with a wrap-up to share what you worked on and what you learned. Your updates help managers and program leads understand what\'s working.' },
   5: { Icon: Star, text: 'Ready to go deeper? Use "Brainstorm" to explore a bigger AI opportunity for your team.' },
 };
 
@@ -577,7 +578,7 @@ function CompletionCard({ week, onContinue }: CompletionCardProps) {
       }}
     >
       <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
-        Ready for Day {week}
+        Day {week} plan set
       </h3>
 
       <div className="flex items-start gap-3 mb-4">

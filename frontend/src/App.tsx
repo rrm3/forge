@@ -136,6 +136,7 @@ import { TipDetail } from './components/TipDetail';
 import { CollabsView } from './components/CollabsView';
 import { CollabDetail } from './components/CollabDetail';
 import { IdeasView } from './components/IdeasView';
+import { ActivityLogView, MyTeamView } from './components/MyTeamView';
 import { IntakeView } from './components/IntakeView';
 import { TopBar } from './components/TopBar';
 import { AdminPanel } from './components/AdminPanel';
@@ -269,7 +270,7 @@ function MainLayout({ profile, ideaCount }: { profile: UserProfile | null; ideaC
   const sidebar = (
     <div className="flex flex-col h-full">
       <div className="flex-1 min-h-0">
-        <SessionList ideaCount={ideaCount} />
+        <SessionList ideaCount={ideaCount} hasTeam={(isAdmin || isDepartmentAdmin) && !!profile?.direct_reports?.length} />
       </div>
     </div>
   );
@@ -542,6 +543,8 @@ function AppContent() {
         <Route path="tips/*" element={<TipsRoute />} />
         <Route path="collabs/*" element={<CollabsRoute />} />
         <Route path="ideas" element={<IdeasView />} />
+        <Route path="activity" element={<ActivityLogView />} />
+        <Route path="team" element={(isAdmin || isDepartmentAdmin) ? <MyTeamView /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

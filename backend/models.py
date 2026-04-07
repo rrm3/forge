@@ -76,7 +76,7 @@ def effective_program_week(profile: "UserProfile", timezone: str | None = None) 
 def intake_title(week: int | None = None) -> str:
     """Session title for the intake of a given program week."""
     w = week if week is not None else get_program_week()
-    return f"Day {w} Getting Started"
+    return f"Day {w} Getting Started" if w <= 1 else f"Day {w} Plan"
 
 
 def wrapup_title(week: int | None = None) -> str:

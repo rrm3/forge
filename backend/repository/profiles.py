@@ -44,6 +44,14 @@ class ProfileRepository(ABC):
         """List all profiles (admin use only)."""
         pass
 
+    async def find_by_name(self, name: str) -> UserProfile | None:
+        """Find a profile by display name. Returns first match or None."""
+        all_profiles = await self.list_all()
+        for p in all_profiles:
+            if p.name == name:
+                return p
+        return None
+
 
 class DynamoDBProfileRepository(ProfileRepository):
     """DynamoDB profile storage. One item per user (PK=user_id)."""
