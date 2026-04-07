@@ -351,6 +351,7 @@ export function ActivityLogView() {
   }
 
   return (
+    <div className="h-full overflow-y-auto">
     <div className="p-6 max-w-3xl mx-auto">
       <div className="mb-6">
         <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
@@ -373,6 +374,7 @@ export function ActivityLogView() {
       ) : (
         <MemberDetail report={report} />
       )}
+    </div>
     </div>
   );
 }
@@ -423,16 +425,19 @@ export function MyTeamView() {
 
   if (selectedMember) {
     return (
+      <div className="h-full overflow-y-auto">
       <div className="p-6 max-w-3xl mx-auto">
         <MemberDetail
           report={selectedMember}
           onBack={() => setSelectedMember(null)}
         />
       </div>
+      </div>
     );
   }
 
   return (
+    <div className="h-full overflow-y-auto">
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6">
         <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
@@ -491,6 +496,7 @@ export function MyTeamView() {
         <ChevronRight className="w-3.5 h-3.5" />
         <span className="text-xs">Click a row to see weekly details</span>
       </div>
+    </div>
     </div>
   );
 }
