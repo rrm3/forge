@@ -241,6 +241,8 @@ function MainLayout({ profile, ideaCount }: { profile: UserProfile | null; ideaC
   const navigate = useNavigate();
   const location = useLocation();
   const { state, deselectSession } = useSession();
+  const isAdmin = useAdminStore((s) => s.isAdmin);
+  const isDepartmentAdmin = useAdminStore((s) => s.isDepartmentAdmin);
   const prevActiveIdRef = useRef<string | null>(null);
 
   // When a new session is created (via WS), navigate to its chat URL
