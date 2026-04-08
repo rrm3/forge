@@ -99,7 +99,10 @@ async def _get_viewable_tree(user: AuthUser, profile) -> list[dict] | None:
     # Department admins get their full subtree in DFS order (parent, then children)
     if profile.is_department_admin and profile.direct_reports and _orgchart:
         tree = _dfs_tree(_orgchart, profile.name)
-        return tree  # list of {"name", "title", "depth", "manager"}
+        logger.info("Team tree for %s: %d people (orgchart=%s)", profile.name, len(tree), type(_orgchart).__name__)
+        if tree:
+            return tree  # list of {"name", "title", "depth"}
+        logger.warning("DFS tree empty for %s, falling back to direct_reports", profile.name)
 
     # Fallback: just direct reports (for future when we open to all managers)
     return [{"name": n, "title": "", "depth": 1} for n in (profile.direct_reports or [])]
