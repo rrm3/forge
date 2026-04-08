@@ -59,6 +59,30 @@ async def _is_full_admin(email: str) -> bool:
     return departments is not None and "*" in departments
 
 
+def _dfs_tree(orgchart, root_name: str) -> list[dict]:
+    """Return the full subtree under root_name in DFS order.
+
+    Each manager is immediately followed by their reports (recursively),
+    so the frontend can use adjacency for collapse/expand.
+    """
+    result = []
+
+    def _visit(name: str, depth: int):
+        person = orgchart.lookup_by_name(name)
+        result.append({
+            "name": name,
+            "title": person["title"] if person else "",
+            "depth": depth,
+        })
+        for report_name in orgchart.find_direct_reports(name):
+            _visit(report_name, depth + 1)
+
+    for dr in orgchart.find_direct_reports(root_name):
+        _visit(dr, 1)
+
+    return result
+
+
 async def _get_viewable_tree(user: AuthUser, profile) -> list[dict] | None:
     """Return the list of people this user can view reports for.
 
@@ -72,10 +96,10 @@ async def _get_viewable_tree(user: AuthUser, profile) -> list[dict] | None:
     if is_admin:
         return None  # Signal: show everyone
 
-    # Department admins get their full subtree
+    # Department admins get their full subtree in DFS order (parent, then children)
     if profile.is_department_admin and profile.direct_reports and _orgchart:
-        tree = _orgchart.get_tree_below(profile.name)
-        return tree  # list of {"name", "title", "depth"}
+        tree = _dfs_tree(_orgchart, profile.name)
+        return tree  # list of {"name", "title", "depth", "manager"}
 
     # Fallback: just direct reports (for future when we open to all managers)
     return [{"name": n, "title": "", "depth": 1} for n in (profile.direct_reports or [])]

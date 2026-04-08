@@ -50,24 +50,30 @@ function ParticipationGrid({ members, maxWeek, onSelect }: {
     });
   }, []);
 
-  // Figure out which depth=1 members are "managers" (have people below them)
-  // The API returns members in tree order: a depth=1 person followed by their depth=2+ reports
+  // Figure out which members are "managers" (have someone at a deeper level after them in DFS order)
   const managerNames = new Set<string>();
   if (hasHierarchy) {
     for (let i = 0; i < members.length; i++) {
-      if ((members[i].depth ?? 1) === 1 && i + 1 < members.length && (members[i + 1].depth ?? 1) > 1) {
+      const myDepth = members[i].depth ?? 1;
+      if (i + 1 < members.length && (members[i + 1].depth ?? 1) > myDepth) {
         managerNames.add(members[i].name);
       }
     }
   }
 
-  // Filter visible rows based on collapse state
-  const visibleMembers = hasHierarchy ? members.filter((m, i) => {
-    if ((m.depth ?? 1) === 1) return true;
-    // Find the nearest depth=1 ancestor above this member
-    for (let j = i - 1; j >= 0; j--) {
-      if ((members[j].depth ?? 1) === 1) {
-        return !collapsed.has(members[j].name);
+  // Filter visible rows based on collapse state.
+  // DFS order means each person's ancestors are the stack of people above them
+  // at decreasing depth levels. If ANY ancestor is collapsed, hide this row.
+  const visibleMembers = hasHierarchy ? members.filter((_m, i) => {
+    const myDepth = _m.depth ?? 1;
+    if (myDepth === 1) return true;
+    // Walk backwards to find ancestors and check if any are collapsed
+    let lookingForDepth = myDepth - 1;
+    for (let j = i - 1; j >= 0 && lookingForDepth >= 1; j--) {
+      const d = members[j].depth ?? 1;
+      if (d === lookingForDepth) {
+        if (collapsed.has(members[j].name)) return false;
+        lookingForDepth--;
       }
     }
     return true;
