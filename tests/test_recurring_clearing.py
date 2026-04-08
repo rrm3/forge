@@ -18,12 +18,12 @@ from backend.models import PROGRAM_START_DATE, make_plan_objective
 # Helper: simulate the clearing logic from executor.py:168-186
 # ---------------------------------------------------------------------------
 
-def simulate_clearing(intake_responses: dict, merged_objectives: list, current_week: int) -> dict:
+def simulate_clearing(intake_responses: dict, merged_objectives: list, current_week: int, today: date | None = None) -> dict:
     """Run the same clearing logic as executor.py, return modified responses."""
     responses = dict(intake_responses)  # copy
     if responses and current_week > 1 and merged_objectives:
         week_start = PROGRAM_START_DATE + timedelta(weeks=current_week - 1)
-        _today = date.today()
+        _today = today or date.today()
         if week_start > _today:
             week_start = _today
         recurring_ids = {o["id"] for o in merged_objectives if o.get("recurring")}
@@ -249,11 +249,15 @@ class TestScenarioD:
             "plan-day2": make_response("2026-03-31"),
         }
 
+    # Pin "today" to April 6 - this scenario tests the clamping behavior
+    # when week_start (April 7) is in the future relative to today.
+    PINNED_TODAY = date(2026, 4, 6)
+
     def test_old_recurring_cleared_with_clamping(self):
         """Week 2 recurring responses (3/31) should be cleared even with clamping."""
         # Today is April 6, week_start=April 7 -> clamped to April 6
         # 2026-03-31 < 2026-04-06 -> cleared
-        result = simulate_clearing(self.responses, self.objectives, current_week=3)
+        result = simulate_clearing(self.responses, self.objectives, current_week=3, today=self.PINNED_TODAY)
         assert "c0-applied-last-week" not in result
         assert "c0-blockers" not in result
 
@@ -262,7 +266,7 @@ class TestScenarioD:
         responses = dict(self.responses)
         responses["c0-applied-last-week"] = make_response("2026-04-06")
         responses["c0-blockers"] = make_response("2026-04-06")
-        result = simulate_clearing(responses, self.objectives, current_week=3)
+        result = simulate_clearing(responses, self.objectives, current_week=3, today=self.PINNED_TODAY)
         # With clamping: week_start clamped to April 6, "2026-04-06" < "2026-04-06" is False
         assert "c0-applied-last-week" in result
         assert "c0-blockers" in result
@@ -273,7 +277,7 @@ class TestScenarioD:
         # First turn: old recurring cleared, then re-answered today
         responses["c0-applied-last-week"] = make_response("2026-04-06")
         responses["c0-blockers"] = make_response("2026-04-06")
-        result = simulate_clearing(responses, self.objectives, current_week=3)
+        result = simulate_clearing(responses, self.objectives, current_week=3, today=self.PINNED_TODAY)
         # Today's responses survive clamping
         assert "c0-applied-last-week" in result
         assert "c0-blockers" in result
