@@ -53,6 +53,7 @@ async def lifespan(app: FastAPI):
 
     # Wire orgchart into deps now that it's loaded
     set_profile_deps(repos["profiles"], orgchart, sessions_repo=repos["sessions"], storage=storage, user_ideas_repo=repos["user_ideas"])
+    set_team_deps(repos["profiles"], storage, orgchart=orgchart, dept_config_repo=DepartmentConfigRepository(storage))
     set_ws_deps(
         sessions_repo=repos["sessions"],
         profiles_repo=repos["profiles"],
