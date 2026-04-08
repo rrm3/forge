@@ -161,6 +161,10 @@ def enrich_profile_kwargs(orgchart: OrgChart, email: str) -> dict:
     # work_summary intentionally NOT pre-filled from org chart.
     # It should come from the user's own description during intake.
 
+    # Set name from org chart (ensures masquerade profiles get the real name)
+    if "name" in keys and entry["name"]:
+        result["name"] = entry["name"]
+
     # Find direct reports by name
     name = entry["name"] if "name" in keys else None
     if name:
