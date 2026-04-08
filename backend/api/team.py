@@ -84,28 +84,28 @@ def _dfs_tree(orgchart, root_name: str) -> list[dict]:
 
 
 async def _get_viewable_tree(user: AuthUser, profile) -> list[dict] | None:
-    """Return the list of people this user can view reports for.
+    """Determine who this user is allowed to view.
 
-    Returns list of {"name", "title", "depth"} dicts, or None for full admins (all).
-    - Full admins: None (show everyone, flat)
-    - Department admins with direct_reports: full subtree via org chart with depth
-    - Others: empty (no access)
+    Returns:
+        None: full admin, can see everyone
+        list[dict]: specific people (name/title/depth), may be empty
     """
-    is_admin = await _is_full_admin(user.email)
+    # Full admins see everyone
+    if await _is_full_admin(user.email):
+        return None
 
-    if is_admin:
-        return None  # Signal: show everyone
+    # Department admins: full subtree via org chart
+    if profile.is_department_admin:
+        if _orgchart and profile.name:
+            tree = _dfs_tree(_orgchart, profile.name)
+            logger.info("Team tree for %s: %d people", profile.name, len(tree))
+            return tree
+        # Orgchart not loaded - deny rather than degrade to partial access
+        logger.warning("Orgchart not available for dept admin %s, denying team access", profile.name)
+        return []
 
-    # Department admins get their full subtree in DFS order (parent, then children)
-    if profile.is_department_admin and profile.direct_reports and _orgchart:
-        tree = _dfs_tree(_orgchart, profile.name)
-        logger.info("Team tree for %s: %d people (orgchart=%s)", profile.name, len(tree), type(_orgchart).__name__)
-        if tree:
-            return tree  # list of {"name", "title", "depth"}
-        logger.warning("DFS tree empty for %s, falling back to direct_reports", profile.name)
-
-    # Fallback: just direct reports (for future when we open to all managers)
-    return [{"name": n, "title": "", "depth": 1} for n in (profile.direct_reports or [])]
+    # Not an admin of any kind - no access
+    return []
 
 
 async def _build_member_entry(name: str, profile_cache: dict | None = None) -> dict:
@@ -154,6 +154,7 @@ async def team_members(user: AuthUser):
     """Return activity reports for people this user can view.
 
     Full admins see everyone. Department admins see their full org subtree.
+    Regular users get 403.
     """
     profile = await _profiles_repo.get(user.user_id)
     if not profile:
@@ -207,9 +208,13 @@ async def team_member_detail(user_id: str, user: AuthUser):
     if target_profile is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Check access
+    # Check access: recompute the viewable set and verify target is in it
     viewable = await _get_viewable_tree(user, profile)
-    if viewable is not None:
+
+    # Full admin can see anyone
+    if viewable is None:
+        pass
+    else:
         viewable_names = {entry["name"] for entry in viewable}
         if target_profile.name not in viewable_names:
             raise HTTPException(status_code=403, detail="Access denied")

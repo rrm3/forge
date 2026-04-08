@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, RotateCcw, UserRoundCog, Settings, Code } from 'lucide-react';
+import { LogOut, RotateCcw, UserRoundCog, Settings, Code, Users } from 'lucide-react';
 import { useAuth } from '../auth/useAuth';
 import { useAdminStore } from '../state/adminStore';
 import { resetIntake } from '../api/client';
@@ -120,6 +120,21 @@ export function TopBar({ profile }: TopBarProps = {}) {
               >
                 <RotateCcw className="w-4 h-4" strokeWidth={1.5} />
                 Reset {intakeTitle()}
+              </button>
+            )}
+            {hasAdminAccess && !!profile?.direct_reports?.length && (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  navigate('/team');
+                }}
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm transition-colors"
+                style={{ color: '#4A5568' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              >
+                <Users className="w-4 h-4" strokeWidth={1.5} />
+                My Team
               </button>
             )}
             {hasAdminAccess && (

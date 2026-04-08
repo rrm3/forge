@@ -241,8 +241,6 @@ function MainLayout({ profile, ideaCount }: { profile: UserProfile | null; ideaC
   const navigate = useNavigate();
   const location = useLocation();
   const { state, deselectSession } = useSession();
-  const isAdmin = useAdminStore((s) => s.isAdmin);
-  const isDepartmentAdmin = useAdminStore((s) => s.isDepartmentAdmin);
   const prevActiveIdRef = useRef<string | null>(null);
 
   // When a new session is created (via WS), navigate to its chat URL
@@ -272,7 +270,7 @@ function MainLayout({ profile, ideaCount }: { profile: UserProfile | null; ideaC
   const sidebar = (
     <div className="flex flex-col h-full">
       <div className="flex-1 min-h-0">
-        <SessionList ideaCount={ideaCount} hasTeam={(isAdmin || isDepartmentAdmin) && !!profile?.direct_reports?.length} />
+        <SessionList ideaCount={ideaCount} />
       </div>
     </div>
   );
