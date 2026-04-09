@@ -37,8 +37,17 @@ function ParticipationGrid({ members, maxWeek, onSelect }: {
   const weeks = Array.from({ length: maxWeek }, (_, i) => i + 1);
   const hasHierarchy = members.some(m => (m.depth ?? 1) > 1);
 
-  // Track which manager names (depth=1 with people below them) are collapsed
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Track which manager names are collapsed. Default: all collapsed.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    const managers = new Set<string>();
+    for (let i = 0; i < members.length; i++) {
+      const myDepth = members[i].depth ?? 1;
+      if (i + 1 < members.length && (members[i + 1].depth ?? 1) > myDepth) {
+        managers.add(members[i].name);
+      }
+    }
+    return managers;
+  });
 
   const toggleCollapse = useCallback((name: string, e: React.MouseEvent) => {
     e.stopPropagation();

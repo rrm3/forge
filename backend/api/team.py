@@ -165,10 +165,18 @@ async def team_members(user: AuthUser):
     if viewable is not None and not viewable:
         raise HTTPException(status_code=403, detail="No team access")
 
-    # Full admin: load all profiles (flat, depth=1)
+    # Full admin: full org tree from CEO down
     if viewable is None:
         all_profiles = await _profiles_repo.list_all()
-        tree = [{"name": p.name, "title": "", "depth": 1} for p in all_profiles if p.name != profile.name]
+        if _orgchart:
+            # Find the CEO (person with no manager) and build full DFS tree
+            ceo = _orgchart._db.execute("SELECT name FROM people WHERE reports_to IS NULL OR reports_to = ''").fetchone()
+            if ceo:
+                tree = _dfs_tree(_orgchart, ceo["name"])
+            else:
+                tree = [{"name": p.name, "title": "", "depth": 1} for p in all_profiles if p.name != profile.name]
+        else:
+            tree = [{"name": p.name, "title": "", "depth": 1} for p in all_profiles if p.name != profile.name]
     else:
         all_profiles = await _profiles_repo.list_all()
         tree = viewable
