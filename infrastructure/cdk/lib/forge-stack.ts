@@ -9,6 +9,7 @@ import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as appscaling from 'aws-cdk-lib/aws-applicationautoscaling';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 
@@ -19,7 +20,9 @@ interface ForgeStackProps extends cdk.StackProps {
   oidcProviderUrl?: string;
   oidcClientId?: string;
   backendProvisionedConcurrency?: number;
+  backendPeakConcurrency?: number;
   wsProvisionedConcurrency?: number;
+  wsPeakConcurrency?: number;
   posthogApiKey?: string;
   devMode?: boolean;
 }
@@ -358,6 +361,25 @@ export class ForgeStack extends cdk.Stack {
       backendAlias.node.addDependency(backendFunction.currentVersion);
     }
 
+    // Scheduled scaling: ramp up provisioned concurrency for AI Tuesdays.
+    // "Tuesday" spans 8am NZST (Mon 19:00 UTC) to 8pm PST (Wed 04:00 UTC)
+    // to cover all global timezones. Conservative UTC bounds handle DST shifts.
+    const backendPeak = props.backendPeakConcurrency ?? 0;
+    if (backendPC > 0 && backendPeak > backendPC) {
+      const backendScaling = backendAlias.addAutoScaling({
+        minCapacity: backendPC,
+        maxCapacity: backendPeak,
+      });
+      backendScaling.scaleOnSchedule('TuesdayScaleUp', {
+        schedule: appscaling.Schedule.cron({ weekDay: 'MON', hour: '19', minute: '0' }),
+        minCapacity: backendPeak,
+      });
+      backendScaling.scaleOnSchedule('TuesdayScaleDown', {
+        schedule: appscaling.Schedule.cron({ weekDay: 'WED', hour: '4', minute: '0' }),
+        minCapacity: backendPC,
+      });
+    }
+
     // Function URL on 'live' alias (not $LATEST) so requests hit warm instances
     const functionUrl = backendAlias.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
@@ -445,6 +467,23 @@ export class ForgeStack extends cdk.Stack {
         `{{resolve:ssm:/forge/live-versions/${prefix}-ws}}`,
       );
       wsAlias.node.addDependency(wsFunction.currentVersion);
+    }
+
+    // Scheduled scaling for WebSocket (same Tuesday pattern as backend)
+    const wsPeak = props.wsPeakConcurrency ?? 0;
+    if (wsPC > 0 && wsPeak > wsPC) {
+      const wsScaling = wsAlias.addAutoScaling({
+        minCapacity: wsPC,
+        maxCapacity: wsPeak,
+      });
+      wsScaling.scaleOnSchedule('TuesdayScaleUp', {
+        schedule: appscaling.Schedule.cron({ weekDay: 'MON', hour: '19', minute: '0' }),
+        minCapacity: wsPeak,
+      });
+      wsScaling.scaleOnSchedule('TuesdayScaleDown', {
+        schedule: appscaling.Schedule.cron({ weekDay: 'WED', hour: '4', minute: '0' }),
+        minCapacity: wsPC,
+      });
     }
 
     // SelfInvoke is part of wsExtraPolicy (managed policy above)
