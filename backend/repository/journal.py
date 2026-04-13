@@ -100,10 +100,26 @@ class DynamoDBJournalRepository(JournalRepository):
 
     async def create(self, entry: JournalEntry) -> None:
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None,
-            partial(self.table.put_item, Item=self._serialize(entry)),
-        )
+        last_exc: ClientError | None = None
+        for attempt in range(3):
+            try:
+                await loop.run_in_executor(
+                    None,
+                    partial(self.table.put_item, Item=self._serialize(entry)),
+                )
+                return
+            except ClientError as exc:
+                error_code = exc.response.get("Error", {}).get("Code", "")
+                if error_code in (
+                    "ProvisionedThroughputExceededException",
+                    "ThrottlingException",
+                    "InternalServerError",
+                ):
+                    last_exc = exc
+                    await asyncio.sleep(0.5 * (2 ** attempt))
+                else:
+                    raise
+        raise last_exc  # type: ignore[misc]
 
     async def delete(self, user_id: str, entry_id: str) -> None:
         loop = asyncio.get_event_loop()

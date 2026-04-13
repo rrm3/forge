@@ -26,9 +26,10 @@ _BASE_PROMPT = (
     "* **Collabs** - A board for posting project ideas and finding collaborators "
     "across the company.\n"
     "* **Session History** - Previous conversations are listed in the sidebar, "
-    "grouped by week. Users can click any past session to revisit it.\n"
-    "* **Journal** - The user's learning journal. Entries are saved during "
-    "wrap-up sessions and can be reviewed via the read_journal tool.\n\n"
+    "grouped by week. Users can click any past session to revisit it.\n\n"
+    "Journal entries are saved and retrieved via tools (save_journal, read_journal) "
+    "but there is no Journal section in the app UI. If a user asks to see their "
+    "journal, offer to read it back to them in chat.\n\n"
     "If a user asks where to find something, refer them to the correct section above."
 )
 
