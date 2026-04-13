@@ -66,8 +66,13 @@ def _dfs_tree(orgchart, root_name: str) -> list[dict]:
     so the frontend can use adjacency for collapse/expand.
     """
     result = []
+    visited: set[str] = set()
 
     def _visit(name: str, depth: int):
+        key = name.lower()
+        if key in visited:
+            return
+        visited.add(key)
         person = orgchart.lookup_by_name(name)
         result.append({
             "name": name,
@@ -81,6 +86,28 @@ def _dfs_tree(orgchart, root_name: str) -> list[dict]:
         _visit(dr, 1)
 
     return result
+
+
+def _is_in_subtree(orgchart, admin_name: str, target_name: str) -> bool:
+    """Check if target is in admin's org subtree by walking up the manager chain.
+
+    Uses the orgchart's reports_to chain rather than name matching,
+    so name collisions between different people cannot bypass access checks.
+    """
+    current = target_name
+    visited: set[str] = set()
+    while current:
+        key = current.lower()
+        if key in visited:
+            return False
+        visited.add(key)
+        if key == admin_name.lower():
+            return True
+        person = orgchart.lookup_by_name(current)
+        if not person:
+            return False
+        current = person["reports_to"]
+    return False
 
 
 async def _get_viewable_tree(user: AuthUser, profile) -> list[dict] | None:
@@ -170,9 +197,9 @@ async def team_members(user: AuthUser):
         all_profiles = await _profiles_repo.list_all()
         if _orgchart:
             # Find the CEO (person with no manager) and build full DFS tree
-            ceo = _orgchart._db.execute("SELECT name FROM people WHERE reports_to IS NULL OR reports_to = ''").fetchone()
-            if ceo:
-                tree = _dfs_tree(_orgchart, ceo["name"])
+            root_name = _orgchart.find_root()
+            if root_name:
+                tree = _dfs_tree(_orgchart, root_name)
             else:
                 tree = [{"name": p.name, "title": "", "depth": 1} for p in all_profiles if p.name != profile.name]
         else:
@@ -216,15 +243,11 @@ async def team_member_detail(user_id: str, user: AuthUser):
     if target_profile is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Check access: recompute the viewable set and verify target is in it
-    viewable = await _get_viewable_tree(user, profile)
-
-    # Full admin can see anyone
-    if viewable is None:
-        pass
-    else:
-        viewable_names = {entry["name"] for entry in viewable}
-        if target_profile.name not in viewable_names:
+    # Check access: full admins see anyone, dept admins must have target in subtree
+    if not await _is_full_admin(user.email):
+        if not profile.is_department_admin or not _orgchart or not profile.name:
+            raise HTTPException(status_code=403, detail="Access denied")
+        if not _is_in_subtree(_orgchart, profile.name, target_profile.name):
             raise HTTPException(status_code=403, detail="Access denied")
 
     report = await _load_report(user_id)
