@@ -50,6 +50,13 @@ class OrgChart:
         ).fetchone()
         return row
 
+    def find_root(self) -> str | None:
+        """Find the root person (no reports_to). Returns name or None."""
+        row = self._db.execute(
+            "SELECT name FROM people WHERE reports_to IS NULL OR reports_to = ''"
+        ).fetchone()
+        return row["name"] if row else None
+
     def find_direct_reports(self, name: str) -> list[str]:
         """Return names of all people whose reports_to matches this name."""
         rows = self._db.execute(
