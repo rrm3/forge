@@ -341,6 +341,7 @@ async def run_agent_session(
             last_flush_time = time.monotonic()
 
     # Run the loop
+    transcript_len_before_turn = len(transcript)
     first_assistant_text: list[str] = []
     # Defer the 'done' message until after all cleanup so the session lock/mutex
     # is released before the frontend allows sending the next message.
@@ -491,17 +492,14 @@ async def run_agent_session(
             session.updated_at = datetime.now(UTC)
             await deps.sessions_repo.update(session)
 
-        # Detect prepared tips and send preview data to frontend
-        if session_type in ("tip", "intake"):
-            await _check_tip_prepared(transcript, sender, session_id)
-
-        # Detect prepared collabs and send preview data to frontend
-        if session_type in ("collab", "intake"):
-            await _check_collab_prepared(transcript, sender, session_id)
-
-        # Detect prepared ideas and send preview data to frontend
-        if session_type in ("brainstorm", "chat", "tip", "stuck", "intake", "collab"):
-            await _check_idea_prepared(transcript, sender, session_id)
+        # Detect prepared tips/collabs/ideas and send preview data to frontend.
+        # These tools are available in all session types (except incomplete intake
+        # which excludes prepare_tip and prepare_collab via FilteredToolRegistry),
+        # so the checks must run broadly - not just for the "tip"/"collab" types.
+        current_turn = transcript[transcript_len_before_turn:]
+        await _check_tip_prepared(current_turn, sender, session_id)
+        await _check_collab_prepared(current_turn, sender, session_id)
+        await _check_idea_prepared(current_turn, sender, session_id)
 
         # Intake state machine: check required fields and mark complete when done
         if session_type == "intake" and not intake_is_complete:
