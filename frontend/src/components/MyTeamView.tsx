@@ -5,8 +5,8 @@
  * Managers see their direct reports' data; everyone sees their own.
  */
 
-import { Fragment, useEffect, useState, useCallback } from 'react';
-import { Check, X as XIcon, ChevronRight, ChevronDown, ChevronLeft, ClipboardList, Users, AlertCircle, Lightbulb, BookOpen } from 'lucide-react';
+import { Fragment, useEffect, useState, useCallback, useMemo } from 'react';
+import { Check, X as XIcon, ChevronRight, ChevronDown, ChevronLeft, ClipboardList, Users, AlertCircle, Lightbulb, BookOpen, Filter, Download } from 'lucide-react';
 import { getMyActivity, getTeamMembers } from '../api/client';
 import { UserAvatar } from './UserAvatar';
 import { getProgramWeek } from '../program';
@@ -397,11 +397,51 @@ export function ActivityLogView() {
 
 // ── My Team (visible to managers) ───────────────────────────────────────────
 
+type FilterMode = 'all' | 'missing-intake' | 'missing-wrapup' | 'no-activity' | 'not-joined';
+
+function csvSafe(value: string): string {
+  let s = (value || '').replace(/"/g, '""');
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return `"${s}"`;
+}
+
+function exportParticipationCsv(members: ActivityReport[], maxWeek: number) {
+  const weeks = Array.from({ length: maxWeek }, (_, i) => i + 1);
+  const header = ['Name', 'Title', 'Department',
+    ...weeks.flatMap(w => [`Day ${w} Plan`, `Day ${w} Wrap-up`]),
+  ].join(',');
+
+  const rows = members.map(m => {
+    const cells = [
+      csvSafe(m.name || ''),
+      csvSafe(m.title || ''),
+      csvSafe(m.department || ''),
+    ];
+    for (const w of weeks) {
+      const week = m.weeks?.[String(w)];
+      cells.push(week?.intake_completed ? 'Yes' : 'No');
+      cells.push(week?.wrapup_completed ? 'Yes' : 'No');
+    }
+    return cells.join(',');
+  });
+
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ai-tuesdays-participation-week${maxWeek}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function MyTeamView() {
   const [teamData, setTeamData] = useState<TeamResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMember, setSelectedMember] = useState<ActivityReport | null>(null);
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [filterWeek, setFilterWeek] = useState<number>(0); // 0 = current week
   const maxWeek = getProgramWeek();
 
   useEffect(() => {
@@ -409,6 +449,25 @@ export function MyTeamView() {
       .then(d => { setTeamData(d); setLoading(false); })
       .catch(e => { setError(e.message); setLoading(false); });
   }, []);
+
+  const members = teamData?.members ?? [];
+  const effectiveWeek = filterWeek || maxWeek;
+
+  // All hooks must be above early returns
+  const filteredMembers = useMemo(() => {
+    if (filterMode === 'all') return members;
+    const wk = String(effectiveWeek);
+    return members.filter(m => {
+      const week = m.weeks?.[wk];
+      switch (filterMode) {
+        case 'missing-intake': return !week?.intake_completed;
+        case 'missing-wrapup': return !week?.wrapup_completed;
+        case 'no-activity': return !week?.intake_completed && !week?.wrapup_completed;
+        case 'not-joined': return !m.has_profile;
+        default: return true;
+      }
+    });
+  }, [members, filterMode, effectiveWeek]);
 
   if (loading) {
     return (
@@ -431,9 +490,7 @@ export function MyTeamView() {
 
   if (!teamData) return null;
 
-  const members = teamData.members;
-
-  // Stats
+  // Stats (always based on full member list)
   const activeThisWeek = members.filter(m => m.weeks?.[String(maxWeek)]?.intake_completed).length;
   const wrappedUpThisWeek = members.filter(m => m.weeks?.[String(maxWeek)]?.wrapup_completed).length;
   const noProfile = members.filter(m => !m.has_profile).length;
@@ -494,23 +551,77 @@ export function MyTeamView() {
         </div>
       </div>
 
+      {/* Filter bar + export */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Filter className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} />
+          <select
+            value={filterMode}
+            onChange={e => setFilterMode(e.target.value as FilterMode)}
+            className="text-sm rounded-md border px-2 py-1.5 outline-none"
+            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-surface-white)' }}
+          >
+            <option value="all">All members</option>
+            <option value="missing-intake">Missing plan</option>
+            <option value="missing-wrapup">Missing wrap-up</option>
+            <option value="no-activity">No activity</option>
+            <option value="not-joined">Not yet joined</option>
+          </select>
+          {filterMode !== 'all' && filterMode !== 'not-joined' && (
+            <select
+              value={filterWeek}
+              onChange={e => setFilterWeek(Number(e.target.value))}
+              className="text-sm rounded-md border px-2 py-1.5 outline-none"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-surface-white)' }}
+            >
+              <option value={0}>Current week (Day {maxWeek})</option>
+              {Array.from({ length: maxWeek }, (_, i) => i + 1).map(w => (
+                <option key={w} value={w}>Day {w}</option>
+              ))}
+            </select>
+          )}
+          {filterMode !== 'all' && (
+            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              {filteredMembers.length} of {members.length}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => exportParticipationCsv(filterMode === 'all' ? members : filteredMembers, maxWeek)}
+          className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border transition-colors hover:bg-[var(--color-surface-raised)]"
+          style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}
+        >
+          <Download className="w-3.5 h-3.5" />
+          Export CSV
+        </button>
+      </div>
+
       {/* Participation grid */}
       <div
         className="rounded-lg border overflow-hidden"
         style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface-white)' }}
       >
         <ParticipationGrid
-          members={members}
+          members={filteredMembers}
           maxWeek={maxWeek}
           onSelect={setSelectedMember}
         />
       </div>
 
       {/* Click hint */}
-      <div className="flex items-center gap-1.5 mt-3" style={{ color: 'var(--color-text-placeholder)' }}>
-        <ChevronRight className="w-3.5 h-3.5" />
-        <span className="text-xs">Click a row to see weekly details</span>
-      </div>
+      {filteredMembers.length > 0 && (
+        <div className="flex items-center gap-1.5 mt-3" style={{ color: 'var(--color-text-placeholder)' }}>
+          <ChevronRight className="w-3.5 h-3.5" />
+          <span className="text-xs">Click a row to see weekly details</span>
+        </div>
+      )}
+      {filteredMembers.length === 0 && filterMode !== 'all' && (
+        <div className="text-center py-8">
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            No members match this filter.
+          </p>
+        </div>
+      )}
     </div>
     </div>
   );
