@@ -26,6 +26,20 @@ EXTRACTION_MODEL = "bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
 # More capable model for nuanced judgment (objective evaluation)
 EVALUATION_MODEL = "bedrock/global.anthropic.claude-sonnet-4-6"
 
+def _parse_json_response(text: str):
+    """Strip markdown fences and parse JSON. Returns parsed object or None."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+
 # Fields we extract and their descriptions (for the extraction prompt)
 EXTRACTABLE_FIELDS = {
     "work_summary": "Brief description of what they do day-to-day",
@@ -319,16 +333,23 @@ async def evaluate_objectives(
             return {}
 
         text = response.content.strip()
-        # Strip markdown fences if present
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-            if text.endswith("```"):
-                text = text[:-3]
-            text = text.strip()
+        extracted = _parse_json_response(text)
 
-        extracted = json.loads(text)
+        # If parsing failed or wrong type, retry once asking the model to fix its output
+        if extracted is None or not isinstance(extracted, dict):
+            logger.warning("Objective evaluation returned invalid JSON, retrying")
+            retry_messages = messages + [
+                {"role": "assistant", "content": text},
+                {"role": "user", "content": "Your response was not valid JSON. Respond with ONLY a JSON object mapping objective IDs to summary strings. No explanation, no markdown."},
+            ]
+            response = await call_llm(retry_messages, model=EVALUATION_MODEL, stream=False)
+            if not response.content:
+                return {}
+            text = response.content.strip()
+            extracted = _parse_json_response(text)
 
-        if not isinstance(extracted, dict):
+        if extracted is None or not isinstance(extracted, dict):
+            logger.warning("Objective evaluation returned invalid JSON after retry")
             return {}
 
         # Filter to valid remaining objective IDs, store summaries as values
@@ -348,9 +369,6 @@ async def evaluate_objectives(
 
         return result
 
-    except json.JSONDecodeError:
-        logger.warning("Objective evaluation returned invalid JSON")
-        return {}
     except Exception:
         logger.warning("Objective evaluation failed", exc_info=True)
         return {}
