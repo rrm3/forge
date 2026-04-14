@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck, Home, X, BookOpen, Users, ExternalLink } from 'lucide-react';
+import { Lightbulb, Compass, Star, Sunrise, MessageCircle, Search, Plus, ChevronDown, ChevronRight, ClipboardCheck, ClipboardList, Home, X, BookOpen, Users, ExternalLink } from 'lucide-react';
 import Tooltip from '@mui/material/Tooltip';
 import { useSession } from '../state/SessionContext';
 import { resetIntake } from '../api/client';
@@ -233,6 +233,7 @@ export function SessionList({ ideaCount }: SessionListProps) {
   const showIdeas = location.pathname === '/ideas';
   const showTips = location.pathname.startsWith('/tips');
   const showCollabs = location.pathname.startsWith('/collabs');
+  const showActivity = location.pathname === '/activity';
 
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--color-surface-white)' }}>
@@ -342,6 +343,32 @@ export function SessionList({ ideaCount }: SessionListProps) {
             style={{ color: showCollabs ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
           >
             Collabs
+          </span>
+        </button>
+      </div>
+
+      {/* Activity Log - visible to everyone */}
+      <div className="px-2">
+        <button
+          onClick={() => navigate('/activity')}
+          className={[
+            'flex items-center gap-2 w-full pl-2 pr-2 rounded-lg transition-colors',
+            showActivity
+              ? 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)]'
+              : 'hover:bg-[var(--color-surface-raised)]',
+          ].join(' ')}
+          style={{ height: '36px', minHeight: '36px' }}
+        >
+          <ClipboardList
+            className="flex-shrink-0 w-3.5 h-3.5"
+            strokeWidth={1.5}
+            style={{ color: showActivity ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
+          />
+          <span
+            className="text-sm font-medium"
+            style={{ color: showActivity ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
+          >
+            Activity Log
           </span>
         </button>
       </div>

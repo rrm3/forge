@@ -136,6 +136,7 @@ import { TipDetail } from './components/TipDetail';
 import { CollabsView } from './components/CollabsView';
 import { CollabDetail } from './components/CollabDetail';
 import { IdeasView } from './components/IdeasView';
+import { ActivityLogView, MyTeamView } from './components/MyTeamView';
 import { IntakeView } from './components/IntakeView';
 import { TopBar } from './components/TopBar';
 import { AdminPanel } from './components/AdminPanel';
@@ -542,6 +543,8 @@ function AppContent() {
         <Route path="tips/*" element={<TipsRoute />} />
         <Route path="collabs/*" element={<CollabsRoute />} />
         <Route path="ideas" element={<IdeasView />} />
+        <Route path="activity" element={<ActivityLogView />} />
+        <Route path="team" element={(isAdmin || isDepartmentAdmin) ? <MyTeamView /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

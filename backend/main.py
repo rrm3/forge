@@ -23,6 +23,8 @@ from backend.api.user_ideas import router as user_ideas_router
 from backend.api.user_ideas import set_user_ideas_deps
 from backend.api.admin import router as admin_router
 from backend.api.admin import set_admin_deps
+from backend.api.team import router as team_router
+from backend.api.team import set_team_deps
 from backend.api.transcription import router as transcription_router
 from backend.api.websocket import router as ws_router
 from backend.api.websocket import set_ws_deps
@@ -51,6 +53,7 @@ async def lifespan(app: FastAPI):
 
     # Wire orgchart into deps now that it's loaded
     set_profile_deps(repos["profiles"], orgchart, sessions_repo=repos["sessions"], storage=storage, user_ideas_repo=repos["user_ideas"])
+    set_team_deps(repos["profiles"], storage, orgchart=orgchart, dept_config_repo=DepartmentConfigRepository(storage))
     set_ws_deps(
         sessions_repo=repos["sessions"],
         profiles_repo=repos["profiles"],
@@ -144,6 +147,7 @@ set_admin_deps(
     tips_repo=repos["tips"],
     storage=storage,
 )
+set_team_deps(repos["profiles"], storage, orgchart=orgchart, dept_config_repo=DepartmentConfigRepository(storage))
 
 # Include REST routers under /api prefix
 app.include_router(sessions_router, prefix="/api")
@@ -155,6 +159,7 @@ app.include_router(collabs_router, prefix="/api")
 app.include_router(user_ideas_router, prefix="/api")
 app.include_router(transcription_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
+app.include_router(team_router, prefix="/api")
 
 # WebSocket endpoint (no /api prefix - at root /ws)
 app.include_router(ws_router)

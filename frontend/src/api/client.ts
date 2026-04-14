@@ -1,4 +1,4 @@
-import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, CompanyConfig, Tip, TipComment, UserIdea, AdminUserSummary, AdminUserIntake, Collaboration, CollabComment } from './types';
+import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, CompanyConfig, Tip, TipComment, UserIdea, AdminUserSummary, AdminUserIntake, Collaboration, CollabComment, ActivityReport, TeamResponse } from './types';
 
 let getTokenFn: (() => Promise<string | null>) | null = null;
 let tokenGetterReady: (() => void) | null = null;
@@ -522,4 +522,18 @@ export async function deleteCollabComment(collabId: string, commentId: string): 
     { method: 'DELETE' },
   );
   await checkResponse(res);
+}
+
+// Team / Activity Log API
+
+export async function getMyActivity(): Promise<ActivityReport> {
+  const res = await fetchWithAuth(`${API_BASE}/api/team/me`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function getTeamMembers(): Promise<TeamResponse> {
+  const res = await fetchWithAuth(`${API_BASE}/api/team/members`);
+  await checkResponse(res);
+  return res.json();
 }
