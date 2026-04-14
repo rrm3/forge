@@ -14,7 +14,9 @@ const ENV_CONFIG: Record<string, {
   oidcProviderUrl: string;
   oidcClientId: string;
   backendProvisionedConcurrency: number;
+  backendPeakConcurrency: number;
   wsProvisionedConcurrency: number;
+  wsPeakConcurrency: number;
   posthogApiKey: string;
   devMode?: boolean;
 }> = {
@@ -23,8 +25,10 @@ const ENV_CONFIG: Record<string, {
     acmCertificateArn: 'arn:aws:acm:us-east-1:887690967243:certificate/3c05f20c-617f-4dcf-8958-374b3c09770d',
     oidcProviderUrl: 'https://id.digitalscience.ai',
     oidcClientId: '0bfe6d8ddb94027981248d2a0bd21991',
-    backendProvisionedConcurrency: 10,
-    wsProvisionedConcurrency: 20,
+    backendProvisionedConcurrency: 5,
+    backendPeakConcurrency: 25,
+    wsProvisionedConcurrency: 10,
+    wsPeakConcurrency: 50,
     posthogApiKey: 'phc_Qn6PGsXODJxvYCMV8Vv099fYpf9oAi1OPctdvgwb828',
   },
   staging: {
@@ -33,7 +37,9 @@ const ENV_CONFIG: Record<string, {
     oidcProviderUrl: 'https://id-staging.digitalscience.ai',
     oidcClientId: 'bf985c39ba613a31ddce92186bb374f8',
     backendProvisionedConcurrency: 0,
+    backendPeakConcurrency: 0,
     wsProvisionedConcurrency: 0,
+    wsPeakConcurrency: 0,
     posthogApiKey: 'phc_7wUFuz56pMvIhqnSalLqHakMDY2PKeT4KIM1NZHFQpB',
     devMode: true,
   },
@@ -49,7 +55,9 @@ new ForgeStack(app, `forge-${environment}`, {
   oidcProviderUrl: app.node.tryGetContext('oidcProviderUrl') || envConfig?.oidcProviderUrl || '',
   oidcClientId: app.node.tryGetContext('oidcClientId') || envConfig?.oidcClientId || '',
   backendProvisionedConcurrency: envConfig?.backendProvisionedConcurrency ?? 0,
+  backendPeakConcurrency: envConfig?.backendPeakConcurrency ?? 0,
   wsProvisionedConcurrency: envConfig?.wsProvisionedConcurrency ?? 0,
+  wsPeakConcurrency: envConfig?.wsPeakConcurrency ?? 0,
   posthogApiKey: envConfig?.posthogApiKey || '',
   devMode: envConfig?.devMode ?? false,
   env: {
