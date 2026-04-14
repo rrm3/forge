@@ -29,7 +29,7 @@ class TestSessionTypePrompts:
         content = load_skill("wrapup")
         assert content is not None
         assert "Wrap-up" in content
-        assert "save_journal" in content
+        assert "read_profile" in content
 
     def test_load_nonexistent_type(self):
         """Unknown session types should return None."""
