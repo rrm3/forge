@@ -120,6 +120,13 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         messages: [],
         streamingText: '',
         isStreaming: false,
+        tipReady: null,
+        tipPublished: false,
+        collabReady: null,
+        collabPublished: false,
+        ideaReady: null,
+        ideaPublished: false,
+        ideaContext: null,
       };
 
     case 'DELETE_SESSION': {
