@@ -162,27 +162,39 @@ def extract_participation(
     tips: list[dict],
     collabs: list[dict],
     max_week: int,
+    intake_weeks: dict | None = None,
 ) -> dict[int, dict]:
     """Extract per-week participation facts for a user. No LLM needed."""
     weeks: dict[int, dict] = {}
+    intake_weeks = intake_weeks or {}
 
     for w in range(1, max_week + 1):
         week_start, week_end = _week_date_range(w)
 
         def _in_week(item: dict) -> bool:
+            """Check if item falls in this week by date range OR program_week field."""
             ts = item.get("created_at", "")[:10]
-            return ts >= week_start and ts < week_end
+            if ts >= week_start and ts < week_end:
+                return True
+            # Fallback: check program_week field (handles pre-program sessions)
+            pw = item.get("program_week")
+            if pw is not None and str(pw) == str(w):
+                return True
+            return False
 
         week_sessions = [s for s in sessions if _in_week(s)]
         intake_sessions = [s for s in week_sessions if s.get("type") == "intake"]
         wrapup_sessions = [s for s in week_sessions if s.get("type") == "wrapup"]
         other_sessions = [s for s in week_sessions if s.get("type") not in ("intake", "wrapup")]
 
+        # Also check intake_weeks from profile as source of truth
+        intake_from_profile = str(w) in intake_weeks
+
         week_ideas = [i for i in ideas if _in_week(i)]
         week_tips = [t for t in tips if _in_week(t)]
         week_collabs = [c for c in collabs if _in_week(c)]
 
-        if not week_sessions:
+        if not week_sessions and not intake_from_profile:
             continue
 
         # Build full tip descriptions for the LLM
@@ -212,7 +224,7 @@ def extract_participation(
             })
 
         weeks[w] = {
-            "intake_completed": len(intake_sessions) > 0,
+            "intake_completed": len(intake_sessions) > 0 or intake_from_profile,
             "wrapup_completed": len(wrapup_sessions) > 0,
             "session_count": len(week_sessions),
             "other_session_count": len(other_sessions),
@@ -361,7 +373,8 @@ def build_user_report(
     name = profile.get("name", "Unknown")
 
     participation = extract_participation(
-        user_id, sessions, ideas, tips, collabs, max_week
+        user_id, sessions, ideas, tips, collabs, max_week,
+        intake_weeks=profile.get("intake_weeks"),
     )
 
     if not participation:
