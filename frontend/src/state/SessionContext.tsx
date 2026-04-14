@@ -103,6 +103,13 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         messages: action.messages,
         streamingText: '',
         isStreaming: false,
+        tipReady: null,
+        tipPublished: false,
+        collabReady: null,
+        collabPublished: false,
+        ideaReady: null,
+        ideaPublished: false,
+        ideaContext: null,
       };
 
     case 'CREATE_SESSION':
@@ -156,7 +163,7 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
       return { ...state, tipReady: action.tip, tipPublished: false };
 
     case 'SET_TIP_PUBLISHED':
-      return { ...state, tipPublished: true };
+      return { ...state, tipPublished: true, tipReady: null };
 
     case 'SET_COLLAB_READY':
       return { ...state, collabReady: action.collab, collabPublished: false };
