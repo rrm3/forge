@@ -130,7 +130,7 @@ Then a blank line, then the narrative paragraphs."""
 
     client = boto3.client('bedrock-runtime', region_name='us-east-1')
     resp = client.invoke_model(
-        modelId='us.anthropic.claude-sonnet-4-20250514-v1:0',
+        modelId='us.anthropic.claude-sonnet-4-6-20250514-v1:0',
         body=json.dumps({
             'anthropic_version': 'bedrock-2023-05-31',
             'max_tokens': 1024,
