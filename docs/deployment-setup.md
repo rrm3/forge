@@ -123,7 +123,7 @@ The Lambda function needs these env vars (CDK sets most of them, but verify):
 * S3_BUCKET=forge-production-data
 * LANCE_BACKEND=s3
 * LANCE_S3_BUCKET=forge-production-data
-* LLM_MODEL=anthropic/claude-sonnet-4-20250514
+* LLM_MODEL=anthropic/claude-sonnet-4-6-20250514
 * DEV_MODE=false
 * AWS_LWA_INVOKE_MODE=response_stream
 
