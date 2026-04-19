@@ -664,6 +664,13 @@ async def _check_intake_completion(
             all_complete = required_fields.issubset(captured)
 
         if all_complete:
+            # Capture first-intake signal BEFORE writing intake_weeks[N] below.
+            # `intake_weeks` is the canonical record of completed intakes; if it's
+            # empty now, this completion is the user's first-ever intake and
+            # profile-field enrichment is appropriate. Subsequent weekly check-ins
+            # are gated out in `_enrich_profile_async`.
+            is_first_intake = not (profile.intake_weeks or {})
+
             week_str = str(effective_program_week(profile))
             now_iso = datetime.now(UTC).isoformat()
             current_weeks = dict(profile.intake_weeks or {}) if profile else {}
@@ -714,7 +721,13 @@ async def _check_intake_completion(
             # because asyncio.run() tears down the event loop (and all pending
             # tasks) as soon as the outer coroutine returns.
             objectives = department_config.get("objectives", []) if department_config else []
-            return {"deps": deps, "user_id": user_id, "transcript": transcript, "objectives": objectives}
+            return {
+                "deps": deps,
+                "user_id": user_id,
+                "transcript": transcript,
+                "objectives": objectives,
+                "is_first_intake": is_first_intake,
+            }
     except Exception:
         logger.warning("Failed to check intake completion", exc_info=True)
 
@@ -724,12 +737,21 @@ async def _enrich_profile_async(
     user_id: str,
     transcript: list[Message],
     objectives: list[dict],
+    is_first_intake: bool,
 ):
     """Background task: Opus enrichment of profile and objective summaries.
 
     Runs after intake completes. Updates profile fields and objective responses
     with thorough summaries based on the full transcript. Fire-and-forget.
+
+    Only runs on the user's first-ever intake completion. Weekly check-ins
+    (Week 2+) skip enrichment to avoid overwriting user-corrected identity
+    fields from thin transcripts. See
+    docs/designs/2026-04-19-weekly-enrichment-overwrite.md.
     """
+    if not is_first_intake:
+        logger.info("Skipping enrichment - not first intake (user=%s)", user_id)
+        return
     try:
         from backend.agent.extraction import enrich_profile_with_opus, LIST_FIELDS
 
