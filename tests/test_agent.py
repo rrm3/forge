@@ -555,9 +555,12 @@ class TestReactLoop:
                 )
             )
 
-        # messages should have been modified in place
+        # messages should have been modified in place. The system prompt is
+        # wrapped in a cache_control block for Anthropic prompt caching.
         assert messages[0]["role"] == "system"
-        assert messages[0]["content"] == "System prompt here"
+        assert isinstance(messages[0]["content"], list)
+        assert messages[0]["content"][0]["text"] == "System prompt here"
+        assert messages[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
         assert messages[1]["role"] == "user"
         assert messages[1]["content"] == "Hello there"
         assert messages[2]["role"] == "assistant"

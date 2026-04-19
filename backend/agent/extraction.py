@@ -23,8 +23,23 @@ logger = logging.getLogger(__name__)
 # Fast, cheap model for profile field extraction
 EXTRACTION_MODEL = "bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
 
-# More capable model for nuanced judgment (objective evaluation)
-EVALUATION_MODEL = "bedrock/global.anthropic.claude-sonnet-4-6"
+# Model for nuanced judgment (objective evaluation).
+# Opus rather than Sonnet: Bedrock Sonnet 4.6 has dramatically worse tail latency
+# than Opus 4.6 under contention (p99 was 4-12x worse across 4 Tuesdays), and Opus
+# gives stricter judgment for roughly the same per-call cost at this volume.
+EVALUATION_MODEL = "bedrock/global.anthropic.claude-opus-4-6-v1"
+
+
+def _cached_system(text: str) -> list[dict]:
+    """Wrap a system prompt with Anthropic ephemeral cache_control.
+
+    LiteLLM forwards this to Bedrock's Anthropic cachePoint so that repeated
+    calls with the same prefix skip re-processing. Keep anything session-
+    variable out of the cached block (pass it in a second, unmarked block or
+    in the user message).
+    """
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
 
 def _parse_json_response(text: str):
     """Strip markdown fences and parse JSON. Returns parsed object or None."""
@@ -101,15 +116,23 @@ async def extract_profile_data(
         if value:
             current_state[field] = value
 
-    # Build the extraction prompt
+    # Build the extraction prompt. Split the static instructions (cached) from
+    # the session-variable profile state so consecutive calls within a session
+    # hit the cache on the large instruction block.
     profile_json = json.dumps(current_state, default=str) if current_state else "{}"
-    system = _EXTRACTION_PROMPT_TEMPLATE.replace("CURRENT_PROFILE_PLACEHOLDER", profile_json)
+    prefix, suffix = _EXTRACTION_PROMPT_TEMPLATE.split("CURRENT_PROFILE_PLACEHOLDER", 1)
 
     # Include last few messages for context (not the entire history)
     recent = transcript_messages[-6:] if len(transcript_messages) > 6 else transcript_messages
 
     messages = [
-        {"role": "system", "content": system},
+        {
+            "role": "system",
+            "content": [
+                {"type": "text", "text": prefix, "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": f"{profile_json}{suffix}"},
+            ],
+        },
         {"role": "user", "content": _format_conversation(recent)},
     ]
 
@@ -207,7 +230,7 @@ async def score_ai_proficiency(transcript_messages: list[dict]) -> dict | None:
         return None
 
     messages = [
-        {"role": "system", "content": _PROFICIENCY_PROMPT},
+        {"role": "system", "content": _cached_system(_PROFICIENCY_PROMPT)},
         {"role": "user", "content": user_text},
     ]
 
@@ -321,7 +344,7 @@ async def evaluate_objectives(
     conversation = _format_conversation(transcript_messages)
 
     messages = [
-        {"role": "system", "content": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]},
+        {"role": "system", "content": _cached_system(system)},
         {"role": "user", "content": conversation},
     ]
 
@@ -428,7 +451,10 @@ async def enrich_profile_with_opus(
     else:
         obj_text = "(none)"
 
-    system = _ENRICHMENT_PROMPT.replace("OBJECTIVES_PLACEHOLDER", obj_text)
+    # Split the static instruction prefix (cached) from the per-department
+    # objectives list. The prefix is identical across all users so the cache
+    # hits for every enrichment call.
+    prefix, suffix = _ENRICHMENT_PROMPT.split("OBJECTIVES_PLACEHOLDER", 1)
 
     # Include full conversation (both user and assistant for context)
     formatted = []
@@ -440,7 +466,13 @@ async def enrich_profile_with_opus(
     conversation = "\n\n".join(formatted)
 
     messages = [
-        {"role": "system", "content": system},
+        {
+            "role": "system",
+            "content": [
+                {"type": "text", "text": prefix, "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": f"{obj_text}{suffix}"},
+            ],
+        },
         {"role": "user", "content": conversation},
     ]
 
@@ -516,7 +548,7 @@ async def extract_suggestions(transcript_messages: list[dict]) -> list[dict]:
     conversation = "\n\n".join(formatted)
 
     messages = [
-        {"role": "system", "content": _SUGGESTIONS_PROMPT},
+        {"role": "system", "content": _cached_system(_SUGGESTIONS_PROMPT)},
         {"role": "user", "content": conversation},
     ]
 
