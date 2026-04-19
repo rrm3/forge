@@ -111,7 +111,9 @@ async def call_llm(
     Raises:
         Exception: Re-raises non-retryable errors after classify_llm_error logging.
     """
-    model = model or settings.llm_model
+    if model is None:
+        from backend.model_config import get_model
+        model = get_model("opus")
 
     kwargs: dict = {
         "model": model,

@@ -155,3 +155,17 @@ async def get_trends(
         content=data,
         headers={"Cache-Control": "no-store"},
     )
+
+
+@router.post("/reload-models")
+async def reload_models(user: AuthUser):
+    """Force-reload the model config from S3. Admin only."""
+    await _require_admin(user.email)
+    from backend.model_config import reload_cache, async_get_model
+    reload_cache()
+    models = {
+        "opus": await async_get_model("opus"),
+        "sonnet": await async_get_model("sonnet"),
+        "haiku": await async_get_model("haiku"),
+    }
+    return {"status": "reloaded", "models": models}

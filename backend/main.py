@@ -25,6 +25,7 @@ from backend.api.admin import router as admin_router
 from backend.api.admin import set_admin_deps
 from backend.api.reports import router as reports_router
 from backend.api.reports import set_reports_deps
+from backend.model_config import set_model_config_storage, reload_cache as reload_models_cache, get_model
 from backend.api.team import router as team_router
 from backend.api.team import set_team_deps
 from backend.api.transcription import router as transcription_router
@@ -83,7 +84,7 @@ async def lifespan(app: FastAPI):
     logger.info(
         "Forge started: dev_mode=%s, model=%s, orgchart=%s",
         settings.dev_mode,
-        settings.llm_model,
+        get_model("opus"),
         f"{orgchart.count()} people" if orgchart else "not loaded",
     )
     yield
@@ -151,6 +152,7 @@ set_admin_deps(
 )
 set_team_deps(repos["profiles"], storage, orgchart=orgchart, dept_config_repo=DepartmentConfigRepository(storage))
 set_reports_deps(storage, DepartmentConfigRepository(storage), orgchart=orgchart)
+set_model_config_storage(storage)
 
 # Include REST routers under /api prefix
 app.include_router(sessions_router, prefix="/api")

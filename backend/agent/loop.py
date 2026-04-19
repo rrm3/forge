@@ -73,7 +73,8 @@ async def react_loop(
     messages.append({"role": "user", "content": user_message})
 
     tool_schemas = _format_tool_schemas(tools.get_schemas())
-    model = settings.llm_model
+    from backend.model_config import get_model
+    model = get_model("opus")
 
     # Accumulate usage across iterations
     acc_prompt = 0

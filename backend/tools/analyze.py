@@ -89,14 +89,8 @@ async def analyze_and_advise(
         },
     ]
 
-    # Use Opus for deeper analysis (or Sonnet in dev)
-    model = settings.llm_model
-    # In production, prefer Opus for analytical tasks
-    if "sonnet" in model.lower():
-        opus_model = model.replace("sonnet", "opus").replace("Sonnet", "Opus")
-        # Only use Opus if it looks like a valid model string
-        if "opus" in opus_model.lower():
-            model = opus_model
+    from backend.model_config import get_model
+    model = get_model("opus")
 
     try:
         response = await call_llm(messages, model=model)

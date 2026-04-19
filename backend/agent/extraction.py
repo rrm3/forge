@@ -20,14 +20,7 @@ from backend.models import UserProfile
 
 logger = logging.getLogger(__name__)
 
-# Fast, cheap model for profile field extraction
-EXTRACTION_MODEL = "bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
-
-# Model for nuanced judgment (objective evaluation).
-# Opus rather than Sonnet: Bedrock Sonnet 4.6 has dramatically worse tail latency
-# than Opus 4.6 under contention (p99 was 4-12x worse across 4 Tuesdays), and Opus
-# gives stricter judgment for roughly the same per-call cost at this volume.
-EVALUATION_MODEL = "bedrock/global.anthropic.claude-opus-4-7"
+from backend.model_config import get_model
 
 
 def _cached_system(text: str) -> list[dict]:
@@ -137,7 +130,7 @@ async def extract_profile_data(
     ]
 
     try:
-        response = await call_llm(messages, model=EXTRACTION_MODEL, stream=False)
+        response = await call_llm(messages, model=get_model("haiku"), stream=False)
         if not response.content:
             return {}
 
@@ -235,7 +228,7 @@ async def score_ai_proficiency(transcript_messages: list[dict]) -> dict | None:
     ]
 
     try:
-        response = await call_llm(messages, model=EXTRACTION_MODEL, stream=False)
+        response = await call_llm(messages, model=get_model("haiku"), stream=False)
         if not response.content:
             return None
 
@@ -351,7 +344,7 @@ async def evaluate_objectives(
     valid_remaining_ids = {o["id"] for o in remaining}
 
     try:
-        response = await call_llm(messages, model=EVALUATION_MODEL, stream=False)
+        response = await call_llm(messages, model=get_model("opus"), stream=False)
         if not response.content:
             return {}
 
@@ -365,7 +358,7 @@ async def evaluate_objectives(
                 {"role": "assistant", "content": text},
                 {"role": "user", "content": "Your response was not valid JSON. Respond with ONLY a JSON object mapping objective IDs to summary strings. No explanation, no markdown."},
             ]
-            response = await call_llm(retry_messages, model=EVALUATION_MODEL, stream=False)
+            response = await call_llm(retry_messages, model=get_model("opus"), stream=False)
             if not response.content:
                 return {}
             text = response.content.strip()
@@ -478,8 +471,7 @@ async def enrich_profile_with_opus(
 
     text = ""
     try:
-        from backend.config import settings
-        response = await call_llm(messages, model=settings.llm_model, stream=False)
+        response = await call_llm(messages, model=get_model("opus"), stream=False)
         if not response.content:
             return None
 
@@ -553,7 +545,7 @@ async def extract_suggestions(transcript_messages: list[dict]) -> list[dict]:
     ]
 
     try:
-        response = await call_llm(messages, model=EXTRACTION_MODEL, stream=False)
+        response = await call_llm(messages, model=get_model("haiku"), stream=False)
         if not response.content:
             return []
 
