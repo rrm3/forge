@@ -2,7 +2,6 @@ import { useTrendsData } from './hooks/useTrendsData';
 import { TrendChart } from './charts/TrendChart';
 import { SparklineRow } from './charts/SparklineRow';
 import { StackedBar100 } from './charts/StackedBar100';
-import { StackedArea } from './charts/StackedArea';
 import { DivergingStackedBar } from './charts/DivergingStackedBar';
 import { SlopeChart } from './charts/SlopeChart';
 import { GroupedBar } from './charts/GroupedBar';

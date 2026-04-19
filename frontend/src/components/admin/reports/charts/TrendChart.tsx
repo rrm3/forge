@@ -1,4 +1,3 @@
-import { useRef, useEffect } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
