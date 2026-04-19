@@ -39,6 +39,9 @@ def _init():
     orgchart = build_orgchart()
     _deps = build_agent_deps(repos, storage, tool_registry, orgchart)
 
+    from backend.model_config import set_model_config_storage
+    set_model_config_storage(storage)
+
     from backend.config import settings
     if settings.connections_table:
         from backend.repository.connections import ConnectionsRepository
