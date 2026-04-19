@@ -84,6 +84,79 @@ async def test_tip_repo_dynamodb_serialize_deserialize_legacy():
 
 
 @pytest.mark.asyncio
+async def test_tip_find_by_source_dynamodb_does_not_use_limit():
+    """REGRESSION GUARD.
+
+    DynamoDB `Limit` applies BEFORE the FilterExpression, so passing `Limit=1`
+    makes the scan read exactly one row and filter it — returning None whenever
+    that one row doesn't match. An earlier Phase 2 implementation had this bug
+    and would have silently failed to detect published tips on production load.
+    This test patches the underlying table.scan call and asserts no Limit is
+    passed. If someone reintroduces it, the test fails loudly.
+    """
+    from unittest.mock import MagicMock, patch
+
+    from backend.repository.tips import DynamoDBTipRepository
+
+    mock_table = MagicMock()
+    # Simulate a match on the first page.
+    mock_table.scan = MagicMock(return_value={
+        "Items": [{
+            "tip_id": "t1", "author_id": "u1", "content": "A",
+            "source_session_id": "s1", "source_tool_call_id": "tc-1",
+            "created_at": "2026-04-14T10:00:00+00:00",
+        }],
+    })
+
+    with patch("backend.repository.tips.boto3.resource"):
+        repo = DynamoDBTipRepository.__new__(DynamoDBTipRepository)
+        repo.tips_table = mock_table
+        repo.votes_table = MagicMock()
+        repo.comments_table = MagicMock()
+        result = await repo.find_by_source("u1", "s1", "tc-1")
+
+    assert result is not None and result.tip_id == "t1"
+    call_kwargs = mock_table.scan.call_args.kwargs
+    assert "Limit" not in call_kwargs, (
+        "Do not pass Limit to find_by_source's scan — DynamoDB applies Limit "
+        "before the FilterExpression, which would cause the scan to almost "
+        "always miss real matches."
+    )
+
+
+@pytest.mark.asyncio
+async def test_collab_find_by_source_dynamodb_does_not_use_limit():
+    """REGRESSION GUARD for the collabs find_by_source — same bug as tips."""
+    from unittest.mock import MagicMock, patch
+
+    from backend.repository.collabs import DynamoDBCollabRepository
+
+    mock_table = MagicMock()
+    mock_table.scan = MagicMock(return_value={
+        "Items": [{
+            "collab_id": "c1", "author_id": "u1",
+            "source_session_id": "s1", "source_tool_call_id": "tc-7",
+            "created_at": "2026-04-14T10:00:00+00:00",
+        }],
+    })
+
+    with patch("backend.repository.collabs.boto3.resource"):
+        repo = DynamoDBCollabRepository.__new__(DynamoDBCollabRepository)
+        repo.collabs_table = mock_table
+        repo.interests_table = MagicMock()
+        repo.comments_table = MagicMock()
+        result = await repo.find_by_source("u1", "s1", "tc-7")
+
+    assert result is not None and result.collab_id == "c1"
+    call_kwargs = mock_table.scan.call_args.kwargs
+    assert "Limit" not in call_kwargs, (
+        "Do not pass Limit to find_by_source's scan — DynamoDB applies Limit "
+        "before the FilterExpression, which would cause the scan to almost "
+        "always miss real matches."
+    )
+
+
+@pytest.mark.asyncio
 async def test_tip_find_by_source_memory():
     repo = MemoryTipRepository()
     t1 = Tip(tip_id="t1", author_id="u1", content="A",

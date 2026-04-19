@@ -475,31 +475,41 @@ class DynamoDBTipRepository(TipRepository):
 
         Expected to return zero or one row. Used on session load to check whether
         a prepared tip has already been published. Fails closed to None on any error.
+
+        DynamoDB `Limit` applies to rows examined BEFORE the FilterExpression,
+        not to filtered matches. Using Limit=1 here would read one random row
+        and return None unless that one row happened to match — i.e., it would
+        almost always miss a real published record. Instead we paginate the
+        scan, apply the filter server-side, and return on the first match.
         """
         if not user_id or not session_id or not tool_call_id:
             return None
         loop = asyncio.get_event_loop()
+        last_key = None
         try:
-            response = await loop.run_in_executor(
-                None,
-                partial(
-                    self.tips_table.scan,
-                    FilterExpression=(
+            while True:
+                kwargs: dict = {
+                    "FilterExpression": (
                         "author_id = :uid AND source_session_id = :sid "
                         "AND source_tool_call_id = :tcid"
                     ),
-                    ExpressionAttributeValues={
+                    "ExpressionAttributeValues": {
                         ":uid": user_id,
                         ":sid": session_id,
                         ":tcid": tool_call_id,
                     },
-                    Limit=1,
-                ),
-            )
-            items = response.get("Items", [])
-            if not items:
-                return None
-            return self._deserialize_tip(items[0])
+                }
+                if last_key:
+                    kwargs["ExclusiveStartKey"] = last_key
+                response = await loop.run_in_executor(
+                    None, partial(self.tips_table.scan, **kwargs)
+                )
+                items = response.get("Items", [])
+                if items:
+                    return self._deserialize_tip(items[0])
+                last_key = response.get("LastEvaluatedKey")
+                if not last_key:
+                    return None
         except ClientError:
             logger.warning(
                 "find_by_source scan failed user=%s session=%s tool_call=%s",
