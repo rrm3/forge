@@ -27,7 +27,7 @@ EXTRACTION_MODEL = "bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
 # Opus rather than Sonnet: Bedrock Sonnet 4.6 has dramatically worse tail latency
 # than Opus 4.6 under contention (p99 was 4-12x worse across 4 Tuesdays), and Opus
 # gives stricter judgment for roughly the same per-call cost at this volume.
-EVALUATION_MODEL = "bedrock/global.anthropic.claude-opus-4-6-v1"
+EVALUATION_MODEL = "bedrock/global.anthropic.claude-opus-4-7"
 
 
 def _cached_system(text: str) -> list[dict]:
