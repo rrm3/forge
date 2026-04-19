@@ -7,7 +7,7 @@ import {
   useEffect,
   type ReactNode,
 } from 'react';
-import type { Session, SessionType, Message } from '../api/types';
+import type { Session, SessionType, Message, ActivePreview } from '../api/types';
 import { getProgramWeek } from '../program';
 import type { ServerMessage, ConnectionStatus } from '../api/websocket';
 import {
@@ -36,11 +36,11 @@ interface SessionState {
   intakeChecklist: IntakeChecklistItem[];
   intakeComplete: boolean;
   intakeSuggestions: string[];
-  tipReady: { title: string; content: string; tags: string[]; department: string } | null;
+  tipReady: { title: string; content: string; tags: string[]; department: string; tool_call_id?: string } | null;
   tipPublished: boolean;
-  collabReady: { title: string; problem: string; needed_skills: string[]; time_commitment: string; tags: string[]; department: string } | null;
+  collabReady: { title: string; problem: string; needed_skills: string[]; time_commitment: string; tags: string[]; department: string; tool_call_id?: string } | null;
   collabPublished: boolean;
-  ideaReady: { title: string; description: string; tags: string[] } | null;
+  ideaReady: { title: string; description: string; tags: string[]; tool_call_id?: string } | null;
   ideaPublished: boolean;
   ideaContext: { idea_id: string; title: string; description: string; tags: string[] } | null;
 }
@@ -48,7 +48,7 @@ interface SessionState {
 type SessionAction =
   | { type: 'SET_SESSIONS'; sessions: Session[] }
   | { type: 'SET_SESSION_ID'; sessionId: string }
-  | { type: 'SELECT_SESSION'; sessionId: string; messages: Message[] }
+  | { type: 'SELECT_SESSION'; sessionId: string; messages: Message[]; activePreview?: ActivePreview | null }
   | { type: 'CREATE_SESSION'; session: Session }
   | { type: 'DELETE_SESSION'; sessionId: string }
   | { type: 'RENAME_SESSION'; sessionId: string; title: string }
@@ -59,11 +59,11 @@ type SessionAction =
   | { type: 'SET_CONNECTION_STATUS'; status: ConnectionStatus }
   | { type: 'SET_INTAKE_CHECKLIST'; checklist: IntakeChecklistItem[] }
   | { type: 'SET_INTAKE_COMPLETE'; suggestions: string[] }
-  | { type: 'SET_TIP_READY'; tip: { title: string; content: string; tags: string[]; department: string } }
+  | { type: 'SET_TIP_READY'; tip: { title: string; content: string; tags: string[]; department: string; tool_call_id?: string } }
   | { type: 'SET_TIP_PUBLISHED' }
-  | { type: 'SET_COLLAB_READY'; collab: { title: string; problem: string; needed_skills: string[]; time_commitment: string; tags: string[]; department: string } }
+  | { type: 'SET_COLLAB_READY'; collab: { title: string; problem: string; needed_skills: string[]; time_commitment: string; tags: string[]; department: string; tool_call_id?: string } }
   | { type: 'SET_COLLAB_PUBLISHED' }
-  | { type: 'SET_IDEA_READY'; idea: { title: string; description: string; tags: string[] } | null }
+  | { type: 'SET_IDEA_READY'; idea: { title: string; description: string; tags: string[]; tool_call_id?: string } | null }
   | { type: 'SET_IDEA_PUBLISHED' }
   | { type: 'SET_IDEA_CONTEXT'; idea: { idea_id: string; title: string; description: string; tags: string[] } | null }
   | { type: 'DESELECT_SESSION' };
@@ -96,7 +96,10 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
     case 'SET_SESSION_ID':
       return { ...state, activeSessionId: action.sessionId };
 
-    case 'SELECT_SESSION':
+    case 'SELECT_SESSION': {
+      // Always hard-clear preview state first — preserves today's behavior exactly
+      // for legacy backend responses that don't include active_preview.
+      const preview = action.activePreview ?? null;
       return {
         ...state,
         activeSessionId: action.sessionId,
@@ -110,7 +113,43 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         ideaReady: null,
         ideaPublished: false,
         ideaContext: null,
+        // Then populate from preview only when present and matching type.
+        ...(preview?.type === 'tip'
+          ? {
+              tipReady: {
+                title: preview.title,
+                content: preview.content,
+                tags: preview.tags,
+                department: preview.department,
+                tool_call_id: preview.tool_call_id,
+              },
+            }
+          : {}),
+        ...(preview?.type === 'collab'
+          ? {
+              collabReady: {
+                title: preview.title,
+                problem: preview.problem,
+                needed_skills: preview.needed_skills,
+                time_commitment: preview.time_commitment,
+                tags: preview.tags,
+                department: preview.department,
+                tool_call_id: preview.tool_call_id,
+              },
+            }
+          : {}),
+        ...(preview?.type === 'idea'
+          ? {
+              ideaReady: {
+                title: preview.title,
+                description: preview.description,
+                tags: preview.tags,
+                tool_call_id: preview.tool_call_id,
+              },
+            }
+          : {}),
       };
+    }
 
     case 'CREATE_SESSION':
       return {
@@ -234,6 +273,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                     type: 'SELECT_SESSION',
                     sessionId: activeId,
                     messages: data.transcript,
+                    activePreview: data.active_preview ?? null,
                   });
                 }
               })
@@ -367,40 +407,51 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           break;
 
         case 'tip_ready':
-          dispatch({
-            type: 'SET_TIP_READY',
-            tip: {
-              title: (msg as any).title || '',
-              content: (msg as any).content || '',
-              tags: (msg as any).tags || [],
-              department: (msg as any).department || 'Everyone',
-            },
-          });
+          // Filter on active session to avoid cross-session leakage.
+          // intake_complete stays unfiltered on purpose (see preview-card-hydration design doc).
+          if (msg.session_id === activeSessionIdRef.current) {
+            dispatch({
+              type: 'SET_TIP_READY',
+              tip: {
+                title: (msg as any).title || '',
+                content: (msg as any).content || '',
+                tags: (msg as any).tags || [],
+                department: (msg as any).department || 'Everyone',
+                tool_call_id: (msg as any).tool_call_id || '',
+              },
+            });
+          }
           break;
 
         case 'collab_ready':
-          dispatch({
-            type: 'SET_COLLAB_READY',
-            collab: {
-              title: (msg as any).title || '',
-              problem: (msg as any).problem || '',
-              needed_skills: (msg as any).needed_skills || [],
-              time_commitment: (msg as any).time_commitment || 'A few hours',
-              tags: (msg as any).tags || [],
-              department: (msg as any).department || 'Everyone',
-            },
-          });
+          if (msg.session_id === activeSessionIdRef.current) {
+            dispatch({
+              type: 'SET_COLLAB_READY',
+              collab: {
+                title: (msg as any).title || '',
+                problem: (msg as any).problem || '',
+                needed_skills: (msg as any).needed_skills || [],
+                time_commitment: (msg as any).time_commitment || 'A few hours',
+                tags: (msg as any).tags || [],
+                department: (msg as any).department || 'Everyone',
+                tool_call_id: (msg as any).tool_call_id || '',
+              },
+            });
+          }
           break;
 
         case 'idea_ready':
-          dispatch({
-            type: 'SET_IDEA_READY',
-            idea: {
-              title: (msg as any).title || '',
-              description: (msg as any).description || '',
-              tags: (msg as any).tags || [],
-            },
-          });
+          if (msg.session_id === activeSessionIdRef.current) {
+            dispatch({
+              type: 'SET_IDEA_READY',
+              idea: {
+                title: (msg as any).title || '',
+                description: (msg as any).description || '',
+                tags: (msg as any).tags || [],
+                tool_call_id: (msg as any).tool_call_id || '',
+              },
+            });
+          }
           break;
 
         case 'error':
@@ -437,7 +488,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const selectSession = useCallback(async (id: string) => {
     const data = await getSession(id);
-    dispatch({ type: 'SELECT_SESSION', sessionId: id, messages: data.transcript || [] });
+    dispatch({
+      type: 'SELECT_SESSION',
+      sessionId: id,
+      messages: data.transcript || [],
+      activePreview: data.active_preview ?? null,
+    });
   }, []);
 
   const deselectSession = useCallback(() => {

@@ -12,7 +12,7 @@ import remarkGfm from 'remark-gfm';
 import { createUserIdea } from '../api/client';
 
 interface IdeaPreviewCardProps {
-  initial: { title: string; description: string; tags: string[] };
+  initial: { title: string; description: string; tags: string[]; tool_call_id?: string };
   sessionId: string;
   onSaved: (saved?: { idea_id: string; title: string; description: string; tags: string[] }) => void;
   onSkip: () => void;
@@ -62,6 +62,7 @@ export function IdeaPreviewCard({ initial, sessionId, onSaved, onSkip }: IdeaPre
         tags,
         source: 'brainstorm',
         source_session_id: sessionId,
+        source_tool_call_id: initial.tool_call_id || '',
       });
       setSaved(true);
       setSaving(false);
