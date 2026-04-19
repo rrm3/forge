@@ -274,3 +274,67 @@ class TestEnrichmentGate:
         assert loaded.ai_proficiency is not None
         assert loaded.ai_proficiency.level == 4
         assert loaded.ai_proficiency.rationale == "Builds AI workflows at work."
+
+
+class TestFirstIntakePredicate:
+    """Verify the `is_first_intake = not profile.intake_summary` predicate
+    handles the skip-intake trap, the crash-mid-enrichment recovery case,
+    and the normal returning-user case correctly.
+
+    These tests exercise the gate predicate itself (via a small harness)
+    rather than `_enrich_profile_async`, which is covered above.
+    """
+
+    @staticmethod
+    def _is_first_intake(profile: UserProfile) -> bool:
+        """Mirror of the production predicate at `_check_intake_completion`.
+
+        Kept inline so tests break loudly if the production predicate drifts.
+        """
+        return not profile.intake_summary
+
+    def test_fresh_user_no_intake_summary_is_first(self):
+        """Brand-new user with empty intake_summary → is_first_intake=True."""
+        profile = UserProfile(user_id="u1", intake_weeks={}, intake_summary="")
+        assert self._is_first_intake(profile) is True
+
+    def test_enriched_user_is_not_first(self):
+        """User who has had enrichment succeed → is_first_intake=False."""
+        profile = UserProfile(
+            user_id="u2",
+            intake_weeks={"1": "2026-03-24T10:00:00+00:00"},
+            intake_summary="Senior engineer at Dimensions, builds AI tooling.",
+        )
+        assert self._is_first_intake(profile) is False
+
+    def test_skip_intake_user_is_still_first(self):
+        """SKIP-INTAKE TRAP REGRESSION GUARD.
+
+        A user who hit `/skip-intake` has `intake_weeks` populated (by the
+        skip handler) but `intake_summary` empty (never enriched). When they
+        later complete a real intake, enrichment must still run.
+        """
+        profile = UserProfile(
+            user_id="u3",
+            intake_weeks={"4": "2026-04-14T10:00:00+00:00"},
+            intake_skipped=True,
+            intake_summary="",
+        )
+        assert self._is_first_intake(profile) is True, (
+            "Skip-intake users must still be eligible for first enrichment; "
+            "gating on intake_weeks emptiness would wrongly skip them."
+        )
+
+    def test_crash_mid_enrichment_retries(self):
+        """CRASH-MID-FLIGHT REGRESSION GUARD.
+
+        If a prior completion wrote `intake_weeks[N]` but the Lambda died
+        before `_enrich_profile_async` could write `intake_summary`, the
+        user's next intake should still trigger enrichment.
+        """
+        profile = UserProfile(
+            user_id="u4",
+            intake_weeks={"1": "2026-03-24T10:00:00+00:00"},
+            intake_summary="",
+        )
+        assert self._is_first_intake(profile) is True

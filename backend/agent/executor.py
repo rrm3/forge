@@ -664,12 +664,16 @@ async def _check_intake_completion(
             all_complete = required_fields.issubset(captured)
 
         if all_complete:
-            # Capture first-intake signal BEFORE writing intake_weeks[N] below.
-            # `intake_weeks` is the canonical record of completed intakes; if it's
-            # empty now, this completion is the user's first-ever intake and
-            # profile-field enrichment is appropriate. Subsequent weekly check-ins
-            # are gated out in `_enrich_profile_async`.
-            is_first_intake = not (profile.intake_weeks or {})
+            # Whether this user has ever had profile-field enrichment.
+            # `intake_summary` is populated by `_enrich_profile_async` on success
+            # and stays populated unless explicitly reset. Using it as the gate
+            # means: (a) users who skipped prior intakes (intake_weeks populated
+            # but intake_summary empty) still get enriched when they finally
+            # complete a real intake; (b) users whose first enrichment crashed
+            # mid-flight will be retried on the next intake; (c) a successful
+            # enrichment is never re-run, which is what W4-03 requires.
+            # See docs/designs/2026-04-19-weekly-enrichment-overwrite.md.
+            is_first_intake = not profile.intake_summary
 
             week_str = str(effective_program_week(profile))
             now_iso = datetime.now(UTC).isoformat()
