@@ -55,6 +55,12 @@ async function checkResponse(res: Response): Promise<Response> {
   return res;
 }
 
+export async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
+  const res = await fetchWithAuth(`${API_BASE}${path}`, options);
+  await checkResponse(res);
+  return res;
+}
+
 // Session API
 
 export async function listSessions(): Promise<Session[]> {

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './auth/useAuth';
 
@@ -143,6 +143,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { AdminLayout } from './components/AdminLayout';
 import { CompanyContextPanel } from './components/CompanyContextPanel';
 import { AdminUsers } from './components/AdminUsers';
+const ReportsView = lazy(() => import('./components/admin/reports/ReportsView').then(m => ({ default: m.ReportsView })));
 import posthog from './posthog';
 import { getProfile, getAdminAccess, listUserIdeas, getTip, getCollab, AccessDeniedError } from './api/client';
 import { forgeWs } from './api/websocket';
@@ -527,6 +528,7 @@ function AppContent() {
         <Route path="settings" element={<AdminPanel />} />
         <Route path="company" element={isAdmin ? <CompanyContextPanel /> : <Navigate to="/admin/settings" replace />} />
         <Route path="users" element={isAdmin ? <AdminUsers /> : <Navigate to="/admin/settings" replace />} />
+        <Route path="reports" element={isAdmin ? <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: '#64748B' }}>Loading...</div>}><ReportsView /></Suspense> : <Navigate to="/admin/settings" replace />} />
       </Route>
 
       {/* Main layout (all post-intake routes) */}

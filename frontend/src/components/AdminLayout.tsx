@@ -8,18 +8,20 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useAdminStore } from '../state/adminStore';
 
-type Tab = 'settings' | 'company' | 'users';
+type Tab = 'settings' | 'company' | 'users' | 'reports';
 
 export function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isAdmin = useAdminStore((s) => s.isAdmin);
 
-  const activeTab: Tab = location.pathname.includes('/admin/users')
-    ? 'users'
-    : location.pathname.includes('/admin/company')
-      ? 'company'
-      : 'settings';
+  const activeTab: Tab = location.pathname.includes('/admin/reports')
+    ? 'reports'
+    : location.pathname.includes('/admin/users')
+      ? 'users'
+      : location.pathname.includes('/admin/company')
+        ? 'company'
+        : 'settings';
 
   // Mobile gate
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -109,6 +111,11 @@ export function AdminLayout() {
           {isAdmin && (
             <button onClick={() => navigate('/admin/users')} style={tabStyle('users')}>
               Users
+            </button>
+          )}
+          {isAdmin && (
+            <button onClick={() => navigate('/admin/reports')} style={tabStyle('reports')}>
+              Reports
             </button>
           )}
         </div>
