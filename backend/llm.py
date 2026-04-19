@@ -102,7 +102,7 @@ async def call_llm(
     Args:
         messages: Conversation history as role/content dicts.
         tools: Optional tool definitions in OpenAI format.
-        model: Model identifier (defaults to settings.llm_model).
+        model: Model identifier (defaults to opus from S3 model config).
         stream: If True, uses streaming internally (collected before return).
 
     Returns:

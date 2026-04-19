@@ -1,8 +1,11 @@
 """Runtime model configuration loaded from S3 with TTL cache.
 
-Reads config/models.json from the app's S3 bucket. Falls back to hardcoded
-defaults if S3 is unavailable. Re-reads every 5 minutes without requiring
-Lambda restart.
+Reads config/models.json from the app's S3 bucket. Re-reads every
+5 minutes without requiring Lambda restart.
+
+The S3 file is the single source of truth for model IDs. If the file
+is missing or unreadable, get_model() raises so the problem surfaces
+immediately rather than silently falling back to stale values.
 
 Usage:
     from backend.model_config import get_model
@@ -20,12 +23,7 @@ logger = logging.getLogger(__name__)
 
 MODELS_KEY = "config/models.json"
 CACHE_TTL = 300  # 5 minutes
-
-DEFAULTS = {
-    "opus": "bedrock/global.anthropic.claude-opus-4-7",
-    "sonnet": "bedrock/global.anthropic.claude-sonnet-4-6",
-    "haiku": "bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0",
-}
+VALID_SLOTS = {"opus", "sonnet", "haiku"}
 
 _storage = None
 _cache: dict | None = None
@@ -84,7 +82,7 @@ def _refresh_if_stale():
     if loaded is not None:
         _cache = loaded
         _cache_time = now
-        logger.info("Models config loaded: %s", {k: v for k, v in loaded.items() if k in DEFAULTS})
+        logger.info("Models config loaded: %s", loaded)
 
 
 async def _async_refresh_if_stale():
@@ -97,27 +95,37 @@ async def _async_refresh_if_stale():
     if loaded is not None:
         _cache = loaded
         _cache_time = now
-        logger.info("Models config loaded: %s", {k: v for k, v in loaded.items() if k in DEFAULTS})
+        logger.info("Models config loaded: %s", loaded)
 
 
 def get_model(slot: str) -> str:
     """Get the current model ID for a logical slot (opus/sonnet/haiku).
 
-    Reads from S3-cached config, falls back to hardcoded defaults.
-    Safe to call from sync code (agent loop, extraction).
+    Reads from S3-cached config. Raises RuntimeError if config is
+    missing, so infrastructure problems surface immediately.
     """
+    if slot not in VALID_SLOTS:
+        raise ValueError(f"Unknown model slot: {slot}. Valid: {VALID_SLOTS}")
     _refresh_if_stale()
     if _cache and slot in _cache:
         return _cache[slot]
-    return DEFAULTS.get(slot, DEFAULTS["opus"])
+    raise RuntimeError(
+        f"Model config not available for '{slot}'. "
+        f"Ensure {MODELS_KEY} exists in S3 with keys: {VALID_SLOTS}"
+    )
 
 
 async def async_get_model(slot: str) -> str:
-    """Async version of get_model. Preferred in async endpoints."""
+    """Async version of get_model."""
+    if slot not in VALID_SLOTS:
+        raise ValueError(f"Unknown model slot: {slot}. Valid: {VALID_SLOTS}")
     await _async_refresh_if_stale()
     if _cache and slot in _cache:
         return _cache[slot]
-    return DEFAULTS.get(slot, DEFAULTS["opus"])
+    raise RuntimeError(
+        f"Model config not available for '{slot}'. "
+        f"Ensure {MODELS_KEY} exists in S3 with keys: {VALID_SLOTS}"
+    )
 
 
 def reload_cache():
