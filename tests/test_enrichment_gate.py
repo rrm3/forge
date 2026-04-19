@@ -2,13 +2,14 @@
 
 Covers the design in docs/designs/2026-04-19-weekly-enrichment-overwrite.md:
 profile-field enrichment and AI proficiency scoring should only run on the
-user's first-ever intake completion (detected via empty `profile.intake_weeks`
-before the completion write), not on subsequent weekly check-ins.
+user's first-ever successful enrichment (detected via empty
+`profile.intake_enrichment_completed_at`), not on subsequent weekly check-ins.
 """
 
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -132,6 +133,9 @@ class TestEnrichmentGate:
         assert loaded.intake_summary == "Engineer interested in AI-assisted code review."
         assert isinstance(loaded.ai_proficiency, AIProficiency)
         assert loaded.ai_proficiency.level == 3
+        # The enrichment-completed marker must be set so subsequent intakes
+        # correctly identify this user as already enriched.
+        assert loaded.intake_enrichment_completed_at is not None
 
     @pytest.mark.asyncio
     async def test_late_joiner_first_intake_runs_enrichment(
@@ -277,9 +281,10 @@ class TestEnrichmentGate:
 
 
 class TestFirstIntakePredicate:
-    """Verify the `is_first_intake = not profile.intake_summary` predicate
-    handles the skip-intake trap, the crash-mid-enrichment recovery case,
-    and the normal returning-user case correctly.
+    """Verify the `is_first_intake = profile.intake_enrichment_completed_at is None`
+    predicate handles the skip-intake trap, the crash-mid-enrichment recovery
+    case, the intake-skill-writes-intake_summary case, and the normal
+    returning-user case correctly.
 
     These tests exercise the gate predicate itself (via a small harness)
     rather than `_enrich_profile_async`, which is covered above.
@@ -291,19 +296,20 @@ class TestFirstIntakePredicate:
 
         Kept inline so tests break loudly if the production predicate drifts.
         """
-        return not profile.intake_summary
+        return profile.intake_enrichment_completed_at is None
 
-    def test_fresh_user_no_intake_summary_is_first(self):
-        """Brand-new user with empty intake_summary → is_first_intake=True."""
-        profile = UserProfile(user_id="u1", intake_weeks={}, intake_summary="")
+    def test_fresh_user_is_first(self):
+        """Brand-new user with no enrichment marker → is_first_intake=True."""
+        profile = UserProfile(user_id="u1", intake_weeks={})
         assert self._is_first_intake(profile) is True
 
     def test_enriched_user_is_not_first(self):
-        """User who has had enrichment succeed → is_first_intake=False."""
+        """User whose enrichment succeeded and wrote the marker → False."""
         profile = UserProfile(
             user_id="u2",
             intake_weeks={"1": "2026-03-24T10:00:00+00:00"},
             intake_summary="Senior engineer at Dimensions, builds AI tooling.",
+            intake_enrichment_completed_at=datetime.fromisoformat("2026-03-24T10:30:00+00:00"),
         )
         assert self._is_first_intake(profile) is False
 
@@ -311,14 +317,13 @@ class TestFirstIntakePredicate:
         """SKIP-INTAKE TRAP REGRESSION GUARD.
 
         A user who hit `/skip-intake` has `intake_weeks` populated (by the
-        skip handler) but `intake_summary` empty (never enriched). When they
+        skip handler) but no enrichment marker (never enriched). When they
         later complete a real intake, enrichment must still run.
         """
         profile = UserProfile(
             user_id="u3",
             intake_weeks={"4": "2026-04-14T10:00:00+00:00"},
             intake_skipped=True,
-            intake_summary="",
         )
         assert self._is_first_intake(profile) is True, (
             "Skip-intake users must still be eligible for first enrichment; "
@@ -329,12 +334,33 @@ class TestFirstIntakePredicate:
         """CRASH-MID-FLIGHT REGRESSION GUARD.
 
         If a prior completion wrote `intake_weeks[N]` but the Lambda died
-        before `_enrich_profile_async` could write `intake_summary`, the
-        user's next intake should still trigger enrichment.
+        before `_enrich_profile_async` could write the enrichment marker,
+        the user's next intake should still trigger enrichment.
         """
         profile = UserProfile(
             user_id="u4",
             intake_weeks={"1": "2026-03-24T10:00:00+00:00"},
-            intake_summary="",
+            intake_summary="",  # never got written because enrichment crashed
         )
         assert self._is_first_intake(profile) is True
+
+    def test_intake_skill_wrote_intake_summary_is_still_first(self):
+        """SKILL-PROMPT REGRESSION GUARD.
+
+        `skills/intake.md:255` instructs the AI to call `update_profile` with
+        `intake_summary` during the closing turn of the intake. That path
+        populates `intake_summary` BEFORE `_enrich_profile_async` runs, so a
+        predicate based on intake_summary would wrongly skip first enrichment.
+        The dedicated `intake_enrichment_completed_at` marker is written only
+        by `_enrich_profile_async` on success, so it isn't affected.
+        """
+        profile = UserProfile(
+            user_id="u5",
+            intake_weeks={},
+            intake_summary="Engineer building agentic runtimes.",  # written by AI
+            # intake_enrichment_completed_at=None (default) — enrichment hasn't run
+        )
+        assert self._is_first_intake(profile) is True, (
+            "If the intake skill writes intake_summary before completion, "
+            "a summary-based gate would skip enrichment. This must not happen."
+        )

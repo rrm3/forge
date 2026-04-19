@@ -150,6 +150,11 @@ class UserProfile(BaseModel):
     intake_objectives_done: int = 0
     intake_objectives_total: int = 0
     intake_weeks: dict = Field(default_factory=dict)  # {"1": "ISO datetime", "2": "ISO datetime", ...}
+    # Written only by `_enrich_profile_async` when identity-field enrichment
+    # succeeds for the first time. Used as the gate signal for W4-03 so that
+    # weekly check-ins don't re-run enrichment and clobber user corrections.
+    # See docs/designs/2026-04-19-weekly-enrichment-overwrite.md.
+    intake_enrichment_completed_at: datetime | None = None
     program_week_override: int = 0  # If set (>0), overrides clock-based week for testing
     is_department_admin: bool = False
     created_at: datetime = Field(default_factory=_now)

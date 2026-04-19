@@ -664,16 +664,15 @@ async def _check_intake_completion(
             all_complete = required_fields.issubset(captured)
 
         if all_complete:
-            # Whether this user has ever had profile-field enrichment.
-            # `intake_summary` is populated by `_enrich_profile_async` on success
-            # and stays populated unless explicitly reset. Using it as the gate
-            # means: (a) users who skipped prior intakes (intake_weeks populated
-            # but intake_summary empty) still get enriched when they finally
-            # complete a real intake; (b) users whose first enrichment crashed
-            # mid-flight will be retried on the next intake; (c) a successful
-            # enrichment is never re-run, which is what W4-03 requires.
+            # Whether this user has ever had identity-field enrichment succeed.
+            # `intake_enrichment_completed_at` is written by `_enrich_profile_async`
+            # on success and by nothing else — no `update_profile` path, no API
+            # endpoint, no skill prompt can set it. That exclusivity is what makes
+            # it a reliable gate signal. An intake_summary-based gate would be
+            # contaminated by the intake skill's closing-turn `update_profile`
+            # call and skip enrichment on true first completions.
             # See docs/designs/2026-04-19-weekly-enrichment-overwrite.md.
-            is_first_intake = not profile.intake_summary
+            is_first_intake = profile.intake_enrichment_completed_at is None
 
             week_str = str(effective_program_week(profile))
             now_iso = datetime.now(UTC).isoformat()
@@ -806,6 +805,16 @@ async def _enrich_profile_async(
         if proficiency:
             await deps.profiles_repo.update(user_id, {"ai_proficiency": proficiency})
             logger.info("AI proficiency scored: user=%s level=%d", user_id, proficiency["level"])
+
+        # Mark enrichment as successfully completed. This is the exclusive gate
+        # signal read by `_check_intake_completion` on future intakes to decide
+        # whether to re-run enrichment. Write it last so a crash mid-enrichment
+        # leaves the field None and the next intake retries.
+        await deps.profiles_repo.update(
+            user_id,
+            {"intake_enrichment_completed_at": datetime.now(UTC).isoformat()},
+        )
+        logger.info("Enrichment completion marker set: user=%s", user_id)
 
     except Exception:
         logger.warning("Opus enrichment failed for user=%s", user_id, exc_info=True)
