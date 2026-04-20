@@ -1,4 +1,4 @@
-import type { Session, Message, UserProfile, JournalEntry, Idea, DepartmentConfig, CompanyConfig, Tip, TipComment, UserIdea, AdminUserSummary, AdminUserIntake, Collaboration, CollabComment, ActivityReport, TeamResponse } from './types';
+import type { Session, UserProfile, JournalEntry, Idea, DepartmentConfig, CompanyConfig, Tip, TipComment, UserIdea, AdminUserSummary, AdminUserIntake, Collaboration, CollabComment, ActivityReport, TeamResponse, SessionLoadResponse } from './types';
 
 let getTokenFn: (() => Promise<string | null>) | null = null;
 let tokenGetterReady: (() => void) | null = null;
@@ -75,7 +75,7 @@ export async function createSession(): Promise<Session> {
   return res.json();
 }
 
-export async function getSession(id: string): Promise<Session & { transcript: Message[] }> {
+export async function getSession(id: string): Promise<SessionLoadResponse> {
   const res = await fetchWithAuth(`${API_BASE}/api/sessions/${encodeURIComponent(id)}`);
   await checkResponse(res);
   return res.json();
@@ -304,6 +304,8 @@ export async function createTip(tip: {
   department: string;
   category?: string;
   artifact?: string;
+  source_session_id?: string;
+  source_tool_call_id?: string;
 }): Promise<Tip> {
   const res = await fetchWithAuth(`${API_BASE}/api/tips`, {
     method: 'POST',
@@ -403,7 +405,7 @@ export async function listUserIdeas(): Promise<UserIdea[]> {
   return res.json();
 }
 
-export async function createUserIdea(idea: { title: string; description: string; tags: string[]; source?: string; source_session_id?: string }): Promise<UserIdea> {
+export async function createUserIdea(idea: { title: string; description: string; tags: string[]; source?: string; source_session_id?: string; source_tool_call_id?: string }): Promise<UserIdea> {
   const res = await fetchWithAuth(`${API_BASE}/api/user-ideas`, {
     method: 'POST',
     body: JSON.stringify(idea),
@@ -450,6 +452,8 @@ export async function createCollab(data: {
   time_commitment?: string;
   tags?: string[];
   department?: string;
+  source_session_id?: string;
+  source_tool_call_id?: string;
 }): Promise<Collaboration> {
   const res = await fetchWithAuth(`${API_BASE}/api/collabs`, {
     method: 'POST',

@@ -193,6 +193,8 @@ class Tip(BaseModel):
     artifact: str = ""  # gem instructions or skill definition (markdown)
     vote_count: int = 0
     comment_count: int = 0
+    source_session_id: str = ""  # Session that produced this tip via prepare_tip
+    source_tool_call_id: str = ""  # tool_call_id of the prepare_tip invocation
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -223,6 +225,8 @@ class Collaboration(BaseModel):
     comment_count: int = 0
     business_value: str = ""
     tags: list[str] = Field(default_factory=list)
+    source_session_id: str = ""  # Session that produced this collab via prepare_collab
+    source_tool_call_id: str = ""  # tool_call_id of the prepare_collab invocation
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 
@@ -249,6 +253,7 @@ class UserIdea(BaseModel):
     description: str = ""
     source: str = "manual"  # intake, brainstorm, chat, manual
     source_session_id: str = ""
+    source_tool_call_id: str = ""  # tool_call_id of the prepare_idea invocation when created via that path
     linked_sessions: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     status: str = "new"  # new, exploring, done

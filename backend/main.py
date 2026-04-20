@@ -136,7 +136,13 @@ set_ws_deps(
     tool_registry=tool_registry,
     orgchart=orgchart,
 )
-set_sessions_deps(repos["sessions"], storage)
+set_sessions_deps(
+    repos["sessions"],
+    storage,
+    tips_repo=repos["tips"],
+    collabs_repo=repos["collabs"],
+    user_ideas_repo=repos["user_ideas"],
+)
 set_profile_deps(repos["profiles"], orgchart, sessions_repo=repos["sessions"], storage=storage, user_ideas_repo=repos["user_ideas"])
 set_journal_deps(repos["journal"])
 set_ideas_deps(repos["ideas"])

@@ -873,6 +873,7 @@ async def _check_tip_prepared(transcript: list[Message], sender: MessageSender, 
                 await sender.send({
                     "type": "tip_ready",
                     "session_id": session_id,
+                    "tool_call_id": msg.tool_call_id or "",
                     "title": args.get("title", ""),
                     "content": args.get("content", ""),
                     "tags": args.get("tags", []),
@@ -895,6 +896,7 @@ async def _check_collab_prepared(transcript: list[Message], sender: MessageSende
                 await sender.send({
                     "type": "collab_ready",
                     "session_id": session_id,
+                    "tool_call_id": msg.tool_call_id or "",
                     "title": args.get("title", ""),
                     "problem": args.get("problem", ""),
                     "needed_skills": args.get("needed_skills", []),
@@ -916,6 +918,7 @@ async def _check_idea_prepared(transcript: list[Message], sender: MessageSender,
                 await sender.send({
                     "type": "idea_ready",
                     "session_id": session_id,
+                    "tool_call_id": msg.tool_call_id or "",
                     "title": args.get("title", ""),
                     "description": args.get("description", ""),
                     "tags": args.get("tags", []),

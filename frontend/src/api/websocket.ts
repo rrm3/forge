@@ -20,9 +20,9 @@ export type ServerMessage =
   | { type: 'error'; session_id?: string; message: string }
   | { type: 'intake_progress'; session_id: string; checklist: Array<{ field: string; label: string; done: boolean; value?: string }> }
   | { type: 'intake_complete'; session_id: string; suggestions: string[] }
-  | { type: 'tip_ready'; session_id: string; title: string; content: string; tags: string[]; department: string }
-  | { type: 'collab_ready'; session_id: string; title: string; problem: string; needed_skills: string[]; time_commitment: string; tags: string[]; department: string }
-  | { type: 'idea_ready'; session_id: string; title: string; description: string; tags: string[] }
+  | { type: 'tip_ready'; session_id: string; tool_call_id?: string; title: string; content: string; tags: string[]; department: string }
+  | { type: 'collab_ready'; session_id: string; tool_call_id?: string; title: string; problem: string; needed_skills: string[]; time_commitment: string; tags: string[]; department: string }
+  | { type: 'idea_ready'; session_id: string; tool_call_id?: string; title: string; description: string; tags: string[] }
   | { type: 'pong' }
   | { type: 'ping' }
   | { type: 'chunk'; chunk_id: string; seq: number; total: number; data: string };
