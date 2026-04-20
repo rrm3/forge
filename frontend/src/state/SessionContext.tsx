@@ -100,6 +100,7 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
       // Always hard-clear preview state first — preserves today's behavior exactly
       // for legacy backend responses that don't include active_preview.
       const preview = action.activePreview ?? null;
+      const isPublished = preview && 'status' in preview && preview.status === 'published';
       return {
         ...state,
         activeSessionId: action.sessionId,
@@ -113,8 +114,8 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         ideaReady: null,
         ideaPublished: false,
         ideaContext: null,
-        // Then populate from preview only when present and matching type.
-        ...(preview?.type === 'tip'
+        // Editable draft: populate the *Ready slot.
+        ...(preview?.type === 'tip' && !isPublished
           ? {
               tipReady: {
                 title: preview.title,
@@ -125,7 +126,7 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
               },
             }
           : {}),
-        ...(preview?.type === 'collab'
+        ...(preview?.type === 'collab' && !isPublished
           ? {
               collabReady: {
                 title: preview.title,
@@ -138,7 +139,7 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
               },
             }
           : {}),
-        ...(preview?.type === 'idea'
+        ...(preview?.type === 'idea' && !isPublished
           ? {
               ideaReady: {
                 title: preview.title,
@@ -148,6 +149,10 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
               },
             }
           : {}),
+        // Published: flip the *Published flag so the post-publish confirmation renders.
+        ...(preview?.type === 'tip' && isPublished ? { tipPublished: true } : {}),
+        ...(preview?.type === 'collab' && isPublished ? { collabPublished: true } : {}),
+        ...(preview?.type === 'idea' && isPublished ? { ideaPublished: true } : {}),
       };
     }
 

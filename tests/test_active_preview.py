@@ -343,7 +343,10 @@ async def test_active_preview_unpublished_tip_returns_preview():
 
 
 @pytest.mark.asyncio
-async def test_active_preview_published_tip_returns_none():
+async def test_active_preview_published_tip_returns_published_shape():
+    """When the prepare call has a matching saved Tip, return the published
+    shape so the frontend can render the post-publish confirmation block on
+    reload (rather than nothing — the original Phase 2 bug)."""
     tips = MemoryTipRepository()
     await tips.create(
         Tip(
@@ -363,12 +366,18 @@ async def test_active_preview_published_tip_returns_none():
         ),
     ]
     result = await sessions_api._compute_active_preview("u1", "s1", transcript)
-    assert result is None
+    assert result is not None
+    assert result["type"] == "tip"
+    assert result["status"] == "published"
+    assert result["tool_call_id"] == "tc-1"
+    assert result["record_id"] == "t-1"
 
 
 @pytest.mark.asyncio
 async def test_active_preview_superseded_draft_returns_only_latest():
-    """Two prepare calls in a session — only the latest is considered."""
+    """Two prepare calls in a session — only the latest is considered. When
+    the latest is published, the response is the published shape (not the
+    older draft, and not None)."""
     tips = MemoryTipRepository()
     await tips.create(
         Tip(
@@ -384,9 +393,13 @@ async def test_active_preview_superseded_draft_returns_only_latest():
         _mk_tool_call("prepare_tip", "tc-1", {"title": "Draft A", "content": "A"}),
         _mk_tool_call("prepare_tip", "tc-2", {"title": "Draft B", "content": "B"}),
     ]
-    # tc-2 is published — should be None, NOT resurrected tc-1.
+    # tc-2 is published — return the published shape for tc-2, NOT resurrected tc-1.
     result = await sessions_api._compute_active_preview("u1", "s1", transcript)
-    assert result is None
+    assert result is not None
+    assert result["type"] == "tip"
+    assert result["status"] == "published"
+    assert result["tool_call_id"] == "tc-2"
+    assert result["record_id"] == "t-published"
 
 
 @pytest.mark.asyncio
@@ -430,7 +443,7 @@ async def test_active_preview_idea_unpublished():
 
 
 @pytest.mark.asyncio
-async def test_active_preview_idea_published_returns_none():
+async def test_active_preview_idea_published_returns_published_shape():
     ideas = MemoryUserIdeaRepository()
     await ideas.create(
         UserIdea(
@@ -447,7 +460,11 @@ async def test_active_preview_idea_published_returns_none():
         _mk_tool_call("prepare_idea", "tc-ia", {"title": "T", "description": "D"}),
     ]
     result = await sessions_api._compute_active_preview("u1", "s1", transcript)
-    assert result is None
+    assert result is not None
+    assert result["type"] == "idea"
+    assert result["status"] == "published"
+    assert result["tool_call_id"] == "tc-ia"
+    assert result["record_id"] == "idea-1"
 
 
 @pytest.mark.asyncio
@@ -474,7 +491,7 @@ async def test_active_preview_collab_unpublished():
 
 
 @pytest.mark.asyncio
-async def test_active_preview_collab_published_returns_none():
+async def test_active_preview_collab_published_returns_published_shape():
     collabs = MemoryCollabRepository()
     await collabs.create(
         Collaboration(
@@ -491,7 +508,11 @@ async def test_active_preview_collab_published_returns_none():
         _mk_tool_call("prepare_collab", "tc-c", {"title": "T", "problem": "P"}),
     ]
     result = await sessions_api._compute_active_preview("u1", "s1", transcript)
-    assert result is None
+    assert result is not None
+    assert result["type"] == "collab"
+    assert result["status"] == "published"
+    assert result["tool_call_id"] == "tc-c"
+    assert result["record_id"] == "c-1"
 
 
 @pytest.mark.asyncio
