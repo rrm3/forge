@@ -203,6 +203,25 @@ async def run_agent_session(
     else:
         skill_instructions = load_skill(session_type)
 
+    # Wrapup sessions need a one-shot context bundle (today's intake, today's
+    # journal, previous digest, pulse questions to ask). Loaded once at session
+    # start and reused on every prompt rebuild so the three S3 reads don't fire
+    # on every user turn.
+    wrapup_context: dict | None = None
+    if session_type == "wrapup":
+        from backend.agent.wrapup_context import load_wrapup_context
+        try:
+            wrapup_context = await load_wrapup_context(
+                storage=deps.storage,
+                journal_repo=deps.journal_repo,
+                profile=profile,
+                user_id=user_id,
+                merged_objectives=merged_objectives or None,
+            )
+        except Exception:
+            logger.warning("Failed to load wrapup context, continuing without it", exc_info=True)
+            wrapup_context = None
+
     # Build system prompt.
     # Pass merged_config (company + dept objectives) for intake objective tracking,
     # but department_config for department context prompt.
@@ -216,6 +235,7 @@ async def run_agent_session(
         idea=idea,
         company_prompt=company_prompt,
         merged_objectives=merged_objectives if session_type == "intake" else None,
+        wrapup_context=wrapup_context,
     )
 
     # Build tool context
@@ -347,13 +367,15 @@ async def run_agent_session(
     # is released before the frontend allows sending the next message.
     deferred_done_payload: dict | None = None
 
-    # Intake sessions get a restricted tool set - no tip/collab creation
+    # Intake sessions get a restricted tool set - no tip/collab creation,
+    # and no save_journal (the intake plan is captured in intake-responses.json;
+    # journal writes here are accidental noise we don't want to re-surface).
     tools_for_session = deps.tool_registry
     if session_type == "intake" and not intake_is_complete:
         from backend.tools.registry import FilteredToolRegistry
         tools_for_session = FilteredToolRegistry(
             deps.tool_registry,
-            exclude={"prepare_tip", "prepare_collab"},
+            exclude={"prepare_tip", "prepare_collab", "save_journal"},
         )
 
     try:
@@ -509,9 +531,10 @@ async def run_agent_session(
                 intake_responses,
             )
 
-        # Auto-save journal for wrapup sessions if save_journal wasn't called
-        if session_type == "wrapup":
-            await _auto_save_journal(transcript, deps, user_id, session_id)
+        # Wrapup sessions no longer auto-save a journal entry. The previous
+        # behavior double-wrote (auto-save plus explicit saves) and applied
+        # the wrong week's tag, which inflated the journal with duplicates.
+        # See docs/designs/2026-04-19-wrapup-context-loading.md section 2.
 
         # Generate title for sessions
         # - intake/wrapup: hardcoded titles, never overwritten
@@ -783,46 +806,6 @@ async def _enrich_profile_async(
 
     except Exception:
         logger.warning("Opus enrichment failed for user=%s", user_id, exc_info=True)
-
-
-async def _auto_save_journal(transcript: list[Message], deps: AgentDeps, user_id: str, session_id: str):
-    """Auto-save a journal entry if save_journal was never called during this session.
-
-    For wrapup sessions, check whether save_journal was already called. If not,
-    synthesize a minimal journal entry from the assistant's text so the user's
-    reflection isn't lost when sessions time out or the user goes idle.
-    """
-    try:
-        # Check if save_journal was already called in the full transcript
-        for msg in transcript:
-            if msg.role == "tool_call" and msg.tool_name == "save_journal":
-                return  # Already saved explicitly
-
-        # Gather assistant text from this session
-        assistant_parts = [msg.content for msg in transcript if msg.role == "assistant" and msg.content]
-        if not assistant_parts:
-            return
-
-        # Only auto-save if there's meaningful conversation (>200 chars of assistant text)
-        combined = "\n\n".join(assistant_parts)
-        if len(combined) < 200:
-            return
-
-        if not deps.journal_repo:
-            return
-
-        from backend.models import JournalEntry
-        # Use deterministic ID so repeated calls for the same session upsert
-        entry = JournalEntry(
-            entry_id=f"auto-{session_id}",
-            user_id=user_id,
-            content=combined[-2000:] if len(combined) > 2000 else combined,
-            tags=["auto-saved"],
-        )
-        await deps.journal_repo.create(entry)
-        logger.info("Auto-saved journal entry for user=%s session=%s (entry=%s)", user_id, session_id, entry.entry_id)
-    except Exception:
-        logger.warning("Failed to auto-save journal for session=%s", session_id, exc_info=True)
 
 
 async def _check_tip_prepared(transcript: list[Message], sender: MessageSender, session_id: str):
