@@ -1,0 +1,26 @@
+[
+  {
+    "id": "progress",
+    "version": "v1",
+    "text": "Do you feel like you're making progress in building your AI skills?",
+    "scale": [
+      "Not really",
+      "A little",
+      "Moderate progress",
+      "Good progress",
+      "Significant progress"
+    ]
+  },
+  {
+    "id": "impact",
+    "version": "v1",
+    "text": "To what extent has AI helped you buy back time or reduce friction in your weekly tasks?",
+    "scale": [
+      "No impact",
+      "Minimal impact",
+      "Moderate impact",
+      "Significant impact",
+      "Transformative impact"
+    ]
+  }
+]

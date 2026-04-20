@@ -39,6 +39,8 @@ class CreateCollabRequest(BaseModel):
     time_commitment: str = ""
     tags: list[str] = []
     department: str = ""
+    source_session_id: str = ""
+    source_tool_call_id: str = ""
 
 
 class UpdateCollabRequest(BaseModel):
@@ -77,6 +79,8 @@ async def create_collab(body: CreateCollabRequest, user: AuthUser):
         needed_skills=body.needed_skills,
         time_commitment=body.time_commitment,
         tags=body.tags,
+        source_session_id=body.source_session_id,
+        source_tool_call_id=body.source_tool_call_id,
     )
     await _collabs_repo.create(collab)
     posthog_track(user.user_id, "collab_created", {

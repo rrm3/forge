@@ -228,9 +228,44 @@ export interface UserIdea {
   description: string;
   source: string;
   source_session_id: string;
+  source_tool_call_id?: string;
   linked_sessions: string[];
   tags: string[];
   status: string;
   created_at: string;
   updated_at: string;
+}
+
+/** Server-computed unpublished preview card, returned by GET /api/sessions/{id}. */
+export type ActivePreview =
+  | {
+      type: 'tip';
+      tool_call_id: string;
+      title: string;
+      content: string;
+      tags: string[];
+      department: string;
+    }
+  | {
+      type: 'collab';
+      tool_call_id: string;
+      title: string;
+      problem: string;
+      needed_skills: string[];
+      time_commitment: string;
+      tags: string[];
+      department: string;
+    }
+  | {
+      type: 'idea';
+      tool_call_id: string;
+      title: string;
+      description: string;
+      tags: string[];
+    };
+
+/** Shape of GET /api/sessions/{id} response — Session fields plus transcript and optional preview. */
+export interface SessionLoadResponse extends Session {
+  transcript?: Message[];
+  active_preview?: ActivePreview | null;
 }

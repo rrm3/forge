@@ -288,6 +288,53 @@ async def test_journal_delete_nonexistent(journal_repo):
     await journal_repo.delete("user-1", "nonexistent")
 
 
+@pytest.mark.asyncio
+async def test_dynamodb_journal_list_does_not_pass_limit_with_date_filter():
+    """REGRESSION GUARD.
+
+    DynamoDB `Limit` applies to rows examined BEFORE the FilterExpression.
+    If we pass Limit=N alongside a date FilterExpression, DynamoDB reads
+    exactly N rows in sort-key order and THEN filters by date. For a journal
+    table whose sort key is random entry_id, this means "today's entries"
+    can come back empty even when they exist.
+
+    Verify that `list(date_from=..., date_to=...)` does NOT include Limit
+    in the underlying query kwargs. And that `list()` with no date filter
+    DOES include Limit (the cheap path when we just want N latest).
+    """
+    from unittest.mock import MagicMock, patch
+
+    from backend.repository.journal import DynamoDBJournalRepository
+
+    mock_table = MagicMock()
+    mock_table.query = MagicMock(return_value={"Items": []})
+
+    with patch("backend.repository.journal.boto3.resource"):
+        repo = DynamoDBJournalRepository.__new__(DynamoDBJournalRepository)
+        repo.table = mock_table
+
+        await repo.list(
+            "user-1",
+            date_from=datetime(2026, 4, 14, tzinfo=timezone.utc),
+            date_to=datetime(2026, 4, 15, tzinfo=timezone.utc),
+            limit=10,
+        )
+        call_kwargs = mock_table.query.call_args.kwargs
+        assert "Limit" not in call_kwargs, (
+            "Do not pass Limit to DynamoDB query when a date FilterExpression "
+            "is present — DynamoDB applies Limit before the filter, which can "
+            "cause today's entries to be missed. Paginate and filter in code."
+        )
+        assert "FilterExpression" in call_kwargs
+
+        # Reset and verify the no-filter path still sets Limit (cheap path)
+        mock_table.query.reset_mock()
+        mock_table.query = MagicMock(return_value={"Items": []})
+        await repo.list("user-1", limit=10)
+        call_kwargs = mock_table.query.call_args.kwargs
+        assert call_kwargs.get("Limit") == 10
+
+
 # --- Idea repository ---
 
 

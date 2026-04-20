@@ -150,6 +150,11 @@ class UserProfile(BaseModel):
     intake_objectives_done: int = 0
     intake_objectives_total: int = 0
     intake_weeks: dict = Field(default_factory=dict)  # {"1": "ISO datetime", "2": "ISO datetime", ...}
+    # Written only by `_enrich_profile_async` when identity-field enrichment
+    # succeeds for the first time. Used as the gate signal for W4-03 so that
+    # weekly check-ins don't re-run enrichment and clobber user corrections.
+    # See docs/designs/2026-04-19-weekly-enrichment-overwrite.md.
+    intake_enrichment_completed_at: datetime | None = None
     program_week_override: int = 0  # If set (>0), overrides clock-based week for testing
     is_department_admin: bool = False
     created_at: datetime = Field(default_factory=_now)
@@ -188,6 +193,8 @@ class Tip(BaseModel):
     artifact: str = ""  # gem instructions or skill definition (markdown)
     vote_count: int = 0
     comment_count: int = 0
+    source_session_id: str = ""  # Session that produced this tip via prepare_tip
+    source_tool_call_id: str = ""  # tool_call_id of the prepare_tip invocation
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -218,6 +225,8 @@ class Collaboration(BaseModel):
     comment_count: int = 0
     business_value: str = ""
     tags: list[str] = Field(default_factory=list)
+    source_session_id: str = ""  # Session that produced this collab via prepare_collab
+    source_tool_call_id: str = ""  # tool_call_id of the prepare_collab invocation
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 
@@ -244,6 +253,7 @@ class UserIdea(BaseModel):
     description: str = ""
     source: str = "manual"  # intake, brainstorm, chat, manual
     source_session_id: str = ""
+    source_tool_call_id: str = ""  # tool_call_id of the prepare_idea invocation when created via that path
     linked_sessions: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     status: str = "new"  # new, exploring, done

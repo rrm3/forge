@@ -213,6 +213,7 @@ export function ChatView() {
             {state.tipReady && !isStreaming && !state.tipPublished && (
               <TipPreviewCard
                 initial={state.tipReady}
+                sessionId={state.activeSessionId || ''}
                 onPublished={() => {
                   dispatch({ type: 'SET_TIP_PUBLISHED' });
                 }}
@@ -245,6 +246,7 @@ export function ChatView() {
             {state.collabReady && !isStreaming && !state.collabPublished && (
               <CollabPreviewCard
                 initial={state.collabReady}
+                sessionId={state.activeSessionId || ''}
                 onPublished={() => {
                   dispatch({ type: 'SET_COLLAB_PUBLISHED' });
                 }}

@@ -273,6 +273,8 @@ class CreateTipRequest(BaseModel):
     department: str = "Everyone"
     category: TipCategoryType = "tip"
     artifact: str = Field("", max_length=50000)
+    source_session_id: str = ""
+    source_tool_call_id: str = ""
 
 
 @router.post("")
@@ -291,6 +293,8 @@ async def create_tip(body: CreateTipRequest, user: AuthUser):
         tags=body.tags,
         category=body.category,
         artifact=body.artifact,
+        source_session_id=body.source_session_id,
+        source_tool_call_id=body.source_tool_call_id,
     )
     await _tips_repo.create(tip)
     posthog_track(user.user_id, "tip_created", {

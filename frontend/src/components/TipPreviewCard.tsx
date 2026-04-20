@@ -24,12 +24,13 @@ const DEPARTMENTS = [
 ];
 
 interface TipPreviewCardProps {
-  initial: { title: string; content: string; tags: string[]; department: string; category?: string };
+  initial: { title: string; content: string; tags: string[]; department: string; category?: string; tool_call_id?: string };
+  sessionId?: string;
   onPublished: () => void;
   onShowTips?: () => void;
 }
 
-export function TipPreviewCard({ initial, onPublished }: TipPreviewCardProps) {
+export function TipPreviewCard({ initial, sessionId, onPublished }: TipPreviewCardProps) {
   const [title, setTitle] = useState(initial.title);
   const [content, setContent] = useState(initial.content);
   const [tags, setTags] = useState<string[]>(initial.tags);
@@ -101,7 +102,15 @@ export function TipPreviewCard({ initial, onPublished }: TipPreviewCardProps) {
   async function doPublish() {
     setPublishing(true);
     try {
-      await createTip({ title, content, tags, department, category: initial.category || 'tip' });
+      await createTip({
+        title,
+        content,
+        tags,
+        department,
+        category: initial.category || 'tip',
+        source_session_id: sessionId || '',
+        source_tool_call_id: initial.tool_call_id || '',
+      });
       onPublished();
     } catch (err) {
       console.error('Failed to publish tip:', err);
