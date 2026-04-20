@@ -100,7 +100,9 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
       // Always hard-clear preview state first — preserves today's behavior exactly
       // for legacy backend responses that don't include active_preview.
       const preview = action.activePreview ?? null;
-      const isPublished = preview && 'status' in preview && preview.status === 'published';
+      // Use the `'status' in preview` shape narrow inline (rather than a
+      // precomputed boolean) so TypeScript carries the discriminated-union
+      // narrowing through to the property accesses below.
       return {
         ...state,
         activeSessionId: action.sessionId,
@@ -115,7 +117,7 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         ideaPublished: false,
         ideaContext: null,
         // Editable draft: populate the *Ready slot.
-        ...(preview?.type === 'tip' && !isPublished
+        ...(preview?.type === 'tip' && !('status' in preview)
           ? {
               tipReady: {
                 title: preview.title,
@@ -126,7 +128,7 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
               },
             }
           : {}),
-        ...(preview?.type === 'collab' && !isPublished
+        ...(preview?.type === 'collab' && !('status' in preview)
           ? {
               collabReady: {
                 title: preview.title,
@@ -139,7 +141,7 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
               },
             }
           : {}),
-        ...(preview?.type === 'idea' && !isPublished
+        ...(preview?.type === 'idea' && !('status' in preview)
           ? {
               ideaReady: {
                 title: preview.title,
@@ -150,9 +152,9 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
             }
           : {}),
         // Published: flip the *Published flag so the post-publish confirmation renders.
-        ...(preview?.type === 'tip' && isPublished ? { tipPublished: true } : {}),
-        ...(preview?.type === 'collab' && isPublished ? { collabPublished: true } : {}),
-        ...(preview?.type === 'idea' && isPublished ? { ideaPublished: true } : {}),
+        ...(preview?.type === 'tip' && 'status' in preview ? { tipPublished: true } : {}),
+        ...(preview?.type === 'collab' && 'status' in preview ? { collabPublished: true } : {}),
+        ...(preview?.type === 'idea' && 'status' in preview ? { ideaPublished: true } : {}),
       };
     }
 
