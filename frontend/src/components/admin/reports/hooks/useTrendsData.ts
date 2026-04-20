@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../../api/client';
 
-export type TrendsMode = 'full' | 'shareable';
-
 export interface TrendsData {
   generated_at: string;
   weeks: { n: number; start: string; end: string; label: string }[];
+  programme?: {
+    org_chart_total?: number;
+    profiles_total?: number;
+    signup_rate?: number;
+    intake_completed?: number;
+    intake_skipped?: number;
+    signups_by_week?: { week: number; profiles_total: number | null; intake_completed: number | null }[];
+  };
   engagement: Record<string, unknown[]>;
   cohorts: Record<string, unknown[]>;
   departments: { list: string[]; active_by_week: unknown[]; momentum: unknown[] };
@@ -14,16 +20,14 @@ export interface TrendsData {
   blockers: { canonical: string[]; counts_by_week: unknown[]; persistent: unknown[] };
   sentiment: { levels: string[]; mix_by_week: unknown[]; by_department_by_week: unknown[] };
   ideas: { new_by_week: unknown[]; status_transitions_by_week: unknown[]; top_themes_by_week: unknown[] };
-  _named?: Record<string, unknown[]>;
 }
 
 export function useTrendsData() {
   const [data, setData] = useState<TrendsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<TrendsMode>('full');
 
-  const fetchTrends = useCallback(async (m: TrendsMode) => {
+  const fetchTrends = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -34,7 +38,7 @@ export function useTrendsData() {
         const resp = await fetch('/trends.sample.json');
         result = await resp.json();
       } else {
-        const resp = await apiFetch(`/api/admin/trends?mode=${m}`);
+        const resp = await apiFetch('/api/admin/trends');
         result = await resp.json();
       }
       setData(result);
@@ -47,12 +51,8 @@ export function useTrendsData() {
   }, []);
 
   useEffect(() => {
-    fetchTrends(mode);
-  }, [mode, fetchTrends]);
+    fetchTrends();
+  }, [fetchTrends]);
 
-  const toggleMode = useCallback(() => {
-    setMode((prev) => (prev === 'full' ? 'shareable' : 'full'));
-  }, []);
-
-  return { data, loading, error, mode, toggleMode, refetch: () => fetchTrends(mode) };
+  return { data, loading, error, refetch: fetchTrends };
 }

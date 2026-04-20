@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { Search, X, ChevronUp, ChevronDown, Shield } from 'lucide-react';
-import { listAdminUsers, getAdminUserIntake, setUserRole, setUserAdmin, deleteAdminUser } from '../api/client';
+import { listAdminUsers, getAdminUserIntake, setUserRole, setUserAdmin, setUserReportViewer, deleteAdminUser } from '../api/client';
 import { UserAvatar } from './UserAvatar';
 import { getProgramWeek } from '../program';
 import type { AdminUserSummary, AdminUserIntake } from '../api/types';
@@ -85,6 +85,17 @@ export function AdminUsers() {
       );
     } catch (err) {
       console.error('Failed to update admin status:', err);
+    }
+  }
+
+  async function handleToggleReportViewer(userId: string, isReportViewer: boolean) {
+    try {
+      await setUserReportViewer(userId, isReportViewer);
+      setUsers((prev) =>
+        prev.map((u) => u.user_id === userId ? { ...u, is_report_viewer: isReportViewer } : u)
+      );
+    } catch (err) {
+      console.error('Failed to update report-viewer status:', err);
     }
   }
 
@@ -420,6 +431,21 @@ export function AdminUsers() {
                           Dept Admin
                         </span>
                       )}
+                      {u.is_report_viewer && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5"
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            fontFamily: "'Satoshi', system-ui, sans-serif",
+                            backgroundColor: '#ECFDF5',
+                            color: '#047857',
+                          }}
+                        >
+                          <Shield className="w-3 h-3" strokeWidth={2} />
+                          Report Viewer
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td style={{ ...monoTd, textAlign: 'center' }}>
@@ -482,6 +508,7 @@ export function AdminUsers() {
               onClose={() => setSelectedUserId(null)}
               onToggleRole={handleToggleRole}
               onToggleAdmin={handleToggleAdmin}
+              onToggleReportViewer={handleToggleReportViewer}
               onDelete={handleDeleteUser}
             />
           </div>
@@ -500,6 +527,7 @@ function DetailPanel({
   onClose,
   onToggleRole,
   onToggleAdmin,
+  onToggleReportViewer,
   onDelete,
 }: {
   userId: string;
@@ -510,6 +538,7 @@ function DetailPanel({
   onClose: () => void;
   onToggleRole: (userId: string, isDeptAdmin: boolean) => void;
   onToggleAdmin: (userId: string, isAdmin: boolean) => void;
+  onToggleReportViewer: (userId: string, isReportViewer: boolean) => void;
   onDelete: (userId: string) => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -657,8 +686,58 @@ function DetailPanel({
             </span>
           </button>
           {user.is_department_admin && (
-            <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
+            <p className="text-xs mt-1.5 mb-3" style={{ color: 'var(--color-text-muted)' }}>
               Can view and edit department settings for {p.department || 'their department'}
+            </p>
+          )}
+          {!user.is_department_admin && <div className="mb-3" />}
+
+          {/* Report Viewer toggle */}
+          <button
+            onClick={() => onToggleReportViewer(userId, !user.is_report_viewer)}
+            className="flex items-center justify-between w-full rounded-lg border px-3 py-2.5 transition-colors"
+            style={{
+              borderColor: user.is_report_viewer ? '#A7F3D0' : 'var(--color-border)',
+              backgroundColor: user.is_report_viewer ? '#ECFDF5' : 'transparent',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => { if (!user.is_report_viewer) e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)'; }}
+            onMouseLeave={(e) => { if (!user.is_report_viewer) e.currentTarget.style.backgroundColor = user.is_report_viewer ? '#ECFDF5' : 'transparent'; }}
+          >
+            <span className="flex items-center gap-2">
+              <Shield
+                className="w-4 h-4"
+                strokeWidth={1.5}
+                style={{ color: user.is_report_viewer ? '#047857' : 'var(--color-text-muted)' }}
+              />
+              <span
+                className="text-sm font-medium"
+                style={{ color: user.is_report_viewer ? '#047857' : 'var(--color-text-primary)' }}
+              >
+                Report Viewer
+              </span>
+            </span>
+            <span
+              className="relative inline-block rounded-full transition-colors"
+              style={{
+                width: 32,
+                height: 18,
+                backgroundColor: user.is_report_viewer ? '#047857' : '#CBD5E1',
+              }}
+            >
+              <span
+                className="absolute top-0.5 rounded-full bg-white transition-all shadow-sm"
+                style={{
+                  width: 14,
+                  height: 14,
+                  left: user.is_report_viewer ? 16 : 2,
+                }}
+              />
+            </span>
+          </button>
+          {user.is_report_viewer && (
+            <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
+              Read-only access to the trends report at /admin/reports
             </p>
           )}
         </Section>

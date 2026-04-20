@@ -157,6 +157,7 @@ class UserProfile(BaseModel):
     intake_enrichment_completed_at: datetime | None = None
     program_week_override: int = 0  # If set (>0), overrides clock-based week for testing
     is_department_admin: bool = False
+    is_report_viewer: bool = False
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 
