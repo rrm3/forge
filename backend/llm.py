@@ -102,7 +102,7 @@ async def call_llm(
     Args:
         messages: Conversation history as role/content dicts.
         tools: Optional tool definitions in OpenAI format.
-        model: Model identifier (defaults to settings.llm_model).
+        model: Model identifier (defaults to opus from S3 model config).
         stream: If True, uses streaming internally (collected before return).
 
     Returns:
@@ -111,7 +111,9 @@ async def call_llm(
     Raises:
         Exception: Re-raises non-retryable errors after classify_llm_error logging.
     """
-    model = model or settings.llm_model
+    if model is None:
+        from backend.model_config import get_model
+        model = get_model("opus")
 
     kwargs: dict = {
         "model": model,

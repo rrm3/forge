@@ -37,8 +37,7 @@ class Settings(BaseSettings):
     lance_local_path: str = "/tmp/lance"
     lance_s3_bucket: str = ""
 
-    # LLM
-    llm_model: str = "bedrock/global.anthropic.claude-opus-4-6-v1"
+    # LLM (model IDs loaded at runtime from S3 config/models.json)
     bedrock_access_key_id: str = ""
     bedrock_secret_access_key: str = ""
     bedrock_role_arn: str = ""  # cross-account role for Bedrock (preferred over static keys)

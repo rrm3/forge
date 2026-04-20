@@ -86,6 +86,15 @@ class TipRepository(ABC):
         """Count tips per author. Returns {author_id: count}."""
         pass
 
+    @abstractmethod
+    async def find_by_source(self, user_id: str, session_id: str, tool_call_id: str) -> Tip | None:
+        """Find a tip by its provenance (source_session_id + source_tool_call_id) for a given user.
+
+        Used by the session-load endpoint to determine whether a prepared tip has already
+        been published. Returns None if no match exists or on any retrieval error.
+        """
+        pass
+
 
 class DynamoDBTipRepository(TipRepository):
     """DynamoDB tip storage. Tips PK=tip_id, Votes PK=tip_id+SK=user_id, Comments PK=tip_id+SK=comment_id."""
@@ -113,6 +122,10 @@ class DynamoDBTipRepository(TipRepository):
             d["summary"] = tip.summary
         if tip.artifact:
             d["artifact"] = tip.artifact
+        if tip.source_session_id:
+            d["source_session_id"] = tip.source_session_id
+        if tip.source_tool_call_id:
+            d["source_tool_call_id"] = tip.source_tool_call_id
         return d
 
     def _deserialize_tip(self, item: dict) -> Tip:
@@ -128,6 +141,8 @@ class DynamoDBTipRepository(TipRepository):
             artifact=item.get("artifact", ""),
             vote_count=int(item.get("vote_count", 0)),
             comment_count=int(item.get("comment_count", 0)),
+            source_session_id=item.get("source_session_id", ""),
+            source_tool_call_id=item.get("source_tool_call_id", ""),
             created_at=datetime.fromisoformat(item["created_at"]),
         )
 
@@ -455,6 +470,53 @@ class DynamoDBTipRepository(TipRepository):
                 break
         return counts
 
+    async def find_by_source(self, user_id: str, session_id: str, tool_call_id: str) -> Tip | None:
+        """Scan with a filter on author_id + source_session_id + source_tool_call_id.
+
+        Expected to return zero or one row. Used on session load to check whether
+        a prepared tip has already been published. Fails closed to None on any error.
+
+        DynamoDB `Limit` applies to rows examined BEFORE the FilterExpression,
+        not to filtered matches. Using Limit=1 here would read one random row
+        and return None unless that one row happened to match — i.e., it would
+        almost always miss a real published record. Instead we paginate the
+        scan, apply the filter server-side, and return on the first match.
+        """
+        if not user_id or not session_id or not tool_call_id:
+            return None
+        loop = asyncio.get_event_loop()
+        last_key = None
+        try:
+            while True:
+                kwargs: dict = {
+                    "FilterExpression": (
+                        "author_id = :uid AND source_session_id = :sid "
+                        "AND source_tool_call_id = :tcid"
+                    ),
+                    "ExpressionAttributeValues": {
+                        ":uid": user_id,
+                        ":sid": session_id,
+                        ":tcid": tool_call_id,
+                    },
+                }
+                if last_key:
+                    kwargs["ExclusiveStartKey"] = last_key
+                response = await loop.run_in_executor(
+                    None, partial(self.tips_table.scan, **kwargs)
+                )
+                items = response.get("Items", [])
+                if items:
+                    return self._deserialize_tip(items[0])
+                last_key = response.get("LastEvaluatedKey")
+                if not last_key:
+                    return None
+        except ClientError:
+            logger.warning(
+                "find_by_source scan failed user=%s session=%s tool_call=%s",
+                user_id, session_id, tool_call_id, exc_info=True,
+            )
+            return None
+
 
 class MemoryTipRepository(TipRepository):
     """In-memory tip storage for local dev and tests."""
@@ -600,3 +662,15 @@ class MemoryTipRepository(TipRepository):
             if tip.author_id in author_set:
                 counts[tip.author_id] = counts.get(tip.author_id, 0) + 1
         return counts
+
+    async def find_by_source(self, user_id: str, session_id: str, tool_call_id: str) -> Tip | None:
+        if not user_id or not session_id or not tool_call_id:
+            return None
+        for tip in self._tips.values():
+            if (
+                tip.author_id == user_id
+                and tip.source_session_id == session_id
+                and tip.source_tool_call_id == tool_call_id
+            ):
+                return tip
+        return None

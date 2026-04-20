@@ -31,6 +31,7 @@ class CreateUserIdeaRequest(BaseModel):
     tags: list[str] = []
     source: str = "manual"
     source_session_id: str = ""
+    source_tool_call_id: str = ""
 
 
 class UpdateUserIdeaRequest(BaseModel):
@@ -62,6 +63,7 @@ async def create_user_idea(body: CreateUserIdeaRequest, user: AuthUser):
         tags=body.tags,
         source=body.source,
         source_session_id=body.source_session_id,
+        source_tool_call_id=body.source_tool_call_id,
     )
     await _user_ideas_repo.create(idea)
     posthog_track(user.user_id, "idea_created", {

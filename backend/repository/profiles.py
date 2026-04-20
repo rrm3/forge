@@ -91,6 +91,7 @@ class DynamoDBProfileRepository(ProfileRepository):
             "intake_fields_captured": profile.intake_fields_captured,
             "intake_completed_at": profile.intake_completed_at.isoformat() if profile.intake_completed_at else None,
             "intake_weeks": profile.intake_weeks or {},
+            "intake_enrichment_completed_at": profile.intake_enrichment_completed_at.isoformat() if profile.intake_enrichment_completed_at else None,
             "program_week_override": profile.program_week_override,
             "timezone": profile.timezone,
             "is_department_admin": profile.is_department_admin,
@@ -112,6 +113,12 @@ class DynamoDBProfileRepository(ProfileRepository):
         intake_completed = item.get("intake_completed_at")
         if isinstance(intake_completed, str):
             intake_completed = datetime.fromisoformat(intake_completed)
+
+        intake_enriched = item.get("intake_enrichment_completed_at")
+        if isinstance(intake_enriched, str):
+            intake_enriched = datetime.fromisoformat(intake_enriched)
+        else:
+            intake_enriched = None
 
         # Coerce DynamoDB values: lists that should be strings, strings that should be lists
         def _to_str(val, default=""):
@@ -164,6 +171,7 @@ class DynamoDBProfileRepository(ProfileRepository):
             intake_objectives_done=int(item.get("intake_objectives_done", 0)),
             intake_objectives_total=int(item.get("intake_objectives_total", 0)),
             intake_weeks=dict(item.get("intake_weeks", {})),
+            intake_enrichment_completed_at=intake_enriched,
             program_week_override=int(item.get("program_week_override", 0)),
             timezone=item.get("timezone", ""),
             is_department_admin=bool(item.get("is_department_admin", False)),

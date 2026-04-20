@@ -20,11 +20,19 @@ from backend.models import UserProfile
 
 logger = logging.getLogger(__name__)
 
-# Fast, cheap model for profile field extraction
-EXTRACTION_MODEL = "bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
+from backend.model_config import get_model
 
-# More capable model for nuanced judgment (objective evaluation)
-EVALUATION_MODEL = "bedrock/global.anthropic.claude-sonnet-4-6"
+
+def _cached_system(text: str) -> list[dict]:
+    """Wrap a system prompt with Anthropic ephemeral cache_control.
+
+    LiteLLM forwards this to Bedrock's Anthropic cachePoint so that repeated
+    calls with the same prefix skip re-processing. Keep anything session-
+    variable out of the cached block (pass it in a second, unmarked block or
+    in the user message).
+    """
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
 
 def _parse_json_response(text: str):
     """Strip markdown fences and parse JSON. Returns parsed object or None."""
@@ -101,20 +109,28 @@ async def extract_profile_data(
         if value:
             current_state[field] = value
 
-    # Build the extraction prompt
+    # Build the extraction prompt. Split the static instructions (cached) from
+    # the session-variable profile state so consecutive calls within a session
+    # hit the cache on the large instruction block.
     profile_json = json.dumps(current_state, default=str) if current_state else "{}"
-    system = _EXTRACTION_PROMPT_TEMPLATE.replace("CURRENT_PROFILE_PLACEHOLDER", profile_json)
+    prefix, suffix = _EXTRACTION_PROMPT_TEMPLATE.split("CURRENT_PROFILE_PLACEHOLDER", 1)
 
     # Include last few messages for context (not the entire history)
     recent = transcript_messages[-6:] if len(transcript_messages) > 6 else transcript_messages
 
     messages = [
-        {"role": "system", "content": system},
+        {
+            "role": "system",
+            "content": [
+                {"type": "text", "text": prefix, "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": f"{profile_json}{suffix}"},
+            ],
+        },
         {"role": "user", "content": _format_conversation(recent)},
     ]
 
     try:
-        response = await call_llm(messages, model=EXTRACTION_MODEL, stream=False)
+        response = await call_llm(messages, model=get_model("haiku"), stream=False)
         if not response.content:
             return {}
 
@@ -207,12 +223,12 @@ async def score_ai_proficiency(transcript_messages: list[dict]) -> dict | None:
         return None
 
     messages = [
-        {"role": "system", "content": _PROFICIENCY_PROMPT},
+        {"role": "system", "content": _cached_system(_PROFICIENCY_PROMPT)},
         {"role": "user", "content": user_text},
     ]
 
     try:
-        response = await call_llm(messages, model=EXTRACTION_MODEL, stream=False)
+        response = await call_llm(messages, model=get_model("haiku"), stream=False)
         if not response.content:
             return None
 
@@ -321,14 +337,14 @@ async def evaluate_objectives(
     conversation = _format_conversation(transcript_messages)
 
     messages = [
-        {"role": "system", "content": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]},
+        {"role": "system", "content": _cached_system(system)},
         {"role": "user", "content": conversation},
     ]
 
     valid_remaining_ids = {o["id"] for o in remaining}
 
     try:
-        response = await call_llm(messages, model=EVALUATION_MODEL, stream=False)
+        response = await call_llm(messages, model=get_model("opus"), stream=False)
         if not response.content:
             return {}
 
@@ -342,7 +358,7 @@ async def evaluate_objectives(
                 {"role": "assistant", "content": text},
                 {"role": "user", "content": "Your response was not valid JSON. Respond with ONLY a JSON object mapping objective IDs to summary strings. No explanation, no markdown."},
             ]
-            response = await call_llm(retry_messages, model=EVALUATION_MODEL, stream=False)
+            response = await call_llm(retry_messages, model=get_model("opus"), stream=False)
             if not response.content:
                 return {}
             text = response.content.strip()
@@ -428,7 +444,10 @@ async def enrich_profile_with_opus(
     else:
         obj_text = "(none)"
 
-    system = _ENRICHMENT_PROMPT.replace("OBJECTIVES_PLACEHOLDER", obj_text)
+    # Split the static instruction prefix (cached) from the per-department
+    # objectives list. The prefix is identical across all users so the cache
+    # hits for every enrichment call.
+    prefix, suffix = _ENRICHMENT_PROMPT.split("OBJECTIVES_PLACEHOLDER", 1)
 
     # Include full conversation (both user and assistant for context)
     formatted = []
@@ -440,14 +459,19 @@ async def enrich_profile_with_opus(
     conversation = "\n\n".join(formatted)
 
     messages = [
-        {"role": "system", "content": system},
+        {
+            "role": "system",
+            "content": [
+                {"type": "text", "text": prefix, "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": f"{obj_text}{suffix}"},
+            ],
+        },
         {"role": "user", "content": conversation},
     ]
 
     text = ""
     try:
-        from backend.config import settings
-        response = await call_llm(messages, model=settings.llm_model, stream=False)
+        response = await call_llm(messages, model=get_model("opus"), stream=False)
         if not response.content:
             return None
 
@@ -516,12 +540,12 @@ async def extract_suggestions(transcript_messages: list[dict]) -> list[dict]:
     conversation = "\n\n".join(formatted)
 
     messages = [
-        {"role": "system", "content": _SUGGESTIONS_PROMPT},
+        {"role": "system", "content": _cached_system(_SUGGESTIONS_PROMPT)},
         {"role": "user", "content": conversation},
     ]
 
     try:
-        response = await call_llm(messages, model=EXTRACTION_MODEL, stream=False)
+        response = await call_llm(messages, model=get_model("haiku"), stream=False)
         if not response.content:
             return []
 

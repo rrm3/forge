@@ -26,12 +26,14 @@ interface CollabPreviewCardProps {
     time_commitment: string;
     tags: string[];
     department: string;
+    tool_call_id?: string;
   };
+  sessionId?: string;
   onPublished: () => void;
   onShowCollabs?: () => void;
 }
 
-export function CollabPreviewCard({ initial, onPublished }: CollabPreviewCardProps) {
+export function CollabPreviewCard({ initial, sessionId, onPublished }: CollabPreviewCardProps) {
   const [title, setTitle] = useState(initial.title);
   const [problem, setProblem] = useState(initial.problem);
   const [neededSkills, setNeededSkills] = useState<string[]>(
@@ -77,6 +79,8 @@ export function CollabPreviewCard({ initial, onPublished }: CollabPreviewCardPro
         time_commitment: timeCommitment,
         tags,
         department,
+        source_session_id: sessionId || '',
+        source_tool_call_id: initial.tool_call_id || '',
       });
       onPublished();
     } catch (err) {

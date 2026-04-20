@@ -57,17 +57,24 @@ async def react_loop(
         LoopEvent instances (TextEvent, ToolCallEvent, ToolResultEvent,
         DoneEvent, or ErrorEvent).
     """
-    # Ensure system prompt is the first message
+    # Ensure system prompt is the first message. Wrap in an ephemeral
+    # cache_control block so consecutive turns hit Anthropic's prompt cache
+    # on the (largely static) system prompt — cuts input-token cost and
+    # latency dramatically once warmed.
+    system_content = [
+        {"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}
+    ]
     if not messages or messages[0].get("role") != "system":
-        messages.insert(0, {"role": "system", "content": system_prompt})
+        messages.insert(0, {"role": "system", "content": system_content})
     else:
-        messages[0] = {"role": "system", "content": system_prompt}
+        messages[0] = {"role": "system", "content": system_content}
 
     # Append the user message
     messages.append({"role": "user", "content": user_message})
 
     tool_schemas = _format_tool_schemas(tools.get_schemas())
-    model = settings.llm_model
+    from backend.model_config import get_model
+    model = get_model("opus")
 
     # Accumulate usage across iterations
     acc_prompt = 0

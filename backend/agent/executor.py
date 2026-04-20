@@ -140,7 +140,11 @@ async def run_agent_session(
     company_prompt = (company_config or {}).get("prompt", "") or None
 
     # Load department config for all sessions when user has a department.
-    # Merged objectives (company + dept) only needed for intake sessions.
+    # Merged objectives (company + dept) are loaded for intake sessions (used
+    # for the state machine + prompt) and for wrapup sessions (used to look up
+    # human-readable labels when rendering today's intake responses in the
+    # wrapup context — otherwise raw IDs like "applied-learnings-week4" leak
+    # into the prompt instead of "Applied last week's learnings").
     department_config = None
     merged_objectives: list[dict] = []
     intake_responses = {}
@@ -148,7 +152,11 @@ async def run_agent_session(
     if profile and profile.department:
         dept_slug = profile.department.lower().replace(" ", "-")
         department_config = await dept_config_repo.get_department_config(dept_slug)
-    if session_type == "intake" and not intake_is_complete:
+    needs_objectives = (
+        (session_type == "intake" and not intake_is_complete)
+        or session_type == "wrapup"
+    )
+    if needs_objectives:
         if dept_slug:
             merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug, program_week=current_week)
         else:
@@ -203,6 +211,25 @@ async def run_agent_session(
     else:
         skill_instructions = load_skill(session_type)
 
+    # Wrapup sessions need a one-shot context bundle (today's intake, today's
+    # journal, previous digest, pulse questions to ask). Loaded once at session
+    # start and reused on every prompt rebuild so the three S3 reads don't fire
+    # on every user turn.
+    wrapup_context: dict | None = None
+    if session_type == "wrapup":
+        from backend.agent.wrapup_context import load_wrapup_context
+        try:
+            wrapup_context = await load_wrapup_context(
+                storage=deps.storage,
+                journal_repo=deps.journal_repo,
+                profile=profile,
+                user_id=user_id,
+                merged_objectives=merged_objectives or None,
+            )
+        except Exception:
+            logger.warning("Failed to load wrapup context, continuing without it", exc_info=True)
+            wrapup_context = None
+
     # Build system prompt.
     # Pass merged_config (company + dept objectives) for intake objective tracking,
     # but department_config for department context prompt.
@@ -216,6 +243,7 @@ async def run_agent_session(
         idea=idea,
         company_prompt=company_prompt,
         merged_objectives=merged_objectives if session_type == "intake" else None,
+        wrapup_context=wrapup_context,
     )
 
     # Build tool context
@@ -347,13 +375,15 @@ async def run_agent_session(
     # is released before the frontend allows sending the next message.
     deferred_done_payload: dict | None = None
 
-    # Intake sessions get a restricted tool set - no tip/collab creation
+    # Intake sessions get a restricted tool set - no tip/collab creation,
+    # and no save_journal (the intake plan is captured in intake-responses.json;
+    # journal writes here are accidental noise we don't want to re-surface).
     tools_for_session = deps.tool_registry
     if session_type == "intake" and not intake_is_complete:
         from backend.tools.registry import FilteredToolRegistry
         tools_for_session = FilteredToolRegistry(
             deps.tool_registry,
-            exclude={"prepare_tip", "prepare_collab"},
+            exclude={"prepare_tip", "prepare_collab", "save_journal"},
         )
 
     try:
@@ -509,9 +539,10 @@ async def run_agent_session(
                 intake_responses,
             )
 
-        # Auto-save journal for wrapup sessions if save_journal wasn't called
-        if session_type == "wrapup":
-            await _auto_save_journal(transcript, deps, user_id, session_id)
+        # Wrapup sessions no longer auto-save a journal entry. The previous
+        # behavior double-wrote (auto-save plus explicit saves) and applied
+        # the wrong week's tag, which inflated the journal with duplicates.
+        # See docs/designs/2026-04-19-wrapup-context-loading.md section 2.
 
         # Generate title for sessions
         # - intake/wrapup: hardcoded titles, never overwritten
@@ -664,6 +695,16 @@ async def _check_intake_completion(
             all_complete = required_fields.issubset(captured)
 
         if all_complete:
+            # Whether this user has ever had identity-field enrichment succeed.
+            # `intake_enrichment_completed_at` is written by `_enrich_profile_async`
+            # on success and by nothing else — no `update_profile` path, no API
+            # endpoint, no skill prompt can set it. That exclusivity is what makes
+            # it a reliable gate signal. An intake_summary-based gate would be
+            # contaminated by the intake skill's closing-turn `update_profile`
+            # call and skip enrichment on true first completions.
+            # See docs/designs/2026-04-19-weekly-enrichment-overwrite.md.
+            is_first_intake = profile.intake_enrichment_completed_at is None
+
             week_str = str(effective_program_week(profile))
             now_iso = datetime.now(UTC).isoformat()
             current_weeks = dict(profile.intake_weeks or {}) if profile else {}
@@ -714,7 +755,13 @@ async def _check_intake_completion(
             # because asyncio.run() tears down the event loop (and all pending
             # tasks) as soon as the outer coroutine returns.
             objectives = department_config.get("objectives", []) if department_config else []
-            return {"deps": deps, "user_id": user_id, "transcript": transcript, "objectives": objectives}
+            return {
+                "deps": deps,
+                "user_id": user_id,
+                "transcript": transcript,
+                "objectives": objectives,
+                "is_first_intake": is_first_intake,
+            }
     except Exception:
         logger.warning("Failed to check intake completion", exc_info=True)
 
@@ -724,12 +771,21 @@ async def _enrich_profile_async(
     user_id: str,
     transcript: list[Message],
     objectives: list[dict],
+    is_first_intake: bool,
 ):
     """Background task: Opus enrichment of profile and objective summaries.
 
     Runs after intake completes. Updates profile fields and objective responses
     with thorough summaries based on the full transcript. Fire-and-forget.
+
+    Only runs on the user's first-ever intake completion. Weekly check-ins
+    (Week 2+) skip enrichment to avoid overwriting user-corrected identity
+    fields from thin transcripts. See
+    docs/designs/2026-04-19-weekly-enrichment-overwrite.md.
     """
+    if not is_first_intake:
+        logger.info("Skipping enrichment - not first intake (user=%s)", user_id)
+        return
     try:
         from backend.agent.extraction import enrich_profile_with_opus, LIST_FIELDS
 
@@ -781,48 +837,18 @@ async def _enrich_profile_async(
             await deps.profiles_repo.update(user_id, {"ai_proficiency": proficiency})
             logger.info("AI proficiency scored: user=%s level=%d", user_id, proficiency["level"])
 
+        # Mark enrichment as successfully completed. This is the exclusive gate
+        # signal read by `_check_intake_completion` on future intakes to decide
+        # whether to re-run enrichment. Write it last so a crash mid-enrichment
+        # leaves the field None and the next intake retries.
+        await deps.profiles_repo.update(
+            user_id,
+            {"intake_enrichment_completed_at": datetime.now(UTC).isoformat()},
+        )
+        logger.info("Enrichment completion marker set: user=%s", user_id)
+
     except Exception:
         logger.warning("Opus enrichment failed for user=%s", user_id, exc_info=True)
-
-
-async def _auto_save_journal(transcript: list[Message], deps: AgentDeps, user_id: str, session_id: str):
-    """Auto-save a journal entry if save_journal was never called during this session.
-
-    For wrapup sessions, check whether save_journal was already called. If not,
-    synthesize a minimal journal entry from the assistant's text so the user's
-    reflection isn't lost when sessions time out or the user goes idle.
-    """
-    try:
-        # Check if save_journal was already called in the full transcript
-        for msg in transcript:
-            if msg.role == "tool_call" and msg.tool_name == "save_journal":
-                return  # Already saved explicitly
-
-        # Gather assistant text from this session
-        assistant_parts = [msg.content for msg in transcript if msg.role == "assistant" and msg.content]
-        if not assistant_parts:
-            return
-
-        # Only auto-save if there's meaningful conversation (>200 chars of assistant text)
-        combined = "\n\n".join(assistant_parts)
-        if len(combined) < 200:
-            return
-
-        if not deps.journal_repo:
-            return
-
-        from backend.models import JournalEntry
-        # Use deterministic ID so repeated calls for the same session upsert
-        entry = JournalEntry(
-            entry_id=f"auto-{session_id}",
-            user_id=user_id,
-            content=combined[-2000:] if len(combined) > 2000 else combined,
-            tags=["auto-saved"],
-        )
-        await deps.journal_repo.create(entry)
-        logger.info("Auto-saved journal entry for user=%s session=%s (entry=%s)", user_id, session_id, entry.entry_id)
-    except Exception:
-        logger.warning("Failed to auto-save journal for session=%s", session_id, exc_info=True)
 
 
 async def _check_tip_prepared(transcript: list[Message], sender: MessageSender, session_id: str):
@@ -838,6 +864,7 @@ async def _check_tip_prepared(transcript: list[Message], sender: MessageSender, 
                 await sender.send({
                     "type": "tip_ready",
                     "session_id": session_id,
+                    "tool_call_id": msg.tool_call_id or "",
                     "title": args.get("title", ""),
                     "content": args.get("content", ""),
                     "tags": args.get("tags", []),
@@ -860,6 +887,7 @@ async def _check_collab_prepared(transcript: list[Message], sender: MessageSende
                 await sender.send({
                     "type": "collab_ready",
                     "session_id": session_id,
+                    "tool_call_id": msg.tool_call_id or "",
                     "title": args.get("title", ""),
                     "problem": args.get("problem", ""),
                     "needed_skills": args.get("needed_skills", []),
@@ -881,6 +909,7 @@ async def _check_idea_prepared(transcript: list[Message], sender: MessageSender,
                 await sender.send({
                     "type": "idea_ready",
                     "session_id": session_id,
+                    "tool_call_id": msg.tool_call_id or "",
                     "title": args.get("title", ""),
                     "description": args.get("description", ""),
                     "tags": args.get("tags", []),

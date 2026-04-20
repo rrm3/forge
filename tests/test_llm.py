@@ -128,12 +128,11 @@ class TestCallLlm:
         assert result.tool_calls is None
 
     @pytest.mark.asyncio
-    async def test_uses_settings_model_by_default(self):
+    async def test_uses_model_config_by_default(self):
         mock_response = _make_response()
         with patch("backend.llm.litellm.acompletion", new_callable=AsyncMock) as mock_call:
             mock_call.return_value = mock_response
-            with patch("backend.llm.settings") as mock_settings:
-                mock_settings.llm_model = "anthropic/claude-test"
+            with patch("backend.model_config.get_model", return_value="anthropic/claude-test"):
                 await call_llm([{"role": "user", "content": "hi"}])
 
         called_kwargs = mock_call.call_args.kwargs

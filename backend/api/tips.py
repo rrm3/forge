@@ -25,8 +25,7 @@ router = APIRouter(prefix="/tips", tags=["tips"])
 
 _tips_repo = None
 
-HAIKU_MODEL = "bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
-SONNET_MODEL = "bedrock/global.anthropic.claude-sonnet-4-6"
+from backend.model_config import get_model
 LANCE_SCOPE = "tips"
 LANCE_COLLECTION = "tips"
 
@@ -51,7 +50,7 @@ async def _generate_summary(title: str, content: str) -> str:
                     "content": f"Summarize in ONE short sentence:\n\n{title}\n\n{content}",
                 }
             ],
-            model=HAIKU_MODEL,
+            model=get_model("haiku"),
             max_tokens=40,
         )
         return (resp.content or "").strip()
@@ -215,7 +214,7 @@ async def check_similar(body: CheckSimilarRequest, user: AuthUser):
         try:
             resp = await call_llm(
                 messages=[{"role": "user", "content": prompt}],
-                model=HAIKU_MODEL,
+                model=get_model("haiku"),
                 max_tokens=200,
             )
             text = (resp.content or "").strip()
@@ -253,7 +252,7 @@ async def check_similar(body: CheckSimilarRequest, user: AuthUser):
         try:
             resp = await call_llm(
                 messages=[{"role": "user", "content": comment_prompt}],
-                model=SONNET_MODEL,
+                model=get_model("sonnet"),
                 max_tokens=500,
             )
             match["suggested_comment"] = (resp.content or "").strip()
@@ -274,6 +273,8 @@ class CreateTipRequest(BaseModel):
     department: str = "Everyone"
     category: TipCategoryType = "tip"
     artifact: str = Field("", max_length=50000)
+    source_session_id: str = ""
+    source_tool_call_id: str = ""
 
 
 @router.post("")
@@ -292,6 +293,8 @@ async def create_tip(body: CreateTipRequest, user: AuthUser):
         tags=body.tags,
         category=body.category,
         artifact=body.artifact,
+        source_session_id=body.source_session_id,
+        source_tool_call_id=body.source_tool_call_id,
     )
     await _tips_repo.create(tip)
     posthog_track(user.user_id, "tip_created", {
