@@ -237,7 +237,14 @@ export interface UserIdea {
   updated_at: string;
 }
 
-/** Server-computed unpublished preview card, returned by GET /api/sessions/{id}. */
+/** Server-computed preview card, returned by GET /api/sessions/{id}.
+ *
+ * Three shapes:
+ *   - Editable draft (no `status`): the user has called prepare_* but not yet published.
+ *   - Published (`status: "published"`): the prepare_* call was followed by a real save;
+ *     the frontend renders the post-publish confirmation block instead of an editable card.
+ *   - null (response field absent or null): no prepare_* call exists in the transcript.
+ */
 export type ActivePreview =
   | {
       type: 'tip';
@@ -246,6 +253,12 @@ export type ActivePreview =
       content: string;
       tags: string[];
       department: string;
+    }
+  | {
+      type: 'tip';
+      status: 'published';
+      tool_call_id: string;
+      record_id: string;
     }
   | {
       type: 'collab';
@@ -258,11 +271,23 @@ export type ActivePreview =
       department: string;
     }
   | {
+      type: 'collab';
+      status: 'published';
+      tool_call_id: string;
+      record_id: string;
+    }
+  | {
       type: 'idea';
       tool_call_id: string;
       title: string;
       description: string;
       tags: string[];
+    }
+  | {
+      type: 'idea';
+      status: 'published';
+      tool_call_id: string;
+      record_id: string;
     };
 
 /** Shape of GET /api/sessions/{id} response — Session fields plus transcript and optional preview. */
