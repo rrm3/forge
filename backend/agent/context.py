@@ -45,6 +45,7 @@ def build_system_prompt(
     company_prompt: str | None = None,
     merged_objectives: list[dict] | None = None,
     weekly_briefing: dict | None = None,
+    wrapup_context: dict | None = None,
 ) -> str:
     """Build a system prompt with optional profile, memory, and skill content.
 
@@ -61,6 +62,9 @@ def build_system_prompt(
             When provided, overrides department_config objectives for intake tracking.
         weekly_briefing: Pre-generated briefing from previous week's sessions.
             Included in intake prompts so the AI can reference specific context.
+        wrapup_context: Pre-loaded wrapup context (today's intake, today's journal,
+            previous digest, pulse questions to ask). Rendered only for wrapup
+            sessions when at least one subsection is non-empty.
 
     Returns:
         The assembled system prompt string.
@@ -115,6 +119,14 @@ def build_system_prompt(
 
     if skill_instructions:
         parts.append(skill_instructions)
+
+    # Wrapup-specific context bundle (today's intake, today's journal,
+    # previous digest, pulse questions to ask). Rendered once per session so
+    # the agent never needs to issue tool calls to get this information.
+    if session_type == "wrapup":
+        wrapup_section = _build_wrapup_context(wrapup_context)
+        if wrapup_section:
+            parts.append(wrapup_section)
 
     # Department context - injected for all session types
     if department_config is not None:
@@ -184,6 +196,73 @@ def _build_idea_context(idea: UserIdea) -> str:
         "above to update the description, status, or tags. This keeps the idea record "
         "in sync with what you discuss."
     )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Wrapup context (today's intake, journal, prior digest, pulse to-ask)
+# ---------------------------------------------------------------------------
+
+def _build_wrapup_context(wrapup_context: dict | None) -> str | None:
+    """Render today's wrapup context bundle as a system prompt section.
+
+    Each subsection is omitted when empty. Returns None when every subsection
+    is empty so the caller skips the whole header.
+    """
+    if not wrapup_context:
+        return None
+
+    intake_items = wrapup_context.get("intake_today") or []
+    journal_items = wrapup_context.get("journal_today") or []
+    previous_digest = (wrapup_context.get("previous_digest") or "").strip()
+    pulse_items = wrapup_context.get("pulse_to_ask") or []
+
+    if not (intake_items or journal_items or previous_digest or pulse_items):
+        return None
+
+    lines: list[str] = ["## Context for Today's Wrap-up"]
+
+    if intake_items:
+        lines.append("")
+        lines.append("### This morning you set these intentions")
+        for item in intake_items:
+            label = item.get("label") or item.get("id") or ""
+            value = (item.get("value") or "").strip()
+            if label and value:
+                lines.append(f"- {label}: {value}")
+            elif value:
+                lines.append(f"- {value}")
+
+    if journal_items:
+        lines.append("")
+        lines.append("### Today's journal entries")
+        for entry in journal_items:
+            timestamp = (entry.get("timestamp") or "").strip()
+            content = (entry.get("content") or "").strip()
+            if not content:
+                continue
+            if timestamp:
+                lines.append(f"- [{timestamp}] {content}")
+            else:
+                lines.append(f"- {content}")
+
+    if previous_digest:
+        lines.append("")
+        lines.append("### Last week's digest")
+        lines.append(previous_digest)
+
+    if pulse_items:
+        lines.append("")
+        lines.append("### Pulse questions to ask this session")
+        for question in pulse_items:
+            qid = question.get("id", "")
+            text = question.get("text", "")
+            scale = question.get("scale") or []
+            lines.append(f"- {qid}: {text}")
+            if scale:
+                scale_str = ", ".join(f"{i + 1} {label}" for i, label in enumerate(scale))
+                lines.append(f"  Scale: {scale_str}")
+
     return "\n".join(lines)
 
 
