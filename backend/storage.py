@@ -208,3 +208,64 @@ async def load_weekly_briefing(storage: StorageBackend, user_id: str) -> dict | 
     if data is None:
         return None
     return json.loads(data.decode())
+
+
+# ---------------------------------------------------------------------------
+# Pulse survey helpers
+# ---------------------------------------------------------------------------
+
+def _pulse_responses_key(user_id: str) -> str:
+    return f"profiles/{user_id}/pulse-responses.json"
+
+
+async def load_pulse_responses(storage: StorageBackend, user_id: str) -> list[dict]:
+    """Load the pulse-response log for a user. Empty list if none exist."""
+    key = _pulse_responses_key(user_id)
+    data = await storage.read(key)
+    if data is None:
+        return []
+    try:
+        parsed = json.loads(data.decode())
+    except json.JSONDecodeError:
+        logger.warning("Pulse responses for user=%s unreadable; treating as empty", user_id)
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return parsed
+
+
+async def append_pulse_response(
+    storage: StorageBackend,
+    user_id: str,
+    record: dict,
+) -> None:
+    """Append a single pulse-response record to the user's append-only log."""
+    existing = await load_pulse_responses(storage, user_id)
+    existing.append(record)
+    key = _pulse_responses_key(user_id)
+    data = json.dumps(existing, default=str).encode()
+    await storage.write(key, data, content_type="application/json")
+
+
+def load_pulse_config() -> list[dict]:
+    """Load pulse-survey definitions from config/pulse-surveys.json.
+
+    Returns an empty list if the file is missing or malformed (so callers
+    degrade gracefully rather than crashing the session).
+    """
+    # Resolve relative to the repo root (parent of backend/).
+    from pathlib import Path
+    config_path = Path(__file__).resolve().parent.parent / "config" / "pulse-surveys.json"
+    try:
+        raw = config_path.read_bytes()
+    except FileNotFoundError:
+        logger.warning("Pulse config missing at %s", config_path)
+        return []
+    try:
+        parsed = json.loads(raw.decode())
+    except json.JSONDecodeError:
+        logger.warning("Pulse config is not valid JSON at %s", config_path)
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return parsed
