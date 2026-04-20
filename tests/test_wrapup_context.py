@@ -226,19 +226,22 @@ class TestLoadWrapupContext:
     @pytest.mark.asyncio
     async def test_journal_today_truncation_and_order(self, storage, journal_repo):
         profile = UserProfile(user_id="u-j", program_week_override=1)
-        now = datetime.now(UTC)
+        # Use the middle of the current UTC day so both entries land inside
+        # [today_start, today_end) regardless of when the test runs.
+        today = datetime.now(UTC).date()
+        midday = datetime.combine(today, datetime.min.time().replace(hour=12), tzinfo=UTC)
         await journal_repo.create(JournalEntry(
             entry_id="e1",
             user_id="u-j",
             content="early entry",
-            created_at=now - timedelta(hours=2),
+            created_at=midday - timedelta(hours=2),
         ))
         long_content = "x" * 800
         await journal_repo.create(JournalEntry(
             entry_id="e2",
             user_id="u-j",
             content=long_content,
-            created_at=now - timedelta(minutes=5),
+            created_at=midday,
         ))
         ctx = await load_wrapup_context(storage, journal_repo, profile, "u-j")
         assert len(ctx["journal_today"]) == 2
@@ -251,18 +254,19 @@ class TestLoadWrapupContext:
     @pytest.mark.asyncio
     async def test_journal_excludes_yesterday(self, storage, journal_repo):
         profile = UserProfile(user_id="u-y", program_week_override=1)
-        now = datetime.now(UTC)
+        today = datetime.now(UTC).date()
+        midday = datetime.combine(today, datetime.min.time().replace(hour=12), tzinfo=UTC)
         await journal_repo.create(JournalEntry(
             entry_id="yesterday",
             user_id="u-y",
             content="from yesterday",
-            created_at=now - timedelta(days=2),
+            created_at=midday - timedelta(days=2),
         ))
         await journal_repo.create(JournalEntry(
             entry_id="today",
             user_id="u-y",
             content="from today",
-            created_at=now - timedelta(minutes=30),
+            created_at=midday,
         ))
         ctx = await load_wrapup_context(storage, journal_repo, profile, "u-y")
         contents = [e["content"] for e in ctx["journal_today"]]
