@@ -74,13 +74,15 @@ def _find_latest_prepare_call(transcript: list[Message]) -> Message | None:
 
 
 async def _compute_active_preview(user_id: str, session_id: str, transcript: list[Message]) -> dict | None:
-    """Return the active (unpublished) preview for a session, or None.
+    """Return the active preview for a session, or None.
 
     Scans the transcript for the latest `prepare_tip` / `prepare_idea` /
-    `prepare_collab` tool_call. If the corresponding record exists in the
-    target repo (matched by user_id + source_session_id + source_tool_call_id),
-    the preview is considered already published and we return None.
-    Otherwise we build a preview payload from the tool_call's args.
+    `prepare_collab` tool_call. If a matching record exists in the target repo
+    (user_id + source_session_id + source_tool_call_id), returns a "published"
+    shape so the frontend can render the post-publish confirmation card on
+    reload. Otherwise returns the editable preview built from the tool_call's
+    args. Returns None only when there's no prepare call at all (or it can't
+    be tracked / parsed).
 
     Fail-closed: any exception — malformed transcript, repo hiccup, missing
     repo dep — returns None. A single bad session must not break session load.
@@ -109,7 +111,16 @@ async def _compute_active_preview(user_id: str, session_id: str, transcript: lis
                 return None
             existing = await _tips_repo.find_by_source(user_id, session_id, tool_call_id)
             if existing is not None:
-                return None
+                # Direct attribute access — if a future repo bug returns a
+                # record without tip_id, the outer try/except returns None
+                # rather than rendering a published-confirmation pointing at
+                # an empty string.
+                return {
+                    "type": "tip",
+                    "status": "published",
+                    "tool_call_id": tool_call_id,
+                    "record_id": existing.tip_id,
+                }
             dept = args.get("department", "Everyone")
             if not isinstance(dept, str) or dept.lower() in ("all", ""):
                 dept = "Everyone"
@@ -127,7 +138,12 @@ async def _compute_active_preview(user_id: str, session_id: str, transcript: lis
                 return None
             existing = await _collabs_repo.find_by_source(user_id, session_id, tool_call_id)
             if existing is not None:
-                return None
+                return {
+                    "type": "collab",
+                    "status": "published",
+                    "tool_call_id": tool_call_id,
+                    "record_id": existing.collab_id,
+                }
             dept = args.get("department", "Everyone")
             if not isinstance(dept, str) or dept.lower() in ("all", ""):
                 dept = "Everyone"
@@ -152,7 +168,12 @@ async def _compute_active_preview(user_id: str, session_id: str, transcript: lis
                     getattr(idea, "source_session_id", "") == session_id
                     and getattr(idea, "source_tool_call_id", "") == tool_call_id
                 ):
-                    return None
+                    return {
+                        "type": "idea",
+                        "status": "published",
+                        "tool_call_id": tool_call_id,
+                        "record_id": idea.idea_id,
+                    }
             return {
                 "type": "idea",
                 "tool_call_id": tool_call_id,
