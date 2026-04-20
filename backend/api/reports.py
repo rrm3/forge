@@ -6,10 +6,11 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from backend.auth import AuthUser
+from backend.api.admin import require_reports_access
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +59,13 @@ def _get_orgchart_sizes() -> dict[str, int]:
 
 
 def _strip_named(data: dict) -> dict:
-    """Remove the _named block for shareable mode."""
-    result = {k: v for k, v in data.items() if k != "_named"}
-    return result
+    """Remove the legacy _named block if present.
+
+    The generator no longer emits _named, but older trends.json files
+    on S3 may still include it. Stripping defensively keeps names out
+    of responses regardless of payload age.
+    """
+    return {k: v for k, v in data.items() if k != "_named"}
 
 
 def _roll_up_small_departments(data: dict, dept_sizes: dict[str, int], threshold: int = 10) -> dict:
@@ -117,14 +122,15 @@ def _roll_up_small_departments(data: dict, dept_sizes: dict[str, int], threshold
 
 
 @router.get("/trends")
-async def get_trends(
-    user: AuthUser,
-    mode: str = Query("full", pattern="^(full|shareable)$"),
-):
-    """Serve the cumulative trends report, optionally sanitised."""
-    await _require_admin(user.email)
+async def get_trends(user: AuthUser):
+    """Serve the cumulative trends report.
 
-    cache_key = f"trends:{mode}"
+    Always returns the anonymised shape: no `_named` block, and departments
+    with fewer than 10 staff are rolled up into a single "Other" bucket.
+    """
+    await require_reports_access(user)
+
+    cache_key = "trends"
     now = time.time()
     if cache_key in _cache:
         cached_at, cached_data = _cache[cache_key]
@@ -142,12 +148,10 @@ async def get_trends(
         )
 
     data = json.loads(raw)
-
-    if mode == "shareable":
-        data = _strip_named(data)
-        dept_sizes = _get_orgchart_sizes()
-        if dept_sizes:
-            data = _roll_up_small_departments(data, dept_sizes)
+    data = _strip_named(data)
+    dept_sizes = _get_orgchart_sizes()
+    if dept_sizes:
+        data = _roll_up_small_departments(data, dept_sizes)
 
     _cache[cache_key] = (now, data)
 

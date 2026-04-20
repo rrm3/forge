@@ -95,6 +95,7 @@ class DynamoDBProfileRepository(ProfileRepository):
             "program_week_override": profile.program_week_override,
             "timezone": profile.timezone,
             "is_department_admin": profile.is_department_admin,
+            "is_report_viewer": profile.is_report_viewer,
             "created_at": profile.created_at.isoformat(),
             "updated_at": profile.updated_at.isoformat(),
         }
@@ -175,6 +176,7 @@ class DynamoDBProfileRepository(ProfileRepository):
             program_week_override=int(item.get("program_week_override", 0)),
             timezone=item.get("timezone", ""),
             is_department_admin=bool(item.get("is_department_admin", False)),
+            is_report_viewer=bool(item.get("is_report_viewer", False)),
             created_at=created_at,
             updated_at=updated_at,
         )

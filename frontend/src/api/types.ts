@@ -208,6 +208,7 @@ export interface AdminUserSummary {
   intake_objectives_total: number;
   intake_weeks: Record<string, string>;
   is_department_admin: boolean;
+  is_report_viewer: boolean;
   is_admin: boolean;
   session_count: number;
   tip_count: number;

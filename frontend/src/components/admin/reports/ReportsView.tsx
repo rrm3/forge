@@ -6,10 +6,10 @@ import { DivergingStackedBar } from './charts/DivergingStackedBar';
 import { SlopeChart } from './charts/SlopeChart';
 import { GroupedBar } from './charts/GroupedBar';
 import { palette, typography } from './chartTheme';
-import { Download, Eye, EyeOff } from 'lucide-react';
+import { Download } from 'lucide-react';
 
 export function ReportsView() {
-  const { data, loading, error, mode, toggleMode } = useTrendsData();
+  const { data, loading, error } = useTrendsData();
 
   if (loading) {
     return (
@@ -46,18 +46,15 @@ export function ReportsView() {
   const departments = data.departments as any;
   const ideas = data.ideas as any;
   const blockers = data.blockers as any;
-  const named = data._named as any;
+  const programme = (data as any).programme as {
+    org_chart_total?: number;
+    profiles_total?: number;
+    signup_rate?: number;
+    intake_completed?: number;
+    intake_skipped?: number;
+  } | undefined;
 
-  const handlePrint = () => {
-    if (mode !== 'shareable') {
-      if (confirm('Switch to shareable mode (no names) before downloading?')) {
-        toggleMode();
-        setTimeout(() => window.print(), 500);
-      }
-    } else {
-      window.print();
-    }
-  };
+  const handlePrint = () => window.print();
 
   return (
     <div className="reports-dashboard" style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -74,34 +71,17 @@ export function ReportsView() {
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }} className="no-print">
             <button
-              onClick={toggleMode}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '8px 14px', borderRadius: 10,
-                border: `1px solid ${palette.cardBorder}`,
-                backgroundColor: mode === 'shareable' ? '#059669' : '#FFFFFF',
-                color: mode === 'shareable' ? '#FFFFFF' : '#4A5568',
-                fontFamily: typography.font, fontSize: 13, fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
-              {mode === 'shareable' ? <EyeOff size={14} /> : <Eye size={14} />}
-              {mode === 'shareable' ? 'Shareable' : 'Full names'}
-            </button>
-            <button
               onClick={handlePrint}
-              disabled={mode !== 'shareable'}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '8px 14px', borderRadius: 10,
                 border: `1px solid ${palette.cardBorder}`,
                 backgroundColor: '#FFFFFF',
-                color: mode === 'shareable' ? '#4A5568' : '#94A3B8',
+                color: '#4A5568',
                 fontFamily: typography.font, fontSize: 13, fontWeight: 500,
-                cursor: mode === 'shareable' ? 'pointer' : 'not-allowed',
-                opacity: mode === 'shareable' ? 1 : 0.5,
+                cursor: 'pointer',
               }}
-              title={mode !== 'shareable' ? 'Switch to shareable mode to enable PDF export' : 'Download PDF'}
+              title="Download PDF"
             >
               <Download size={14} />
               PDF
@@ -109,6 +89,53 @@ export function ReportsView() {
           </div>
         </div>
       </div>
+
+      {/* Programme overview — totals pulled from the latest weekly metrics. */}
+      {programme && programme.profiles_total != null && (
+        <section style={{ marginBottom: 32 }}>
+          <div style={{
+            backgroundColor: palette.cardBg,
+            border: `1px solid ${palette.cardBorder}`,
+            borderRadius: 14,
+            padding: 24,
+          }}>
+            <h3 style={{ fontSize: 20, fontWeight: 600, fontFamily: typography.font, color: '#1A1F25', margin: '0 0 4px' }}>
+              Programme Overview
+            </h3>
+            <p style={{ fontSize: 14, fontFamily: typography.font, color: '#64748B', margin: '0 0 16px' }}>
+              Totals as of {weeks[weeks.length - 1]?.end}.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+              {[
+                { label: 'Total signups', value: programme.profiles_total, sub: programme.signup_rate != null ? `${programme.signup_rate}% of org` : undefined },
+                { label: 'Intake completed', value: programme.intake_completed },
+                { label: 'Intake skipped', value: programme.intake_skipped },
+                { label: 'Org size', value: programme.org_chart_total },
+              ]
+                .filter((t) => t.value != null)
+                .map((t) => (
+                  <div key={t.label} style={{
+                    padding: '12px 16px', borderRadius: 10,
+                    border: `1px solid ${palette.cardBorder}`,
+                    backgroundColor: '#FFFFFF',
+                  }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, fontFamily: typography.font, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {t.label}
+                    </div>
+                    <div style={{ fontSize: 24, fontWeight: 600, fontFamily: typography.mono, color: '#1A1F25', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+                      {typeof t.value === 'number' ? t.value.toLocaleString() : t.value}
+                    </div>
+                    {t.sub && (
+                      <div style={{ fontSize: 12, fontFamily: typography.font, color: '#94A3B8', marginTop: 2 }}>
+                        {t.sub}
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Engagement */}
       <section style={{ marginBottom: 32 }}>
@@ -421,81 +448,6 @@ export function ReportsView() {
         />
       </section>
 
-      {/* Named sections (MB only) */}
-      {mode === 'full' && named && (
-        <>
-          {named.top_active_users_by_week?.length > 0 && (
-            <section style={{ marginBottom: 32 }}>
-              <div style={{
-                backgroundColor: palette.cardBg,
-                border: `1px solid ${palette.cardBorder}`,
-                borderRadius: 14,
-                padding: 24,
-              }}>
-                <h3 style={{ fontSize: 20, fontWeight: 600, fontFamily: typography.font, color: '#1A1F25', margin: '0 0 16px' }}>
-                  Top Active Users
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(weeks.length, 4)}, 1fr)`, gap: 16 }}>
-                  {named.top_active_users_by_week.map((wk: any) => (
-                    <div key={wk.week}>
-                      <div style={{
-                        fontSize: 12, fontWeight: 600, fontFamily: typography.font,
-                        color: '#64748B', marginBottom: 8, textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                      }}>
-                        Week {wk.week}
-                      </div>
-                      {wk.users.slice(0, 5).map((u: any, i: number) => (
-                        <div key={u.user_id || i} style={{
-                          fontSize: 13, fontFamily: typography.font, color: '#1A1F25',
-                          padding: '4px 0', display: 'flex', justifyContent: 'space-between',
-                        }}>
-                          <span>{u.name || u.user_id.slice(0, 8)}</span>
-                          <span style={{
-                            fontFamily: typography.mono, fontVariantNumeric: 'tabular-nums',
-                            color: '#64748B', fontSize: 12,
-                          }}>
-                            {u.sessions} sessions
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
-          )}
-
-          {named.attributed_quotes?.length > 0 && (
-            <section style={{ marginBottom: 32 }}>
-              <div style={{
-                backgroundColor: palette.cardBg,
-                border: `1px solid ${palette.cardBorder}`,
-                borderRadius: 14,
-                padding: 24,
-              }}>
-                <h3 style={{ fontSize: 20, fontWeight: 600, fontFamily: typography.font, color: '#1A1F25', margin: '0 0 16px' }}>
-                  Notable Quotes
-                </h3>
-                {named.attributed_quotes.slice(0, 10).map((q: any, i: number) => (
-                  <blockquote key={i} style={{
-                    borderLeft: `3px solid ${palette.sentiment[q.sentiment] || palette.barPrimary}`,
-                    paddingLeft: 16, margin: '12px 0',
-                  }}>
-                    <p style={{ fontSize: 14, fontFamily: typography.font, color: '#1A1F25', fontStyle: 'italic', margin: 0 }}>
-                      "{q.quote}"
-                    </p>
-                    <footer style={{ fontSize: 12, fontFamily: typography.font, color: '#64748B', marginTop: 4 }}>
-                      {q.name} ({q.department}) — Week {q.week}
-                    </footer>
-                  </blockquote>
-                ))}
-              </div>
-            </section>
-          )}
-        </>
-      )}
-
       {/* Print styles */}
       <style>{`
         @media print {
@@ -503,6 +455,16 @@ export function ReportsView() {
           .reports-dashboard { max-width: 100% !important; }
           @page { size: landscape; margin: 1cm; }
           section { break-inside: avoid; }
+          /* Neutralize ancestor scroll containers so the full report prints,
+             not just the first viewport. AdminLayout uses h-screen +
+             overflow-y-auto, which otherwise clips print output to one page. */
+          html, body, #root { height: auto !important; overflow: visible !important; }
+          .h-screen { height: auto !important; }
+          .overflow-y-auto, .overflow-auto, .overflow-hidden {
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+          }
         }
       `}</style>
     </div>
