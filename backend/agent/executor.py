@@ -664,6 +664,16 @@ async def _check_intake_completion(
             all_complete = required_fields.issubset(captured)
 
         if all_complete:
+            # Whether this user has ever had identity-field enrichment succeed.
+            # `intake_enrichment_completed_at` is written by `_enrich_profile_async`
+            # on success and by nothing else — no `update_profile` path, no API
+            # endpoint, no skill prompt can set it. That exclusivity is what makes
+            # it a reliable gate signal. An intake_summary-based gate would be
+            # contaminated by the intake skill's closing-turn `update_profile`
+            # call and skip enrichment on true first completions.
+            # See docs/designs/2026-04-19-weekly-enrichment-overwrite.md.
+            is_first_intake = profile.intake_enrichment_completed_at is None
+
             week_str = str(effective_program_week(profile))
             now_iso = datetime.now(UTC).isoformat()
             current_weeks = dict(profile.intake_weeks or {}) if profile else {}
@@ -714,7 +724,13 @@ async def _check_intake_completion(
             # because asyncio.run() tears down the event loop (and all pending
             # tasks) as soon as the outer coroutine returns.
             objectives = department_config.get("objectives", []) if department_config else []
-            return {"deps": deps, "user_id": user_id, "transcript": transcript, "objectives": objectives}
+            return {
+                "deps": deps,
+                "user_id": user_id,
+                "transcript": transcript,
+                "objectives": objectives,
+                "is_first_intake": is_first_intake,
+            }
     except Exception:
         logger.warning("Failed to check intake completion", exc_info=True)
 
@@ -724,12 +740,21 @@ async def _enrich_profile_async(
     user_id: str,
     transcript: list[Message],
     objectives: list[dict],
+    is_first_intake: bool,
 ):
     """Background task: Opus enrichment of profile and objective summaries.
 
     Runs after intake completes. Updates profile fields and objective responses
     with thorough summaries based on the full transcript. Fire-and-forget.
+
+    Only runs on the user's first-ever intake completion. Weekly check-ins
+    (Week 2+) skip enrichment to avoid overwriting user-corrected identity
+    fields from thin transcripts. See
+    docs/designs/2026-04-19-weekly-enrichment-overwrite.md.
     """
+    if not is_first_intake:
+        logger.info("Skipping enrichment - not first intake (user=%s)", user_id)
+        return
     try:
         from backend.agent.extraction import enrich_profile_with_opus, LIST_FIELDS
 
@@ -780,6 +805,16 @@ async def _enrich_profile_async(
         if proficiency:
             await deps.profiles_repo.update(user_id, {"ai_proficiency": proficiency})
             logger.info("AI proficiency scored: user=%s level=%d", user_id, proficiency["level"])
+
+        # Mark enrichment as successfully completed. This is the exclusive gate
+        # signal read by `_check_intake_completion` on future intakes to decide
+        # whether to re-run enrichment. Write it last so a crash mid-enrichment
+        # leaves the field None and the next intake retries.
+        await deps.profiles_repo.update(
+            user_id,
+            {"intake_enrichment_completed_at": datetime.now(UTC).isoformat()},
+        )
+        logger.info("Enrichment completion marker set: user=%s", user_id)
 
     except Exception:
         logger.warning("Opus enrichment failed for user=%s", user_id, exc_info=True)

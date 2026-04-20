@@ -45,11 +45,15 @@ Second-order finding: `ai_proficiency` re-scoring has the same structural flaw. 
 
 ## Design
 
-Gate `_enrich_profile_async` and the AI proficiency scoring inside it to **the user's first-ever intake completion**, not to calendar Week 1.
+Gate `_enrich_profile_async` and the AI proficiency scoring inside it to **the user's first successful enrichment**, not to calendar Week 1 and not to first completed intake.
 
-Why not `program_week == 1`: `effective_program_week()` is purely calendar/override-based. A user who joins in Week 3 would never satisfy `program_week == 1` and therefore never get their initial identity enrichment. Late joiners are a supported case (new profiles are created on first access at any time; incomplete intake sessions pick up the current calendar week's objectives). The correct predicate is "this is the user's first intake completion, regardless of calendar week."
+Why not `program_week == 1`: `effective_program_week()` is purely calendar/override-based. A user who joins in Week 3 would never satisfy `program_week == 1` and therefore never get their initial identity enrichment. Late joiners are a supported case.
 
-The signal we already have: `profile.intake_weeks` is the canonical record of completed intakes per week. If it is empty *before* this completion is written, this is the user's first-ever intake.
+Why not `not (profile.intake_weeks or {})`: `intake_weeks` gets populated by `POST /api/profile/skip-intake` *without* running enrichment. 149 production users are currently in that state (`intake_skipped=True`, `intake_weeks` populated, identity fields empty). If the gate uses `intake_weeks` emptiness, those users will be silently blocked from enrichment the first time they complete a real intake — a new bug caused by the fix. `intake_weeks` also gets populated by the migration script `migrate-objectives-to-company.py` without enrichment. And if a first enrichment crashes mid-flight, `intake_weeks[N]` is already written but the identity fields are empty — the user should get retried, but `intake_weeks` emptiness would say they shouldn't.
+
+Why not `not profile.intake_summary`: `skills/intake.md:255` explicitly instructs the AI to call `update_profile` with `intake_summary` during the intake closing turn. `tools/profile.py:118` has `intake_summary` in the `update_profile` allowlist. So `intake_summary` is populated BEFORE `_enrich_profile_async` runs for the first time, making it a contaminated signal that would skip first enrichment for every new user.
+
+The correct signal is a dedicated field `intake_enrichment_completed_at` that is written by `_enrich_profile_async` **and by nothing else** — no skill path, no `update_profile` allowlist, no API endpoint. The field is added to `UserProfile` as `datetime | None = None`, set to `datetime.now(UTC)` at the end of a successful enrichment run (after all writes), and read by `_check_intake_completion` as the gate predicate.
 
 The enrichment is invoked from `backend/agent/executor.py:553-554`:
 
@@ -58,10 +62,10 @@ if enrichment_args:
     await _enrich_profile_async(**enrichment_args)
 ```
 
-`enrichment_args` comes from `_check_intake_completion` at line 717. Compute the first-intake signal *before* the write at line 669 (`current_weeks = dict(profile.intake_weeks or {})`) and pass it through:
+`enrichment_args` comes from `_check_intake_completion`. Compute the first-enrichment signal from the dedicated `profile.intake_enrichment_completed_at` field (written only by `_enrich_profile_async`) and pass it through:
 
 ```python
-is_first_intake = not (profile.intake_weeks or {})
+is_first_intake = profile.intake_enrichment_completed_at is None
 
 # ... existing completion write (intake_completed_at, onboarding_complete,
 #     intake_weeks[N], intake_skipped=False) ...
@@ -74,6 +78,17 @@ return {
     "is_first_intake": is_first_intake,   # new
 }
 ```
+
+At the end of a successful enrichment run, `_enrich_profile_async` writes the marker:
+
+```python
+await deps.profiles_repo.update(
+    user_id,
+    {"intake_enrichment_completed_at": datetime.now(UTC).isoformat()},
+)
+```
+
+The marker write is the last step inside the enrichment `try` block, so a crash anywhere earlier leaves the field None and the next intake retries.
 
 Inside `_enrich_profile_async`, gate the whole body on that boolean:
 
@@ -108,9 +123,11 @@ If any of these ever becomes desired in a more targeted form (e.g., "week-specif
 
 | # | File | Change |
 |---|---|---|
-| 1 | `backend/agent/executor.py:666-717` | In `_check_intake_completion`, compute `is_first_intake = not (profile.intake_weeks or {})` *before* writing the completion update at line 669. Add `is_first_intake` to the dict returned at line 717. |
-| 2 | `backend/agent/executor.py:722-785` | Add `is_first_intake: bool` parameter to `_enrich_profile_async`. First line of the function body: early-return with a log line if `not is_first_intake`. |
-| 3 | `tests/test_enrichment_gate.py` | New. Four cases: (a) calendar Week 1 first intake → enrichment runs; (b) calendar Week 3 first intake for a late joiner (profile.intake_weeks empty) → enrichment runs; (c) Week 2+ intake for a user with non-empty intake_weeks → enrichment skipped, Opus + proficiency mocks show zero calls; (d) existing non-empty profile values are unchanged across a Week 2+ completion. |
+| 1 | `backend/models.py` | Add `intake_enrichment_completed_at: datetime | None = None` to `UserProfile`. |
+| 2 | `backend/repository/profiles.py` | Extend `_serialize` and `_deserialize` for the new field (ISO-format round-trip through DynamoDB). |
+| 3 | `backend/agent/executor.py:666-717` | In `_check_intake_completion`, compute `is_first_intake = profile.intake_enrichment_completed_at is None` inside the `if all_complete:` branch. Add `is_first_intake` to the dict returned as `enrichment_args`. |
+| 4 | `backend/agent/executor.py:722-785` | Add `is_first_intake: bool` parameter to `_enrich_profile_async`. First line of the function body: early-return with a log line if `not is_first_intake`. At the end of the `try` block (after proficiency scoring), write the `intake_enrichment_completed_at` marker. |
+| 5 | `tests/test_enrichment_gate.py` | Function-level: (a) calendar Week 1 first intake runs enrichment AND writes the marker; (b) late joiner first intake runs enrichment; (c) Week 2+ skips enrichment; (d) Week 2+ preserves existing values. Predicate-level: (e) fresh user is first; (f) enriched user is not first; (g) skip-intake user is still first; (h) crash-mid-flight retries; (i) intake skill writing `intake_summary` does NOT contaminate the gate. |
 
 Total diff: under 20 lines of production code. Test surface is the meaningful addition.
 
