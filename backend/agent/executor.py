@@ -140,7 +140,11 @@ async def run_agent_session(
     company_prompt = (company_config or {}).get("prompt", "") or None
 
     # Load department config for all sessions when user has a department.
-    # Merged objectives (company + dept) only needed for intake sessions.
+    # Merged objectives (company + dept) are loaded for intake sessions (used
+    # for the state machine + prompt) and for wrapup sessions (used to look up
+    # human-readable labels when rendering today's intake responses in the
+    # wrapup context — otherwise raw IDs like "applied-learnings-week4" leak
+    # into the prompt instead of "Applied last week's learnings").
     department_config = None
     merged_objectives: list[dict] = []
     intake_responses = {}
@@ -148,7 +152,11 @@ async def run_agent_session(
     if profile and profile.department:
         dept_slug = profile.department.lower().replace(" ", "-")
         department_config = await dept_config_repo.get_department_config(dept_slug)
-    if session_type == "intake" and not intake_is_complete:
+    needs_objectives = (
+        (session_type == "intake" and not intake_is_complete)
+        or session_type == "wrapup"
+    )
+    if needs_objectives:
         if dept_slug:
             merged_objectives = await dept_config_repo.get_merged_objectives(dept_slug, program_week=current_week)
         else:

@@ -72,13 +72,29 @@ class DynamoDBJournalRepository(JournalRepository):
         date_to: datetime | None = None,
         limit: int = 50,
     ) -> list[JournalEntry]:
+        """Return the user's journal entries, optionally date-filtered.
+
+        When a date filter is present, we must NOT pass Limit to DynamoDB.
+        DynamoDB applies Limit to rows examined BEFORE the FilterExpression,
+        so `Limit=N` plus a date filter reads N rows in sort-key order and
+        then discards the ones outside the window, which for a sort key of
+        random entry_ids means "today's entries" can come back empty even
+        when they exist. Instead we paginate the query, apply the filter
+        server-side, collect matches in memory, and truncate to `limit`.
+
+        When there's no date filter, Limit is safe (we just want the N most
+        recent entries in sort-key order) and cheaper.
+        """
         loop = asyncio.get_event_loop()
+
+        has_date_filter = bool(date_from or date_to)
 
         kwargs: dict = {
             "KeyConditionExpression": Key("user_id").eq(user_id),
-            "ScanIndexForward": False,  # newest first
-            "Limit": limit,
+            "ScanIndexForward": False,  # newest first by sort key
         }
+        if not has_date_filter:
+            kwargs["Limit"] = limit
 
         if date_from and date_to:
             kwargs["FilterExpression"] = (
@@ -89,14 +105,26 @@ class DynamoDBJournalRepository(JournalRepository):
         elif date_to:
             kwargs["FilterExpression"] = Key("created_at").lte(date_to.isoformat())
 
+        entries: list[JournalEntry] = []
+        last_key = None
         try:
-            response = await loop.run_in_executor(
-                None,
-                partial(self.table.query, **kwargs),
-            )
-            return [self._deserialize(item) for item in response.get("Items", [])]
+            while True:
+                page_kwargs = dict(kwargs)
+                if last_key is not None:
+                    page_kwargs["ExclusiveStartKey"] = last_key
+                response = await loop.run_in_executor(
+                    None,
+                    partial(self.table.query, **page_kwargs),
+                )
+                for item in response.get("Items", []):
+                    entries.append(self._deserialize(item))
+                    if len(entries) >= limit:
+                        return entries
+                last_key = response.get("LastEvaluatedKey")
+                if not last_key:
+                    return entries
         except ClientError:
-            return []
+            return entries
 
     async def create(self, entry: JournalEntry) -> None:
         loop = asyncio.get_event_loop()
