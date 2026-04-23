@@ -44,11 +44,14 @@ class ProfileRepository(ABC):
         """List all profiles (admin use only)."""
         pass
 
-    async def find_by_name(self, name: str) -> UserProfile | None:
-        """Find a profile by display name. Returns first match or None."""
+    async def find_by_email(self, email: str) -> UserProfile | None:
+        """Find a profile by email (case-insensitive). Returns first match or None."""
+        if not email:
+            return None
+        target = email.lower()
         all_profiles = await self.list_all()
         for p in all_profiles:
-            if p.name == name:
+            if p.email and p.email.lower() == target:
                 return p
         return None
 
