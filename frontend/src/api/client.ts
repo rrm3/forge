@@ -179,10 +179,18 @@ export async function listIdeas(params?: {
 
 // Admin API
 
-export async function getAdminAccess(): Promise<{ is_admin: boolean; is_department_admin: boolean; departments: string[] }> {
+export async function getAdminAccess(): Promise<{ is_admin: boolean; is_department_admin: boolean; is_report_viewer: boolean; departments: string[] }> {
   const res = await fetchWithAuth(`${API_BASE}/api/admin/access`);
   await checkResponse(res);
   return res.json();
+}
+
+export async function setUserReportViewer(userId: string, isReportViewer: boolean): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/admin/users/${encodeURIComponent(userId)}/report-viewer`, {
+    method: 'PUT',
+    body: JSON.stringify({ is_report_viewer: isReportViewer }),
+  });
+  await checkResponse(res);
 }
 
 export async function getDepartmentConfig(department: string): Promise<DepartmentConfig> {

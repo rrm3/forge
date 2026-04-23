@@ -44,11 +44,14 @@ class ProfileRepository(ABC):
         """List all profiles (admin use only)."""
         pass
 
-    async def find_by_name(self, name: str) -> UserProfile | None:
-        """Find a profile by display name. Returns first match or None."""
+    async def find_by_email(self, email: str) -> UserProfile | None:
+        """Find a profile by email (case-insensitive). Returns first match or None."""
+        if not email:
+            return None
+        target = email.lower()
         all_profiles = await self.list_all()
         for p in all_profiles:
-            if p.name == name:
+            if p.email and p.email.lower() == target:
                 return p
         return None
 
@@ -95,6 +98,7 @@ class DynamoDBProfileRepository(ProfileRepository):
             "program_week_override": profile.program_week_override,
             "timezone": profile.timezone,
             "is_department_admin": profile.is_department_admin,
+            "is_report_viewer": profile.is_report_viewer,
             "created_at": profile.created_at.isoformat(),
             "updated_at": profile.updated_at.isoformat(),
         }
@@ -175,6 +179,7 @@ class DynamoDBProfileRepository(ProfileRepository):
             program_week_override=int(item.get("program_week_override", 0)),
             timezone=item.get("timezone", ""),
             is_department_admin=bool(item.get("is_department_admin", False)),
+            is_report_viewer=bool(item.get("is_report_viewer", False)),
             created_at=created_at,
             updated_at=updated_at,
         )

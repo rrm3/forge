@@ -63,7 +63,9 @@ def _dfs_tree(orgchart, root_name: str) -> list[dict]:
     """Return the full subtree under root_name in DFS order.
 
     Each manager is immediately followed by their reports (recursively),
-    so the frontend can use adjacency for collapse/expand.
+    so the frontend can use adjacency for collapse/expand. Each entry
+    includes the person's email from the org chart so callers can join
+    to user profiles without relying on name matching.
     """
     result = []
     visited: set[str] = set()
@@ -77,6 +79,7 @@ def _dfs_tree(orgchart, root_name: str) -> list[dict]:
         result.append({
             "name": name,
             "title": person["title"] if person else "",
+            "email": (person["email"] or "") if person else "",
             "depth": depth,
         })
         for report_name in orgchart.find_direct_reports(name):
@@ -121,26 +124,43 @@ async def _get_viewable_tree(user: AuthUser, profile) -> list[dict] | None:
     if await _is_full_admin(user.email):
         return None
 
-    # Department admins: full subtree via org chart
+    # Department admins: full subtree via org chart.
+    # Locate the admin in the org chart by email (not name) so nickname/full-name
+    # differences between systems don't produce an empty tree.
     if profile.is_department_admin:
-        if _orgchart and profile.name:
-            tree = _dfs_tree(_orgchart, profile.name)
-            logger.info("Team tree for %s: %d people", profile.name, len(tree))
-            return tree
-        # Orgchart not loaded - deny rather than degrade to partial access
-        logger.warning("Orgchart not available for dept admin %s, denying team access", profile.name)
-        return []
+        if not _orgchart:
+            logger.warning("Orgchart not available for dept admin %s, denying team access", profile.email)
+            return []
+        admin_row = _orgchart.lookup_by_email(profile.email) if profile.email else None
+        if not admin_row:
+            logger.warning("Dept admin %s (%s) not found in orgchart by email, denying team access", profile.name, profile.email)
+            return []
+        tree = _dfs_tree(_orgchart, admin_row["name"])
+        logger.info("Team tree for %s: %d people", admin_row["name"], len(tree))
+        return tree
 
     # Not an admin of any kind - no access
     return []
 
 
-async def _build_member_entry(name: str, profile_cache: dict | None = None) -> dict:
-    """Build a member entry for the team response, looking up profile and report."""
-    dr_profile = profile_cache.get(name) if profile_cache else await _profiles_repo.find_by_name(name)
+async def _build_member_entry(entry: dict, profile_cache: dict | None = None) -> dict:
+    """Build a member entry for the team response, looking up profile and report.
+
+    Joins orgchart -> profile strictly by email (case-insensitive). Nickname
+    or full-name divergence between systems (e.g. "Steve" vs "Stephen") must
+    not drop a user from the view.
+    """
+    name = entry["name"]
+    email = (entry.get("email") or "").lower()
+
+    dr_profile = None
+    if email:
+        dr_profile = profile_cache.get(email) if profile_cache else await _profiles_repo.find_by_email(email)
+
     if dr_profile is None:
         return {
             "name": name,
+            "title": entry.get("title", ""),
             "user_id": None,
             "has_report": False,
             "has_profile": False,
@@ -152,7 +172,7 @@ async def _build_member_entry(name: str, profile_cache: dict | None = None) -> d
         return {
             "name": name,
             "user_id": dr_profile.user_id,
-            "title": dr_profile.title,
+            "title": dr_profile.title or entry.get("title", ""),
             "department": dr_profile.department,
             "team": dr_profile.team,
             "avatar_url": dr_profile.avatar_url,
@@ -163,6 +183,9 @@ async def _build_member_entry(name: str, profile_cache: dict | None = None) -> d
 
     report["has_report"] = True
     report["has_profile"] = True
+    # Display the orgchart name so the team tree stays internally consistent
+    # (e.g. Steve Leicht in orgchart, even if the profile has "Stephen Leicht").
+    report["name"] = name
     return report
 
 
@@ -201,32 +224,30 @@ async def team_members(user: AuthUser):
             if root_name:
                 tree = _dfs_tree(_orgchart, root_name)
             else:
-                tree = [{"name": p.name, "title": "", "depth": 1} for p in all_profiles if p.name != profile.name]
+                tree = [{"name": p.name, "title": "", "email": p.email or "", "depth": 1} for p in all_profiles if p.user_id != profile.user_id]
         else:
-            tree = [{"name": p.name, "title": "", "depth": 1} for p in all_profiles if p.name != profile.name]
+            tree = [{"name": p.name, "title": "", "email": p.email or "", "depth": 1} for p in all_profiles if p.user_id != profile.user_id]
     else:
         all_profiles = await _profiles_repo.list_all()
         tree = viewable
 
-    # Build a name->profile cache so we don't re-scan for every member
-    profile_cache = {p.name: p for p in all_profiles}
-
-    # Build a depth lookup by name
-    depth_map = {entry["name"]: entry["depth"] for entry in tree}
-    names = [entry["name"] for entry in tree]
+    # Build an email->profile cache (case-insensitive) so we don't re-scan for every member.
+    # Joining by email is the single source of truth — name mismatches like "Steve" vs
+    # "Stephen" must not drop users from the view.
+    profile_cache = {p.email.lower(): p for p in all_profiles if p.email}
 
     # Load reports in parallel with concurrency limit
     sem = asyncio.Semaphore(20)
 
-    async def _load(name: str) -> dict:
+    async def _load(tree_entry: dict) -> dict:
         async with sem:
-            entry = await _build_member_entry(name, profile_cache=profile_cache)
-            entry["depth"] = depth_map.get(name, 1)
-            return entry
+            member = await _build_member_entry(tree_entry, profile_cache=profile_cache)
+            member["depth"] = tree_entry.get("depth", 1)
+            return member
 
-    members = await asyncio.gather(*[_load(n) for n in names])
+    members = await asyncio.gather(*[_load(e) for e in tree])
 
-    return {"members": list(members), "team_size": len(names)}
+    return {"members": list(members), "team_size": len(tree)}
 
 
 @router.get("/members/{user_id}")
@@ -243,11 +264,17 @@ async def team_member_detail(user_id: str, user: AuthUser):
     if target_profile is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Check access: full admins see anyone, dept admins must have target in subtree
+    # Check access: full admins see anyone, dept admins must have target in subtree.
+    # Look up both admin and target in the orgchart by email so subtree walking
+    # uses the orgchart's canonical names (not the profile names, which may diverge).
     if not await _is_full_admin(user.email):
-        if not profile.is_department_admin or not _orgchart or not profile.name:
+        if not profile.is_department_admin or not _orgchart or not profile.email:
             raise HTTPException(status_code=403, detail="Access denied")
-        if not _is_in_subtree(_orgchart, profile.name, target_profile.name):
+        admin_row = _orgchart.lookup_by_email(profile.email)
+        target_row = _orgchart.lookup_by_email(target_profile.email) if target_profile.email else None
+        if not admin_row or not target_row:
+            raise HTTPException(status_code=403, detail="Access denied")
+        if not _is_in_subtree(_orgchart, admin_row["name"], target_row["name"]):
             raise HTTPException(status_code=403, detail="Access denied")
 
     report = await _load_report(user_id)

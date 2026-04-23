@@ -93,23 +93,66 @@ async def _require_any_admin(user: AuthUser, department: str | None = None) -> l
 async def check_access(user: AuthUser):
     """Check if the current user is an admin and which departments they can manage.
 
-    Returns three access levels:
+    Returns four access levels:
     - is_admin: full admin (from admin-access.json) - sees everything
     - is_department_admin: department admin (from profile flag) - sees department settings only
+    - is_report_viewer: read-only access to /admin/reports
     - departments: list of departments the user can manage
     """
     logger.warning("Admin access check: email='%s' user_id='%s'", user.email, user.user_id)
     departments = await _get_admin_departments(user.email)
-    if departments is not None:
-        return {"is_admin": True, "is_department_admin": False, "departments": departments}
 
-    # Check if user is a department admin via profile flag
+    is_report_viewer = False
+    is_dept_admin = False
+    dept_admin_depts: list[str] = []
     if _profiles_repo:
         profile = await _profiles_repo.get(user.user_id)
-        if profile and profile.is_department_admin and profile.department:
-            return {"is_admin": False, "is_department_admin": True, "departments": [profile.department]}
+        if profile:
+            is_report_viewer = bool(profile.is_report_viewer)
+            if profile.is_department_admin and profile.department:
+                is_dept_admin = True
+                dept_admin_depts = [profile.department]
 
-    return {"is_admin": False, "is_department_admin": False, "departments": []}
+    if departments is not None:
+        return {
+            "is_admin": True,
+            "is_department_admin": False,
+            "is_report_viewer": is_report_viewer,
+            "departments": departments,
+        }
+
+    if is_dept_admin:
+        return {
+            "is_admin": False,
+            "is_department_admin": True,
+            "is_report_viewer": is_report_viewer,
+            "departments": dept_admin_depts,
+        }
+
+    return {
+        "is_admin": False,
+        "is_department_admin": False,
+        "is_report_viewer": is_report_viewer,
+        "departments": [],
+    }
+
+
+async def require_reports_access(user: AuthUser) -> None:
+    """Assert the user can read the trends report.
+
+    Allowed: full admin OR `is_report_viewer` on their profile.
+    Department admins are NOT granted reports access automatically.
+    """
+    departments = await _get_admin_departments(user.email)
+    if departments is not None:
+        return
+
+    if _profiles_repo:
+        profile = await _profiles_repo.get(user.user_id)
+        if profile and profile.is_report_viewer:
+            return
+
+    raise HTTPException(status_code=403, detail="Not authorized to view reports")
 
 
 @router.get("/company")
@@ -251,6 +294,7 @@ async def list_users(user: AuthUser):
             "intake_objectives_total": p.intake_objectives_total,
             "intake_weeks": p.intake_weeks or {},
             "is_department_admin": p.is_department_admin,
+            "is_report_viewer": p.is_report_viewer,
             "is_admin": p.email.lower() in admin_emails,
             "session_count": session_counts.get(p.user_id, 0),
             "tip_count": tip_counts.get(p.user_id, 0),
@@ -270,6 +314,15 @@ async def set_user_role(user_id: str, body: dict, user: AuthUser):
     is_dept_admin = bool(body.get("is_department_admin", False))
     await _profiles_repo.update(user_id, {"is_department_admin": is_dept_admin})
     return {"status": "updated", "is_department_admin": is_dept_admin}
+
+
+@router.put("/users/{user_id}/report-viewer")
+async def set_user_report_viewer(user_id: str, body: dict, user: AuthUser):
+    """Grant or revoke read-only access to the trends report. Full admin only."""
+    await _require_admin(user.email)
+    is_report_viewer = bool(body.get("is_report_viewer", False))
+    await _profiles_repo.update(user_id, {"is_report_viewer": is_report_viewer})
+    return {"status": "updated", "is_report_viewer": is_report_viewer}
 
 
 @router.put("/users/{user_id}/admin")

@@ -399,6 +399,7 @@ function AppContent() {
   const setAdminAccess = useAdminStore((s) => s.setAdminAccess);
   const isAdmin = useAdminStore((s) => s.isAdmin);
   const isDepartmentAdmin = useAdminStore((s) => s.isDepartmentAdmin);
+  const isReportViewer = useAdminStore((s) => s.isReportViewer);
   const [adminChecked, setAdminChecked] = useState(false);
 
   // Load profile first to verify domain access before loading anything else
@@ -469,7 +470,7 @@ function AppContent() {
   useEffect(() => {
     if (user && profileLoaded && !accessDenied) {
       getAdminAccess()
-        .then(({ is_admin, is_department_admin }) => { setAdminAccess(is_admin, is_department_admin); setAdminChecked(true); })
+        .then(({ is_admin, is_department_admin, is_report_viewer }) => { setAdminAccess(is_admin, is_department_admin, !!is_report_viewer); setAdminChecked(true); })
         .catch(() => setAdminChecked(true));
     }
   }, [user, profileLoaded, accessDenied, setAdminAccess]);
@@ -508,13 +509,13 @@ function AppContent() {
           <Route key={w} path={`/day${w}`} element={<Navigate to={`/day${currentWeek}`} replace />} />
         ))}
 
-      {/* Admin - accessible by full admins and department admins */}
+      {/* Admin - accessible by full admins, department admins, and report viewers */}
       <Route
         path="/admin/*"
         element={
           !adminChecked ? (
             <LoadingScreen />
-          ) : (isAdmin || isDepartmentAdmin) ? (
+          ) : (isAdmin || isDepartmentAdmin || isReportViewer) ? (
             <div className="flex flex-col h-screen">
               <TopBar profile={profile} />
               <AdminLayout />
@@ -524,11 +525,19 @@ function AppContent() {
           )
         }
       >
-        <Route index element={<Navigate to="settings" replace />} />
-        <Route path="settings" element={<AdminPanel />} />
-        <Route path="company" element={isAdmin ? <CompanyContextPanel /> : <Navigate to="/admin/settings" replace />} />
-        <Route path="users" element={isAdmin ? <AdminUsers /> : <Navigate to="/admin/settings" replace />} />
-        <Route path="reports" element={isAdmin ? <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: '#64748B' }}>Loading...</div>}><ReportsView /></Suspense> : <Navigate to="/admin/settings" replace />} />
+        <Route
+          index
+          element={
+            <Navigate
+              to={(isAdmin || isDepartmentAdmin) ? 'settings' : 'reports'}
+              replace
+            />
+          }
+        />
+        <Route path="settings" element={(isAdmin || isDepartmentAdmin) ? <AdminPanel /> : <Navigate to="/admin/reports" replace />} />
+        <Route path="company" element={isAdmin ? <CompanyContextPanel /> : <Navigate to="/admin/reports" replace />} />
+        <Route path="users" element={isAdmin ? <AdminUsers /> : <Navigate to="/admin/reports" replace />} />
+        <Route path="reports" element={(isAdmin || isReportViewer) ? <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: '#64748B' }}>Loading...</div>}><ReportsView /></Suspense> : <Navigate to="/admin/settings" replace />} />
       </Route>
 
       {/* Main layout (all post-intake routes) */}

@@ -14,6 +14,9 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isAdmin = useAdminStore((s) => s.isAdmin);
+  const isDepartmentAdmin = useAdminStore((s) => s.isDepartmentAdmin);
+  const isReportViewer = useAdminStore((s) => s.isReportViewer);
+  const reportViewerOnly = isReportViewer && !isAdmin && !isDepartmentAdmin;
 
   const activeTab: Tab = location.pathname.includes('/admin/reports')
     ? 'reports'
@@ -98,11 +101,14 @@ export function AdminLayout() {
           Admin
         </h1>
 
-        {/* Tab nav - Company Context and Users tabs only visible to full admins */}
+        {/* Tab nav - Company Context and Users tabs only visible to full admins.
+            Report-viewer-only users see just the Reports tab. */}
         <div className="flex gap-6 mb-6 mt-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
-          <button onClick={() => navigate('/admin/settings')} style={tabStyle('settings')}>
-            Questions
-          </button>
+          {!reportViewerOnly && (
+            <button onClick={() => navigate('/admin/settings')} style={tabStyle('settings')}>
+              Questions
+            </button>
+          )}
           {isAdmin && (
             <button onClick={() => navigate('/admin/company')} style={tabStyle('company')}>
               System Prompts
@@ -113,7 +119,7 @@ export function AdminLayout() {
               Users
             </button>
           )}
-          {isAdmin && (
+          {(isAdmin || isReportViewer) && (
             <button onClick={() => navigate('/admin/reports')} style={tabStyle('reports')}>
               Reports
             </button>
