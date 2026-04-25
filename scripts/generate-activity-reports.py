@@ -348,14 +348,40 @@ def generate_summary(
 # ── Report assembly ──────────────────────────────────────────────────────────
 
 def load_digest(user_id: str, week: int) -> str:
-    for path in [
-        os.path.join(DATA_DIR, "digests", f"digest-week{week}", f"{user_id}.md"),
-        os.path.join(DATA_DIR, "s3", "profiles", user_id, f"digest-week{week}.md"),
-    ]:
+    for path in _digest_paths_for_user(user_id, week):
         if os.path.exists(path):
             with open(path) as f:
                 return f.read()
     return ""
+
+
+def _digest_paths_for_user(user_id: str, week: int) -> list[str]:
+    """Return candidate paths load_digest reads, in priority order."""
+    return [
+        os.path.join(DATA_DIR, "digests", f"digest-week{week}", f"{user_id}.md"),
+        os.path.join(DATA_DIR, "s3", "profiles", user_id, f"digest-week{week}.md"),
+    ]
+
+
+def _digest_exists_for_week(week: int, user_id: str | None = None) -> bool:
+    """Used by the preflight to decide whether activity reports can run safely.
+
+    When `user_id` is set we narrow the check to THAT user's digest file in
+    either of the two paths load_digest consults — a partial population of the
+    digests dir (10 of 290 users digested) must not pass the preflight just
+    because the directory is non-empty. When `user_id` is None we apply the
+    coarser "directory contains at least one .md" check, which is fine for
+    full-population batch runs (the per-user digest fallback in load_digest
+    handles individual misses).
+    """
+    if user_id:
+        return any(os.path.isfile(p) for p in _digest_paths_for_user(user_id, week))
+    digest_dir = os.path.join(DATA_DIR, "digests", f"digest-week{week}")
+    if os.path.isdir(digest_dir) and any(
+        f.endswith(".md") for f in os.listdir(digest_dir)
+    ):
+        return True
+    return False
 
 
 def build_user_report(
@@ -384,6 +410,16 @@ def build_user_report(
         report_weeks = existing_report["weeks"]
     else:
         report_weeks = {}
+
+    # When this is a full regen (no target_week), prune any week from the
+    # existing report that isn't in current participation. Otherwise a deleted
+    # session, a quarantine-domain change, or a filter tweak would leave
+    # zombie summaries on S3 that no longer reflect reality. Partial regens
+    # (target_week is set) intentionally preserve other weeks as-is —
+    # surgical mode trusts the operator to know what they're doing.
+    if target_week is None:
+        live_weeks = {str(w) for w in participation.keys()}
+        report_weeks = {w: v for w, v in report_weeks.items() if w in live_weeks}
 
     weeks_to_process = [target_week] if target_week else sorted(participation.keys())
 
@@ -487,29 +523,31 @@ def main():
     # plan / accomplished. If the digests for the target week don't exist yet,
     # every user gets "No plan recorded" / "No activity recorded" and that
     # garbage gets uploaded to S3. Hard-abort instead.
-    weeks_to_check = [args.week] if args.week else list(range(1, max_week + 1))
-    missing = []
-    for w in weeks_to_check:
-        digest_dir = os.path.join(DATA_DIR, "digests", f"digest-week{w}")
-        if not os.path.isdir(digest_dir) or not any(
-            f.endswith(".md") for f in os.listdir(digest_dir)
-        ):
-            missing.append(w)
-    if missing:
-        print(
-            f"ERROR: digest directory missing or empty for weeks {missing}.\n"
-            f"  Activity reports use digests as the LLM source — running without\n"
-            f"  them will produce 'No plan recorded' for every user and corrupt S3.\n"
-            f"\n"
-            f"  Fix: run digest generation first. For the full pipeline:\n"
-            f"      /forge-analytics --digests-only\n"
-            f"  Or for a specific user:\n"
-            f"      python3 scripts/generate-digest.py --week <N> <user_id> <Name>\n"
-            f"\n"
-            f"  See docs/weekly-analytics-runbook.md (Hard rules + step ordering).",
-            file=sys.stderr,
-        )
-        sys.exit(2)
+    #
+    # Skipped under --dry-run (no LLM work, no S3 writes — operators need
+    # dry-run to be safe to invoke after a fresh sync, even before digests).
+    if not args.dry_run:
+        weeks_to_check = [args.week] if args.week else list(range(1, max_week + 1))
+        missing = []
+        for w in weeks_to_check:
+            if not _digest_exists_for_week(w, user_id=args.user):
+                missing.append(w)
+        if missing:
+            scope = f"for user {args.user}" if args.user else "for any user"
+            print(
+                f"ERROR: digest missing {scope} for weeks {missing}.\n"
+                f"  Activity reports use digests as the LLM source — running without\n"
+                f"  them will produce 'No plan recorded' for every user and corrupt S3.\n"
+                f"\n"
+                f"  Fix: run digest generation first. For the full pipeline:\n"
+                f"      /forge-analytics --digests-only\n"
+                f"  Or for a specific user:\n"
+                f"      python3 scripts/generate-digest.py --week <N> <user_id> <Name>\n"
+                f"\n"
+                f"  See docs/weekly-analytics-runbook.md (Hard rules + step ordering).",
+                file=sys.stderr,
+            )
+            sys.exit(2)
 
     # Load all data
     print("Loading data...")
@@ -581,14 +619,20 @@ def main():
         # (or --incremental) would write a report containing only week N and wipe
         # weeks 1..N-1. Load existing whenever the file is present; build_user_report
         # only replaces the weeks it actually recomputes.
+        #
+        # If the file is present but unparseable, fail closed for this user. Silently
+        # treating a corrupt file as "no existing report" reproduces the old
+        # data-loss bug behind a try/except — the partial regen would write only
+        # target_week and overwrite the corrupt file with a thin one-week report.
+        # Better to refuse and surface the corruption to the operator.
         report_file = os.path.join(REPORTS_DIR, f"{uid}.json")
         existing = None
         if os.path.exists(report_file):
             try:
                 with open(report_file) as f:
                     existing = json.load(f)
-            except Exception:
-                pass
+            except Exception as exc:
+                return uid, "error", f"corrupt existing report at {report_file} ({exc}); refusing to overwrite, fix manually or delete the file"
 
         try:
             report = build_user_report(
