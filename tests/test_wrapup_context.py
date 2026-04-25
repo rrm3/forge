@@ -422,8 +422,16 @@ class TestBuildSystemPromptWithContext:
         assert "### Last week's digest" in prompt
         assert "Week 4" in prompt
         assert "### Pulse questions to ask this session" in prompt
-        assert "progress: Are you making progress?" in prompt
-        assert "1 No, 2 Slight, 3 Some, 4 Good, 5 Great" in prompt
+        # The rendered question must include the canonical text in quotes plus an
+        # explicit verbatim instruction. Paraphrasing this in the agent has
+        # silently corrupted Week 5 pulse data; the prompt must lock it down.
+        assert 'ask verbatim: "Are you making progress?"' in prompt
+        assert "EXACT wording" in prompt
+        assert "Do NOT paraphrase" in prompt
+        # Scale must render as a numbered markdown list (one per line) so the
+        # model copies it back as a numbered list to the user.
+        assert "1. No" in prompt
+        assert "5. Great" in prompt
 
     def test_wrapup_context_only_pulse_renders_pulse_only(self):
         ctx = {

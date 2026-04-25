@@ -483,6 +483,34 @@ def main():
     print(f"  Output: {REPORTS_DIR}")
     print()
 
+    # Preflight: this script reads each user's digest as the LLM source for
+    # plan / accomplished. If the digests for the target week don't exist yet,
+    # every user gets "No plan recorded" / "No activity recorded" and that
+    # garbage gets uploaded to S3. Hard-abort instead.
+    weeks_to_check = [args.week] if args.week else list(range(1, max_week + 1))
+    missing = []
+    for w in weeks_to_check:
+        digest_dir = os.path.join(DATA_DIR, "digests", f"digest-week{w}")
+        if not os.path.isdir(digest_dir) or not any(
+            f.endswith(".md") for f in os.listdir(digest_dir)
+        ):
+            missing.append(w)
+    if missing:
+        print(
+            f"ERROR: digest directory missing or empty for weeks {missing}.\n"
+            f"  Activity reports use digests as the LLM source — running without\n"
+            f"  them will produce 'No plan recorded' for every user and corrupt S3.\n"
+            f"\n"
+            f"  Fix: run digest generation first. For the full pipeline:\n"
+            f"      /forge-analytics --digests-only\n"
+            f"  Or for a specific user:\n"
+            f"      python3 scripts/generate-digest.py --week <N> <user_id> <Name>\n"
+            f"\n"
+            f"  See docs/weekly-analytics-runbook.md (Hard rules + step ordering).",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     # Load all data
     print("Loading data...")
     profiles = load_profiles()
@@ -548,10 +576,14 @@ def main():
         tips = all_tips.get(uid, [])
         collabs = all_collabs.get(uid, [])
 
-        # Load existing report for incremental updates
+        # Load existing report so prior-week summaries are preserved when we're
+        # only recomputing a subset of weeks. Without this, running with --week N
+        # (or --incremental) would write a report containing only week N and wipe
+        # weeks 1..N-1. Load existing whenever the file is present; build_user_report
+        # only replaces the weeks it actually recomputes.
         report_file = os.path.join(REPORTS_DIR, f"{uid}.json")
         existing = None
-        if args.incremental and os.path.exists(report_file):
+        if os.path.exists(report_file):
             try:
                 with open(report_file) as f:
                     existing = json.load(f)

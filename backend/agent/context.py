@@ -254,14 +254,24 @@ def _build_wrapup_context(wrapup_context: dict | None) -> str | None:
     if pulse_items:
         lines.append("")
         lines.append("### Pulse questions to ask this session")
+        lines.append(
+            "Ask each question below in a separate turn, using the EXACT wording shown "
+            "between the quote marks. Do NOT paraphrase, condense, summarise, or replace "
+            "these with your own 1-5 scale questions. Phrases like \"how productive did "
+            "today feel\", \"how confident are you\", or \"how would you rate your energy\" "
+            "are NOT acceptable substitutes. Pulse responses are tracked across weeks "
+            "against the canonical question text below; rephrasing breaks the dataset."
+        )
+        lines.append("")
         for question in pulse_items:
             qid = question.get("id", "")
             text = question.get("text", "")
             scale = question.get("scale") or []
-            lines.append(f"- {qid}: {text}")
+            lines.append(f"* `{qid}` — ask verbatim: \"{text}\"")
             if scale:
-                scale_str = ", ".join(f"{i + 1} {label}" for i, label in enumerate(scale))
-                lines.append(f"  Scale: {scale_str}")
+                lines.append("  Present the scale as a numbered markdown list exactly as shown:")
+                for i, label in enumerate(scale, 1):
+                    lines.append(f"    {i}. {label}")
 
     return "\n".join(lines)
 
