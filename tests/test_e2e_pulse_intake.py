@@ -351,10 +351,15 @@ class TestIntakePersonas:
 
 
 @pytest.mark.live
+@pytest.mark.skipif(
+    os.environ.get("AWS_PROFILE") != "forge",
+    reason="Live Bedrock test requires AWS_PROFILE=forge with active credentials. "
+    "Set AWS_PROFILE=forge && aws login --profile forge to run locally.",
+)
 class TestPulseLiveBedrock:
     """Hits Sonnet 4.6 for real with the same prompt the deployed agent builds.
-    Skipped in CI; invoke with `pytest -m live tests/test_e2e_pulse_intake.py`.
-    Re-uses the script at /tmp/pulse-e2e-test.py rather than duplicating logic.
+    Auto-skips in CI (no `forge` profile); invoke locally with
+    `AWS_PROFILE=forge pytest -m live tests/test_e2e_pulse_intake.py`.
 
     This is the "is the deployed code actually doing the right thing?" test.
     Since the staging Lambda runs the same prompt-building code we're testing
