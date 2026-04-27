@@ -23,6 +23,13 @@ RUN uv sync --frozen --no-dev --no-editable
 COPY backend/ backend/
 COPY skills/ skills/
 COPY department-resources/ department-resources/
+# backend/storage.py::load_pulse_config reads pulse-survey definitions
+# from <lambda_root>/config/pulse-surveys.json. Without this COPY the
+# config silently resolves to an empty list, pulse_to_ask is empty, the
+# rendered Pulse section is omitted from the wrapup prompt entirely, and
+# the wrap-up agent freelances its own 1-5 questions. Root cause of all
+# Week 5+ pulse contamination.
+COPY config/pulse-surveys.json config/pulse-surveys.json
 
 # Default CMD: REST Lambda via Lambda Web Adapter + uvicorn
 # The WS Lambda overrides CMD in CDK to use awslambdaric directly:
