@@ -50,3 +50,6 @@ select = ["E", "F", "I"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "live: hits real Bedrock (Anthropic via AWS) — requires AWS_PROFILE=forge with active credentials. Auto-skipped in CI.",
+]

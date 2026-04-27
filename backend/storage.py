@@ -250,17 +250,33 @@ async def append_pulse_response(
 def load_pulse_config() -> list[dict]:
     """Load pulse-survey definitions from config/pulse-surveys.json.
 
-    Returns an empty list if the file is missing or malformed (so callers
-    degrade gracefully rather than crashing the session).
+    Raises FileNotFoundError if the file is missing — silent degradation
+    here is what produced the Week 5+ pulse-data contamination. With an
+    empty config, ``pulse_to_ask`` is always empty, the rendered Pulse
+    section is dropped from the wrap-up system prompt, and the agent
+    freelances its own 1-5 scale questions. Better to fail the wrap-up
+    session entirely so operators see CloudWatch errors instead of
+    silently uploading misattributed answers to S3.
+
+    Malformed JSON still returns ``[]`` because that's a content-fix the
+    operator can roll out via a config push, not a missing-deployment
+    bug.
     """
     # Resolve relative to the repo root (parent of backend/).
     from pathlib import Path
     config_path = Path(__file__).resolve().parent.parent / "config" / "pulse-surveys.json"
     try:
         raw = config_path.read_bytes()
-    except FileNotFoundError:
-        logger.warning("Pulse config missing at %s", config_path)
-        return []
+    except FileNotFoundError as exc:
+        logger.error(
+            "Pulse config missing at %s — Lambda deployment is incomplete; "
+            "check Dockerfile bundles config/pulse-surveys.json",
+            config_path,
+        )
+        raise FileNotFoundError(
+            f"Pulse config missing at {config_path}. The Lambda image must "
+            f"bundle config/pulse-surveys.json (see Dockerfile)."
+        ) from exc
     try:
         parsed = json.loads(raw.decode())
     except json.JSONDecodeError:
