@@ -1,7 +1,7 @@
 [
   {
     "id": "progress",
-    "version": "v1",
+    "version": "v2",
     "text": "Do you feel like you're making progress in building your AI skills?",
     "scale": [
       "Not really",
@@ -13,7 +13,7 @@
   },
   {
     "id": "impact",
-    "version": "v1",
+    "version": "v2",
     "text": "To what extent has AI helped you buy back time or reduce friction in your weekly tasks?",
     "scale": [
       "No impact",

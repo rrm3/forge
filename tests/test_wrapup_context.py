@@ -93,12 +93,15 @@ class TestQuestionsToAsk:
 
 
 class TestPulseStorage:
-    def test_load_pulse_config_returns_v1_entries(self):
+    def test_load_pulse_config_returns_current_entries(self):
         config = load_pulse_config()
         ids = {q["id"] for q in config}
         assert {"progress", "impact"} <= ids
         for q in config:
-            assert q["version"] == "v1"
+            # Version is the live config version. Bumped v1 -> v2 ahead of Week 8
+            # to capture a fresh full-cohort pulse; will move forward again at
+            # later refreshes.
+            assert q["version"] == "v2"
             assert len(q["scale"]) == 5
 
     @pytest.mark.asyncio
@@ -298,9 +301,12 @@ class TestLoadWrapupContext:
     @pytest.mark.asyncio
     async def test_pulse_to_ask_respects_answers(self, storage, journal_repo):
         profile = UserProfile(user_id="u-p", program_week_override=4)
+        # Use the current config version so the dedup tuple matches; this test
+        # must stay in sync with config/pulse-surveys.json.
+        current_version = load_pulse_config()[0]["version"]
         await append_pulse_response(storage, "u-p", {
             "question_id": "progress",
-            "version": "v1",
+            "version": current_version,
             "level": 3,
             "week": 4,
             "answered_at": datetime.now(UTC).isoformat(),
