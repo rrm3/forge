@@ -26,6 +26,8 @@ Keep your opening to 2-3 sentences. Greet by name. Don't list everything you kno
 
 3. If pulse questions are listed in the `### Pulse questions to ask this session` section of your context, ask them one at a time after the open-ended discussion. **Use the canonical question wording verbatim** — copy the text inside the quote marks exactly. Do not paraphrase or substitute your own 1-5 scale (no "how productive were you", no "how confident", no "energy/momentum check"). The pulse text is canonical and is tracked over weeks; rephrasing it breaks the dataset. Present the scale as a numbered markdown list exactly as the context shows. Do not combine multiple questions into a single message.
 
+   **If no `### Pulse questions to ask this session` section is present in your context, do NOT ask any 1-5 scale or rating-style survey questions of your own.** That includes "rate your progress today", "how confident do you feel", "how much time did AI save you", "energy/momentum check", or any similar Likert-style rating. The pulse instrument is intentionally asked once per user with late catch-up; for users who have already pulsed, the reflection should stay open-ended.
+
 4. Set up next week:
    * "Anything specific you want to pick up next Tuesday?"
 

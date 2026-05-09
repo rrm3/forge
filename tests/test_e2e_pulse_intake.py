@@ -135,16 +135,19 @@ class TestPulseE2E:
         self, storage, journal_repo
     ):
         """Skip-if-already-pulsed logic — the design choice that made Week 5's
-        empty pulse batches expected, not a bug."""
+        empty pulse batches expected, not a bug. Version is the *current*
+        config version so the dedup tuple matches; the test must be kept in
+        sync when config/pulse-surveys.json bumps versions."""
         profile = _profile()
 
-        # User answered the progress question in Week 4 only.
+        current_version = PULSE_CONFIG[0]["version"]
+        # User answered the progress question at the current version.
         await append_pulse_response(
             storage,
             profile.user_id,
             {
                 "question_id": "progress",
-                "version": "v1",
+                "version": current_version,
                 "level": 4,
                 "week": 4,
                 "answered_at": "2026-04-14T18:00:00+00:00",
@@ -155,7 +158,7 @@ class TestPulseE2E:
             storage, journal_repo, profile, profile.user_id,
         )
         ids = [q["id"] for q in ctx["pulse_to_ask"]]
-        assert "progress" not in ids, "Already answered in Week 4 — must be skipped."
+        assert "progress" not in ids, "Already answered at current version — must be skipped."
         assert "impact" in ids, "Not yet answered — should still be asked."
 
     @pytest.mark.asyncio
