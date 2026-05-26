@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from backend.models import UserIdea, UserProfile
+from backend.models import PROGRAM_WEEKS, UserIdea, UserProfile, effective_program_week
 
 _BASE_PROMPT = (
     "You are an AI assistant for Digital Science's AI Tuesdays program. "
@@ -73,6 +73,26 @@ def build_system_prompt(
 
     # Current date
     parts.append(f"Today's date is {datetime.now(UTC).strftime('%A, %B %d, %Y').replace(' 0', ' ')}.")
+
+    # Program timeline. The model has no anchor for how long AI Tuesdays runs or
+    # which week it is, so it guesses — and at the back half of the program it
+    # wrongly tells users "this is the final week/session" (Week 9 P0). Give it
+    # an authoritative week count + weeks-remaining and forbid the false claim.
+    week = effective_program_week(profile) if profile else None
+    if week:
+        remaining = PROGRAM_WEEKS - week
+        if remaining > 0:
+            parts.append(
+                f"AI Tuesdays is a {PROGRAM_WEEKS}-week program (it began the week of March 24, 2026). "
+                f"This is Week {week} of {PROGRAM_WEEKS}, with {remaining} week{'s' if remaining != 1 else ''} "
+                "still to come after this one. Do not tell the user this is the final or last "
+                "week or session unless there are 0 weeks remaining."
+            )
+        else:
+            parts.append(
+                f"AI Tuesdays is a {PROGRAM_WEEKS}-week program. This is Week {week} of "
+                f"{PROGRAM_WEEKS} — the final week of the program."
+            )
 
     # Company context - shared across all sessions
     if company_prompt and company_prompt.strip():
