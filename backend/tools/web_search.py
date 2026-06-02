@@ -39,7 +39,7 @@ async def web_search_tool(query: str, context: ToolContext) -> str:
         client = genai.Client(api_key=settings.gemini_api_key)
 
         response = await client.aio.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=query,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())],
