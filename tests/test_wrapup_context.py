@@ -98,10 +98,10 @@ class TestPulseStorage:
         ids = {q["id"] for q in config}
         assert {"progress", "impact"} <= ids
         for q in config:
-            # Version is the live config version. Bumped v1 -> v2 ahead of Week 8
-            # to capture a fresh full-cohort pulse; will move forward again at
-            # later refreshes.
-            assert q["version"] == "v2"
+            # Version is the live config version. Bumped v1 -> v2 ahead of Week 8,
+            # then v2 -> v3 ahead of Week 12 (programme close) to capture a fresh
+            # full-cohort pulse; will move forward again at later refreshes.
+            assert q["version"] == "v3"
             assert len(q["scale"]) == 5
 
     @pytest.mark.asyncio
