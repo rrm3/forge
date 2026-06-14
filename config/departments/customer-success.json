@@ -33,7 +33,7 @@
     },
     {
       "id": "4b0206c2-de7d-475f-bdf1-a9abe037671f",
-      "label": "Goals for the 12 weeks",
+      "label": "Goals for the program",
       "description": "What they want to achieve during the AI Tuesdays program.",
       "extraction_key": "goals"
     },

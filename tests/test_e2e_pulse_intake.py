@@ -48,8 +48,36 @@ from backend.storage import (
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PULSE_CONFIG = json.loads((REPO_ROOT / "config" / "pulse-surveys.json").read_text())
 WRAPUP_SKILL = (REPO_ROOT / "skills" / "wrapup.md").read_text()
+
+# Pulse surveys were retired (config/pulse-surveys.json emptied to []) on
+# 2026-06-13, so the live config no longer drives these tests. To keep the
+# loader -> renderer pulse pipeline covered, inject this synthetic config (the
+# same canonical question text the agent shipped) via the `enable_pulse` fixture.
+PULSE_CONFIG = [
+    {
+        "id": "progress",
+        "version": "vtest",
+        "text": "Do you feel like you're making progress in building your AI skills?",
+        "scale": ["Not really", "A little", "Moderate progress", "Good progress", "Significant progress"],
+    },
+    {
+        "id": "impact",
+        "version": "vtest",
+        "text": "To what extent has AI helped you buy back time or reduce friction in your weekly tasks?",
+        "scale": ["No impact", "Minimal impact", "Moderate impact", "Significant impact", "Transformative impact"],
+    },
+]
+
+
+@pytest.fixture
+def enable_pulse(monkeypatch):
+    """Inject the synthetic pulse config so the wrap-up loader populates
+    pulse_to_ask even though the live config is empty (pulse retired)."""
+    monkeypatch.setattr(
+        "backend.agent.wrapup_context.load_pulse_config",
+        lambda: PULSE_CONFIG,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +127,7 @@ class TestPulseE2E:
 
     @pytest.mark.asyncio
     async def test_no_prior_pulse_yields_both_questions_to_ask(
-        self, storage, journal_repo
+        self, storage, journal_repo, enable_pulse
     ):
         profile = _profile()
 
@@ -132,7 +160,7 @@ class TestPulseE2E:
 
     @pytest.mark.asyncio
     async def test_prior_pulse_skips_already_answered_question(
-        self, storage, journal_repo
+        self, storage, journal_repo, enable_pulse
     ):
         """Skip-if-already-pulsed logic — the design choice that made Week 5's
         empty pulse batches expected, not a bug. Version is the *current*
@@ -163,7 +191,7 @@ class TestPulseE2E:
 
     @pytest.mark.asyncio
     async def test_full_pipeline_renders_canonical_pulse_in_prompt(
-        self, storage, journal_repo
+        self, storage, journal_repo, enable_pulse
     ):
         """End-to-end pipe: loader output flows into the renderer and produces
         a system prompt with canonical text in quotes + the verbatim instruction.
@@ -371,7 +399,7 @@ class TestPulseLiveBedrock:
 
     @pytest.mark.asyncio
     async def test_canonical_q1_emitted_against_bedrock(
-        self, storage, journal_repo
+        self, storage, journal_repo, enable_pulse
     ):
         import boto3
 

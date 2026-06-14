@@ -14,6 +14,7 @@ import {
   saveCompanyObjectives,
 } from '../api/client';
 import type { DepartmentConfig, DepartmentObjective, CompanyConfig } from '../api/types';
+import { getProgramWeek } from '../program';
 
 function generateId(): string {
   return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 10);
@@ -226,7 +227,9 @@ function ObjectiveCard({
                   cursor: 'pointer',
                 }}
               >
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((w) => (
+                {/* Open-ended program: offer weeks up to a few past the current week,
+                    and never hide the objective's existing value. */}
+                {Array.from({ length: Math.max(getProgramWeek() + 4, editWeekIntroduced) }, (_, i) => i + 1).map((w) => (
                   <option key={w} value={w}>Week {w}</option>
                 ))}
               </select>

@@ -45,15 +45,26 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 
 ## Pulse Surveys — versioning, synthetic backfill, and analytics rules
 
-The AI Tuesdays programme runs **three pulse surveys total** across the 12-week
-arc. Each survey reuses the same two question IDs (`progress`, `impact`) with
-a fresh `version` stamp:
+**STATUS (2026-06-13): Pulse surveys are DISABLED.** `config/pulse-surveys.json`
+is now `[]` (empty). With an empty config, `wrapup_context.questions_to_ask`
+returns nothing, the wrap-up prompt drops the pulse section, and the agent does
+NOT freelance its own 1-5 questions (the `skills/wrapup.md` step 3 guard). The
+programme was extended past its original 12-week arc (it is now open-ended,
+running through at least the end of August 2026), but **pulse will not be
+re-asked**: whatever each user answered through Week 12 is final, with no
+make-ups. There is no v3, and none is planned. To ever re-enable, repopulate the
+config with question objects carrying a fresh `version` string and redeploy.
+
+The pulse instrument ran **two surveys** (v1, v2) before being retired. The
+history below is retained because the suppression and backfill rules still
+govern the pulse data already written to S3. Each survey reused the same two
+question IDs (`progress`, `impact`) with a fresh `version` stamp:
 
 | Survey | Week launched | Config version | Notes |
 |---|---|---|---|
 | 1 | Week 5 | `v1` | Baseline. Active through Week 7. |
 | 2 | Week 8 | `v2` | Same question text as v1 — bump was a config-only change to suppress freelance Qs + force fresh full-cohort capture. See commit `af6d2b3`. |
-| 3 | Week 12 | `v3` (planned) | Programme-close survey. Bump will trigger another full re-prompt under current dedupe logic. |
+| 3 | — | _none_ | **Cancelled.** No programme-close survey was launched. Pulse concluded after v2; `config/pulse-surveys.json` emptied to `[]` on 2026-06-13. |
 
 The Lambda's wrap-up agent suppresses already-answered questions via
 `backend/agent/wrapup_context.py::questions_to_ask`. The dedupe key is the
@@ -130,24 +141,27 @@ Concrete rules per question:
   `(qid, v2)` in synthetic records and correctly suppresses Week 9 prompts.
 * **`compute_metrics.py`** — does not touch pulse data. Unaffected.
 
-### Week 12 v3 launch — what to do
+### Pulse concluded — disabled going forward (2026-06-13)
 
-When v3 ships:
+No v3 shipped. When AI Tuesdays was extended past the original 12-week arc, the
+decision was to retire the pulse instrument rather than run a programme-close or
+ongoing survey. How it was disabled:
 
-1. Update `config/pulse-surveys.json` to `version: "v3"` for both questions.
-2. Deploy the Lambda (config is baked into the Docker image).
-3. All users will be re-prompted on their next wrap-up. This includes:
-   * Users with real v1 + v2 responses
-   * Users with v1 + synthetic v2
-   * Users with real v2 only
-   * Users with no prior responses
-4. After Week 12 wrap-ups complete, **decide** whether to backfill synthetic
-   v3 entries for users who answered v1 OR v2 but skipped v3. The same
-   suppression rule applies: prior answer → no re-prompt. There is no
-   "Week 13", so a Week 12 backfill is only relevant if a v4 bump is
-   anticipated (currently none planned).
-5. Update the survey table in this file with the actual launch week and
-   confirm the version string.
+1. `config/pulse-surveys.json` was set to `[]` (empty array).
+2. On the next Lambda deploy (config is baked into the Docker image), the
+   wrap-up agent stops asking pulse questions for everyone. No re-prompts, and
+   no make-ups for users who never answered v1/v2 — that data is final.
+3. Nothing else needed changing: `questions_to_ask` already returns `[]` for an
+   empty config, and `skills/wrapup.md` step 3 already forbids the agent from
+   inventing its own rating-style questions when no pulse section is present.
+4. The pulse data already in S3 (real v1/v2 answers + the 2026-05-18 synthetic
+   v2 backfill) is untouched and still governed by the analytics rules above.
+   The final v2 capture was Week 12 (uploaded 2026-06-13): 178 real answers
+   from 92 users.
+
+To ever re-enable pulse, repopulate `config/pulse-surveys.json` with question
+objects carrying a fresh `version` and redeploy; the dedupe/suppression logic
+will then re-prompt per the `(question_id, version)` rules.
 
 ### Doc / script touch points to check before changing pulse behaviour
 

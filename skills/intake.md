@@ -111,7 +111,7 @@ You're trying to understand three things:
 
 2. **Where they are with AI** - not self-reported skill level (people are bad at this), but behavioral signals. What have they tried? What worked? What confused them? What do they worry about getting wrong? Map these answers internally to proficiency dimensions.
 
-3. **What would make this worthwhile for them** - their actual goals, not corporate objectives. What would they love to be able to do? What feels like a waste of their time right now? What would success look like after 12 weeks?
+3. **What would make this worthwhile for them** - their actual goals, not corporate objectives. What would they love to be able to do? What feels like a waste of their time right now? What would success look like for them over the coming months?
 
 ## Judgment principles
 

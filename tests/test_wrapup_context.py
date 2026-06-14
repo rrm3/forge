@@ -28,6 +28,25 @@ from backend.storage import (
 )
 
 
+# Pulse was retired (config/pulse-surveys.json emptied to []) on 2026-06-13.
+# Mechanism tests inject this synthetic config so the dedup/render logic stays
+# covered independently of the live (now empty) config. See CLAUDE.md.
+_SYNTHETIC_PULSE_CONFIG = [
+    {
+        "id": "progress",
+        "version": "vtest",
+        "text": "Do you feel like you're making progress in building your AI skills?",
+        "scale": ["Not really", "A little", "Moderate progress", "Good progress", "Significant progress"],
+    },
+    {
+        "id": "impact",
+        "version": "vtest",
+        "text": "To what extent has AI helped you buy back time or reduce friction in your weekly tasks?",
+        "scale": ["No impact", "Minimal impact", "Moderate impact", "Significant impact", "Transformative impact"],
+    },
+]
+
+
 # ---------------------------------------------------------------------------
 # Pulse to-ask computation
 # ---------------------------------------------------------------------------
@@ -93,16 +112,12 @@ class TestQuestionsToAsk:
 
 
 class TestPulseStorage:
-    def test_load_pulse_config_returns_current_entries(self):
-        config = load_pulse_config()
-        ids = {q["id"] for q in config}
-        assert {"progress", "impact"} <= ids
-        for q in config:
-            # Version is the live config version. Bumped v1 -> v2 ahead of Week 8
-            # to capture a fresh full-cohort pulse; will move forward again at
-            # later refreshes.
-            assert q["version"] == "v2"
-            assert len(q["scale"]) == 5
+    def test_load_pulse_config_disabled(self):
+        # Pulse surveys were retired on 2026-06-13; config/pulse-surveys.json is
+        # now empty, so the wrap-up agent never asks pulse questions. The
+        # dedup/render mechanism stays covered via injected configs below and in
+        # TestQuestionsToAsk. See CLAUDE.md "Pulse Surveys".
+        assert load_pulse_config() == []
 
     @pytest.mark.asyncio
     async def test_append_pulse_response_roundtrip(self, tmp_path):
@@ -299,11 +314,15 @@ class TestLoadWrapupContext:
         assert ctx["previous_digest"] == ""
 
     @pytest.mark.asyncio
-    async def test_pulse_to_ask_respects_answers(self, storage, journal_repo):
+    async def test_pulse_to_ask_respects_answers(self, storage, journal_repo, monkeypatch):
+        # Pulse is retired in the live config; inject a synthetic config so the
+        # loader -> questions_to_ask dedup integration stays covered.
+        monkeypatch.setattr(
+            "backend.agent.wrapup_context.load_pulse_config",
+            lambda: _SYNTHETIC_PULSE_CONFIG,
+        )
         profile = UserProfile(user_id="u-p", program_week_override=4)
-        # Use the current config version so the dedup tuple matches; this test
-        # must stay in sync with config/pulse-surveys.json.
-        current_version = load_pulse_config()[0]["version"]
+        current_version = _SYNTHETIC_PULSE_CONFIG[0]["version"]
         await append_pulse_response(storage, "u-p", {
             "question_id": "progress",
             "version": current_version,

@@ -44,7 +44,7 @@ import boto3
 # ── Program constants ────────────────────────────────────────────────────────
 
 PROGRAM_START_DATE = date(2026, 3, 24)
-CURRENT_WEEK_MAX = 12
+# AI Tuesdays is open-ended (no fixed end week); the current week is only floored at 1.
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data", "analytics")
@@ -65,7 +65,7 @@ def _week_date_range(week: int) -> tuple[str, str]:
 def _current_program_week() -> int:
     today = date.today()
     days = (today - PROGRAM_START_DATE).days
-    return max(1, min(days // 7 + 1, CURRENT_WEEK_MAX))
+    return max(1, days // 7 + 1)
 
 
 # ── Data loading ─────────────────────────────────────────────────────────────

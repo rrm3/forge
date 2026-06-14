@@ -65,7 +65,7 @@ const CARDS = [
   },
   {
     headline: 'Your AI companion',
-    body: "This is your home base for the next 12 weeks. It learns what you're working on, suggests ideas that fit, and helps when you're stuck. Think of it as a knowledgeable colleague who's always available.",
+    body: "This is your home base for AI Tuesdays. It learns what you're working on, suggests ideas that fit, and helps when you're stuck. Think of it as a knowledgeable colleague who's always available.",
   },
   {
     headline: 'Better together',
