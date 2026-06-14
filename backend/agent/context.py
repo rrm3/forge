@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from backend.models import PROGRAM_WEEKS, UserIdea, UserProfile, effective_program_week
+from backend.models import UserIdea, UserProfile, effective_program_week
 
 _BASE_PROMPT = (
     "You are an AI assistant for Digital Science's AI Tuesdays program. "
@@ -74,25 +74,19 @@ def build_system_prompt(
     # Current date
     parts.append(f"Today's date is {datetime.now(UTC).strftime('%A, %B %d, %Y').replace(' 0', ' ')}.")
 
-    # Program timeline. The model has no anchor for how long AI Tuesdays runs or
-    # which week it is, so it guesses — and at the back half of the program it
-    # wrongly tells users "this is the final week/session" (Week 9 P0). Give it
-    # an authoritative week count + weeks-remaining and forbid the false claim.
+    # Program timeline. The model has no anchor for which week it is, so it
+    # guesses — and at the back half of the program it wrongly tells users
+    # "this is the final week/session" (Week 9 P0). AI Tuesdays is open-ended
+    # (no fixed end; it ran a 12-week arc and is continuing past it), so give
+    # the model the current week and forbid the false "final week" claim.
     week = effective_program_week(profile) if profile else None
     if week:
-        remaining = PROGRAM_WEEKS - week
-        if remaining > 0:
-            parts.append(
-                f"AI Tuesdays is a {PROGRAM_WEEKS}-week program (it began the week of March 24, 2026). "
-                f"This is Week {week} of {PROGRAM_WEEKS}, with {remaining} week{'s' if remaining != 1 else ''} "
-                "still to come after this one. Do not tell the user this is the final or last "
-                "week or session unless there are 0 weeks remaining."
-            )
-        else:
-            parts.append(
-                f"AI Tuesdays is a {PROGRAM_WEEKS}-week program. This is Week {week} of "
-                f"{PROGRAM_WEEKS} — the final week of the program."
-            )
+        parts.append(
+            "AI Tuesdays is an ongoing weekly program (it began the week of "
+            f"March 24, 2026). This is Week {week}. The program is continuing — "
+            "do not tell the user this is the final or last week or session, and "
+            "do not speculate about when the program ends."
+        )
 
     # Company context - shared across all sessions
     if company_prompt and company_prompt.strip():
@@ -546,7 +540,7 @@ _INTAKE_FIELDS = [
     ("ai_tools_used", "AI tools they've tried"),
     ("core_skills", "Their core skills"),
     ("learning_goals", "What they want to learn"),
-    ("goals", "Goals for the 12 weeks"),
+    ("goals", "Goals for the program"),
 ]
 
 

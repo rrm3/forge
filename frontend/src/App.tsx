@@ -502,8 +502,8 @@ function AppContent() {
               }} />
         }
       />
-      {/* Redirect any /dayN to the correct week's route */}
-      {Array.from({ length: 12 }, (_, i) => i + 1)
+      {/* Redirect any /dayN to the correct week's route (open-ended: covers weeks 1..currentWeek) */}
+      {Array.from({ length: currentWeek }, (_, i) => i + 1)
         .filter((w) => w !== currentWeek)
         .map((w) => (
           <Route key={w} path={`/day${w}`} element={<Navigate to={`/day${currentWeek}`} replace />} />

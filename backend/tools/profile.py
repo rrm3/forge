@@ -30,7 +30,7 @@ UPDATE_PROFILE_SCHEMA = {
             "ai_experience_level": {"type": "string", "description": "Self-reported AI experience"},
             "interests": {"type": "array", "items": {"type": "string"}, "description": "Topics of interest"},
             "tools_used": {"type": "array", "items": {"type": "string"}, "description": "Tools used regularly"},
-            "goals": {"type": "array", "items": {"type": "string"}, "description": "Goals for the 12-week program"},
+            "goals": {"type": "array", "items": {"type": "string"}, "description": "Goals for the program"},
             "products": {"type": "array", "items": {"type": "string"}, "description": "Products they work on"},
             "daily_tasks": {"type": "string", "description": "What they do day-to-day"},
             "work_summary": {"type": "string", "description": "User's own description of their day-to-day work"},
