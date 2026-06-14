@@ -3,13 +3,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# AI Tuesdays 12-week program: first Tuesday is March 24, 2026
+# AI Tuesdays program: first Tuesday is March 24, 2026.
+# The program is open-ended (no fixed end week). It ran a 12-week arc through
+# Week 12 (June 9, 2026) and is continuing past it, so the week number is not
+# clamped to an upper bound — only floored at 1.
 PROGRAM_START_DATE = date(2026, 3, 24)
-PROGRAM_WEEKS = 12
 
 
 def get_program_week(as_of: date | None = None, timezone: str | None = None) -> int:
-    """Return the current program week (1-12), clamped to valid range.
+    """Return the current program week (1-based, floored at 1, no upper bound).
 
     If timezone is provided (IANA string like 'Pacific/Auckland'), computes
     today's date in that timezone rather than UTC. This ensures users see
@@ -26,8 +28,7 @@ def get_program_week(as_of: date | None = None, timezone: str | None = None) -> 
     else:
         d = date.today()
     days_elapsed = (d - PROGRAM_START_DATE).days
-    week = max(1, (days_elapsed // 7) + 1)
-    return min(week, PROGRAM_WEEKS)
+    return max(1, (days_elapsed // 7) + 1)
 
 
 PLAN_OBJECTIVE_DESCRIPTION = (
@@ -68,7 +69,7 @@ def effective_program_week(profile: "UserProfile", timezone: str | None = None) 
     so users in early timezones (e.g., New Zealand) see the correct week.
     """
     if profile.program_week_override and profile.program_week_override > 0:
-        return min(profile.program_week_override, PROGRAM_WEEKS)
+        return profile.program_week_override
     tz = timezone or profile.timezone or None
     return get_program_week(timezone=tz)
 

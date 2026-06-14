@@ -57,7 +57,7 @@ EXTRACTABLE_FIELDS = {
     "core_skills": "Skills they mentioned having (as a list)",
     "learning_goals": "Things they want to learn (as a list)",
     "ai_superpower": "What AI superpower they'd want",
-    "goals": "Their goals for the 12-week program (as a list)",
+    "goals": "Their goals for the program (as a list)",
 }
 
 # Fields that are stored as lists

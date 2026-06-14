@@ -185,7 +185,7 @@ class DepartmentConfigRepository:
             all_objectives = [
                 o for o in all_objectives
                 if o.get("week_introduced", 1) <= program_week
-                and program_week <= o.get("week_max", 99)
+                and (o.get("week_max") is None or program_week <= o["week_max"])
             ]
 
         return all_objectives

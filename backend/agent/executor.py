@@ -167,7 +167,7 @@ async def run_agent_session(
             merged_objectives = [
                 o for o in all_co
                 if (current_week is None or o.get("week_introduced", 1) <= current_week)
-                and (current_week is None or current_week <= o.get("week_max", 99))
+                and (current_week is None or o.get("week_max") is None or current_week <= o["week_max"])
             ]
     # Load intake responses only for incomplete intake sessions
     if session_type == "intake" and not intake_is_complete:
